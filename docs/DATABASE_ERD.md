@@ -1,8 +1,20 @@
 # AI Writing Coach — Database ERD V1.2
 
-**状态：** Final Development Baseline  
-**依据：** PRD V1.1、System Design V1.1、API Specification V1.1  
+**状态：** Final Development Baseline
+**依据：** PRD V1.1、System Design V1.1、API Specification V1.1
 **数据库：** PostgreSQL + pgvector | **架构：** Modular Monolith
+
+## 0. V1.2.1 增量修订（2026-11-15，Directive V2.0 工程授权）
+
+1. `essay_versions` 增加可空 `label VARCHAR(255)`（迁移 0004），对齐契约
+   `SnapshotCreate.label`；解决契约与 ERD 的字段缺口（追溯矩阵 R3）。
+2. 记录已采用的状态枚举：`users.status ∈ {active, disabled}`、
+   `essays.status ∈ {active, archived}`（追溯矩阵 R4）。
+3. 新增实现级表 `idempotency_keys`（迁移 0004）：`Idempotency-Key` 去重存储
+   （API Spec §2），按 (user_id, key) 主键，保存请求哈希与已完成响应；
+   属基础设施表，不改变业务实体关系。
+4. `essay_edit_events` 按 §6.5 落地（迁移 0004）；`issue_id` / `suggestion_id`
+   的外键待 Grammar 切片建表后附加（与 `essays.question_id` 同一延迟模式）。
 
 ## 1. V1.2 变更摘要
 
@@ -83,7 +95,7 @@ erDiagram
 | `id` | UUID | PK |
 | `email` | VARCHAR(255) | UNIQUE, NOT NULL |
 | `password_hash` | TEXT | NULL；Argon2id 等哈希 |
-| `status` | VARCHAR(20) | NOT NULL |
+| `status` | VARCHAR(20) | NOT NULL；取值 active / disabled（V1.2.1 记录已采用枚举） |
 | `email_verified_at` | TIMESTAMPTZ | NULL |
 | `created_at` | TIMESTAMPTZ | NOT NULL |
 | `updated_at` | TIMESTAMPTZ | NOT NULL |
@@ -148,7 +160,7 @@ erDiagram
 | `question_id` | UUID | FK → ielts_questions.id, NULL |
 | `title` | VARCHAR(255) | NULL |
 | `writing_type` | VARCHAR(30) | NOT NULL |
-| `status` | VARCHAR(20) | NOT NULL |
+| `status` | VARCHAR(20) | NOT NULL；取值 active / archived（V1.2.1 记录已采用枚举） |
 | `original_version_id` | UUID | NULL |
 | `final_version_id` | UUID | NULL |
 | `created_at` | TIMESTAMPTZ | NOT NULL |
@@ -198,6 +210,7 @@ erDiagram
 | `essay_id` | UUID | FK → essays.id, NOT NULL |
 | `version_no` | INTEGER | NOT NULL |
 | `version_type` | VARCHAR(20) | original / checkpoint / assisted / final / ai_rewrite |
+| `label` | VARCHAR(255) | NULL；用户快照备注（V1.2.1 新增，对齐契约 SnapshotCreate.label，迁移 0004） |
 | `content_json` | JSONB | NOT NULL |
 | `plain_text` | TEXT | NOT NULL |
 | `word_count` | INTEGER | NOT NULL DEFAULT 0 |

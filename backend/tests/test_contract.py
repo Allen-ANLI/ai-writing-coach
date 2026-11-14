@@ -109,3 +109,35 @@ def test_error_response_schema_matches_contract():
     expected = _canonical(spec["components"]["schemas"]["ErrorResponse"], spec)
     schema = ErrorResponse.model_json_schema()
     assert _canonical(schema, schema) == expected
+
+
+def test_no_out_of_contract_routes():
+    """Every implemented operation must exist in the contract (shape authority)."""
+    spec = _load_contract()
+    contract_ops = {
+        (method.upper(), path)
+        for path, item in spec["paths"].items()
+        for method in item
+        if method in {"get", "post", "put", "patch", "delete"}
+    }
+    generated = create_app().openapi()
+    implemented = {
+        (method.upper(), path.removeprefix("/api/v1"))
+        for path, item in generated["paths"].items()
+        for method in item
+        if method in {"get", "post", "put", "patch", "delete"}
+    }
+    assert implemented - contract_ops == set()
+
+
+def test_document_lifecycle_operations_implemented():
+    generated = create_app().openapi()["paths"]
+    for path, method in [
+        ("/api/v1/essays/{essay_id}/working-document", "get"),
+        ("/api/v1/essays/{essay_id}/working-document", "put"),
+        ("/api/v1/essays/{essay_id}/snapshots", "post"),
+        ("/api/v1/essays/{essay_id}/versions", "get"),
+        ("/api/v1/essays/{essay_id}/versions/{version_id}", "get"),
+        ("/api/v1/essays/{essay_id}/restore", "post"),
+    ]:
+        assert method in generated[path], f"{method.upper()} {path} missing"

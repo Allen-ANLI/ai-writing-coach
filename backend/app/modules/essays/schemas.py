@@ -71,3 +71,121 @@ class EssayListData(BaseModel):
 class EssayListResponse(BaseModel):
     data: EssayListData
     meta: RequestMeta | None = None
+
+
+# --- Slice 2B: Working Document, snapshots, versions, restore ---
+# Shapes follow API Spec §4 and the contract's WorkingDocumentUpdate /
+# WorkingDocumentSaved / SnapshotCreate schemas; response bodies the contract
+# leaves open follow the §2 envelope + ERD field set.
+
+
+class WorkingDocumentData(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    essay_id: uuid.UUID
+    content_json: dict
+    plain_text: str
+    word_count: int
+    server_revision: int
+    content_hash: str
+    last_saved_at: datetime
+    updated_at: datetime
+
+
+class WorkingDocumentResponse(BaseModel):
+    data: WorkingDocumentData
+    meta: RequestMeta | None = None
+
+
+class SaveWorkingDocumentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    base_revision: int = Field(ge=1)
+    client_revision: int = Field(ge=0)
+    content_json: dict
+    plain_text: str | None = None
+    word_count: int | None = Field(default=None, ge=0)
+
+
+class WorkingDocumentSavedData(BaseModel):
+    essay_id: uuid.UUID
+    server_revision: int
+    client_revision: int
+    saved: bool
+    saved_at: datetime
+
+
+class WorkingDocumentSavedResponse(BaseModel):
+    data: WorkingDocumentSavedData
+    meta: RequestMeta | None = None
+
+
+SnapshotVersionType = Literal["checkpoint", "assisted", "final"]
+
+
+class CreateSnapshotRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_revision: int = Field(ge=1)
+    # 'original' is created only at essay creation and 'ai_rewrite' only by
+    # rewrite acceptance; neither may be created through this endpoint.
+    version_type: SnapshotVersionType
+    label: str | None = Field(default=None, max_length=255)
+
+
+class VersionData(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    essay_id: uuid.UUID
+    version_no: int
+    version_type: str
+    label: str | None
+    word_count: int
+    source_revision: int
+    parent_version_id: uuid.UUID | None
+    created_by: uuid.UUID
+    created_at: datetime
+
+
+class VersionDetailData(VersionData):
+    content_json: dict
+    plain_text: str
+    content_hash: str
+
+
+class VersionResponse(BaseModel):
+    data: VersionDetailData
+    meta: RequestMeta | None = None
+
+
+class VersionListData(BaseModel):
+    items: list[VersionData]
+    next_cursor: str | None
+    limit: int
+
+
+class VersionListResponse(BaseModel):
+    data: VersionListData
+    meta: RequestMeta | None = None
+
+
+class RestoreRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version_id: uuid.UUID
+    base_revision: int = Field(ge=1)
+
+
+class RestoreData(BaseModel):
+    essay_id: uuid.UUID
+    server_revision: int
+    restored_version_id: uuid.UUID
+    word_count: int
+    content_hash: str
+    saved_at: datetime
+
+
+class RestoreResponse(BaseModel):
+    data: RestoreData
+    meta: RequestMeta | None = None

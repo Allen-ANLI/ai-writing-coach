@@ -108,6 +108,7 @@ class EssayVersion(Base):
     essay_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("essays.id"), nullable=False)
     version_no: Mapped[int] = mapped_column(Integer, nullable=False)
     version_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    label: Mapped[str | None] = mapped_column(String(255))
     content_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     plain_text: Mapped[str] = mapped_column(Text, nullable=False)
     word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -115,6 +116,55 @@ class EssayVersion(Base):
     source_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
     parent_version_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class EssayEditEvent(Base):
+    """ERD V1.2 §6.5. Ordinary autosaves do not create events; atomic
+    operations (restore, submit, suggestion acceptance) do.
+
+    issue_id / suggestion_id are plain UUIDs until the Grammar slice adds
+    writing_issues / issue_suggestions and attaches the foreign keys.
+    """
+
+    __tablename__ = "essay_edit_events"
+    __table_args__ = (
+        CheckConstraint(
+            "actor_type IN ('user', 'ai_accept', 'system')",
+            name="ck_essay_edit_events_actor_type",
+        ),
+        CheckConstraint(
+            "event_type IN ('accept_suggestion', 'manual_revision', 'ignore_suggestion', "
+            "'restore', 'submit')",
+            name="ck_essay_edit_events_event_type",
+        ),
+        ForeignKeyConstraint(
+            ["essay_id", "from_version_id"],
+            ["essay_versions.essay_id", "essay_versions.id"],
+            name="fk_essay_edit_events_from_version_same_essay",
+        ),
+        ForeignKeyConstraint(
+            ["essay_id", "to_version_id"],
+            ["essay_versions.essay_id", "essay_versions.id"],
+            name="fk_essay_edit_events_to_version_same_essay",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    essay_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("essays.id"), nullable=False)
+    from_version_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    to_version_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    from_server_revision: Mapped[int | None] = mapped_column(BigInteger)
+    to_server_revision: Mapped[int | None] = mapped_column(BigInteger)
+    issue_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    suggestion_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    actor_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    before_text: Mapped[str | None] = mapped_column(Text)
+    after_text: Mapped[str | None] = mapped_column(Text)
+    event_metadata: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

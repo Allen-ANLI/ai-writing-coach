@@ -19,10 +19,11 @@ This directory holds the approved design baselines and task records for AI Writi
 |---|---|---|---|
 | Repository rules | — | `../AGENTS.md` | **Highest.** Constraints for all agents and contributors |
 | Product requirements | PRD V1.1 | `PRD_V1.1.docx` | Product scope and intent (DOCX only) |
-| System design | V1.1 | — | **MISSING** — see `SYSTEM_DESIGN_MISSING.md` |
+| System design | V1.1 | `AI_Writing_Coach_System_Design_V1.1.md` | Architecture baseline (user-supplied 2026-11-14, committed in `7baeb36`). `SYSTEM_DESIGN_MISSING.md` is a historical record only |
 | Database ERD | V1.2 | `DATABASE_ERD.md` | Schema and data invariants |
 | API specification | V1.1, rev V1.1.1 | `API_SPECIFICATION.md` | Human-readable API semantics |
 | OpenAPI contract | 3.1 / 1.1.1 | `../contracts/openapi.yaml` | **Machine-readable contract; authoritative for shapes** |
+| Traceability matrix | living | `TRACEABILITY_MATRIX.md` | PRD→design→schema→API→code→tests mapping, reconciliation record, completion status |
 
 ### Precedence rules
 
@@ -42,7 +43,8 @@ This directory holds the approved design baselines and task records for AI Writi
 | `PREFLIGHT_REPORT.md` | Preflight findings and implementation plan |
 | `DEVELOPMENT_PLAN.md` | Agreed phase plan |
 | `PRD.md` | Provenance record for the PRD DOCX |
-| `SYSTEM_DESIGN_MISSING.md` | Record of the missing approved dependency |
+| `SYSTEM_DESIGN_MISSING.md` | Historical record (dependency since supplied; see authority table) |
+| `TRACEABILITY_MATRIX.md` | Requirement traceability + document reconciliation (Directive V2.0 §1) |
 
 These are process records, not product baselines.
 

@@ -4,6 +4,29 @@ This file defines repository-wide instructions for AI coding agents (including C
 Read it before changing code. More specific `AGENTS.md` files in subdirectories may add
 constraints, but must not silently contradict this file.
 
+## 0. Execution authority — Master Development Directive V2.0 (2026-11-15)
+
+The user has commissioned autonomous completion of the **entire product** from the
+current repository: all PRD functionality, frontend, backend, AI capabilities, database,
+testing, monetization infrastructure and production readiness, verified before one final
+public launch. No Private Alpha, Public Beta, early-access or partial commercial launch.
+Internal development, local testing and automated verification are allowed.
+
+- Do not stop at plans or milestone reports; continue implementation slice by slice
+  (roadmap in `docs/DEVELOPMENT_PLAN.md` §3a; status in `docs/TRACEABILITY_MATRIX.md`).
+- Full internal engineering authority: ERD/API/architecture changes, migrations,
+  dependencies, refactors — with the obligations in §6/§7 (explain material changes,
+  update docs + ADRs, keep contract aligned, add regression tests, preserve data).
+- Human approval is required ONLY for: new material external costs; purchasing or
+  activating paid services; irreversible destructive data operations; material legal,
+  privacy or regulatory risks; public deployment and release.
+- Ordinary Git commits on `main` are authorized (small, imperative, inspected diffs;
+  §8). Never force-push, reset away work, or edit applied migrations in place.
+- Never claim incomplete functionality is complete; distinguish implemented-and-verified
+  / implemented-not-fully-verified / not-implemented in every report.
+- The original design documents are authoritative starting references, not immutable
+  restrictions; resolve contradictions explicitly in `docs/TRACEABILITY_MATRIX.md` §1.
+
 ## 1. Product and engineering context
 
 AI Writing Coach is an English-writing training web application. Its core experience is
@@ -16,12 +39,13 @@ The approved engineering baseline is:
 - Product requirements: PRD V1.1
 - System design: System Design V1.1
 - Database: Database ERD V1.2
-- API contract: API Specification V1.1
-- Machine-readable contract: OpenAPI 3.1, version 1.1.0
+- API contract: API Specification V1.1 (rev V1.1.1)
+- Machine-readable contract: OpenAPI 3.1, version 1.1.1
 
-When these documents are present in `docs/` or `contracts/`, read the relevant sections
-before implementing a feature. If a document is missing, do not invent its contents;
-report the missing dependency.
+All five baselines are present: PRD V1.1 (`docs/PRD_V1.1.docx`), System Design V1.1
+(`docs/AI_Writing_Coach_System_Design_V1.1.md`), ERD V1.2, API Spec V1.1.1 and the
+OpenAPI contract. Read the relevant sections before implementing a feature. If a
+document is missing, do not invent its contents; report the missing dependency.
 
 ## 2. Technology stack
 
@@ -289,16 +313,10 @@ After implementation, report:
 - Known limitations and follow-up tasks.
 - Any design decision that needs human approval.
 
-## 10. Scope for the first bootstrap task
+## 10. Bootstrap task scope (historical — completed)
 
-The first task is repository bootstrap only:
-- inspect current workspace and preserve existing files;
-- create the agreed Monorepo structure;
-- initialize Next.js TypeScript frontend;
-- initialize FastAPI backend with a health endpoint;
-- add Docker Compose PostgreSQL with pgvector;
-- wire local environment examples and README instructions;
-- add minimal smoke tests.
-
-Do not implement authentication, Essay CRUD, editor features, LanguageTool integration,
-LLM providers, RAG, LangGraph, billing, or production deployment in the bootstrap task.
+The original bootstrap task (Stage 0/1) is complete: Monorepo, Next.js frontend,
+FastAPI backend with health endpoint, Docker Compose PostgreSQL + pgvector, environment
+examples, smoke tests. Authentication (Slice 1/1.5) and Essay CRUD (Slice 2A) are also
+complete and committed. Current work follows the Directive V2.0 slice roadmap in
+`docs/DEVELOPMENT_PLAN.md` §3a under the execution authority in §0.

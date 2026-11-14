@@ -16,7 +16,7 @@ invented here.
 | `docs/API_SPECIFICATION.md` (API Spec V1.1) | Done (moved, hash-verified) |
 | `contracts/openapi.yaml` (OpenAPI 3.1) | Done (moved, hash-verified) |
 | PRD V1.1 preserved as `docs/PRD_V1.1.docx` | Done (moved, hash-verified) |
-| System Design V1.1 | **MISSING** — recorded, not fabricated |
+| System Design V1.1 | **Done** — user supplied `docs/AI_Writing_Coach_System_Design_V1.1.md` 2026-11-14; committed in `7baeb36` |
 | `docs/README.md` authority index | Done |
 | `docs/DEVELOPMENT_PLAN.md` | Done |
 | Exactly one OpenAPI file | Verified |
@@ -142,8 +142,9 @@ Scope delivered:
 
 ## 3c. Stage 2 — Slice 2A: Essay Management
 
-**Status:** IMPLEMENTED 2026-11-14 (explicit user approval), verified, **NOT committed**
-(awaiting review per instruction).
+**Status:** IMPLEMENTED 2026-11-14, re-verified 2026-11-15 (pytest 94 passed, ruff/tsc/
+ESLint/build clean, Playwright 18 passed), **committed as `7baeb36`** on `main`
+(checkpoint commit under Master Development Directive V2.0 autonomous authority).
 
 Phase 0 (stable baseline):
 
@@ -183,26 +184,89 @@ Phase 1 scope delivered:
   ('active','archived') — ERD does not enumerate values; essay list/detail response
   shapes (contract leaves them open) follow API Spec §2 envelope + ERD fields.
 
-## 3a. Later stages — TBC
+## 3d. Stage 2 — Slice 2B: Working Document, snapshots, versions, restore
+
+**Status:** IMPLEMENTED 2026-11-15 under Directive V2.0, verified: backend **144 passed**
+(50 new tests), ruff check/format clean. Migration `0004` applied to dev + test DBs.
+
+Scope delivered:
+
+- `GET/PUT /essays/{id}/working-document`: optimistic concurrency on `base_revision`
+  (409 `WORKING_DOCUMENT_CONFLICT`, no partial write), server-side TipTap JSON →
+  plain text + word count derivation (client values validated when supplied),
+  revision increment, NO snapshot on autosave, essay.updated_at bump.
+- `POST /essays/{id}/snapshots`: exact-current-revision requirement (409
+  `DOCUMENT_VERSION_CONFLICT`), version_no sequence, parent chain, optional label;
+  `original`/`ai_rewrite` types rejected here (created only by essay creation /
+  rewrite acceptance). Idempotency-Key dedup implemented (see below).
+- `GET /essays/{id}/versions` (cursor pagination) and `GET .../versions/{version_id}`.
+- `POST /essays/{id}/restore`: atomic copy into Working Document + revision increment
+  + `restore` Edit Event (from/to revisions, before/after text); source snapshot
+  immutable; 409 on revision conflict.
+- Migration 0004: `essay_edit_events` (ERD §6.5, composite same-essay FKs; issue/
+  suggestion FKs deferred to Grammar slice), `essay_versions.label` (R3),
+  `idempotency_keys` (R10).
+- `app/core/idempotency.py`: per-user Idempotency-Key store; replay on same
+  key+payload, 422 on key reuse with different payload, 429 for in-flight repeats,
+  60s stale-placeholder reclamation. Applied to snapshots; reused by later slices.
+- Defects found and fixed by the new tests: (1) stale identity-map attributes under
+  SELECT FOR UPDATE after the joined essay load — fixed with `populate_existing`
+  (same trap the auth module documents); (2) psycopg reports rowcount -1 for
+  INSERT ON CONFLICT DO NOTHING — conflict detection switched to RETURNING.
+- Contract operations now 21/87; permanent no-out-of-contract-routes test added.
+- ERD updated to V1.2.1 increments (label, status enums, idempotency table, edit
+  events); traceability matrix updated.
+
+Out of scope (next slices): TipTap editor frontend (2C), writing sessions (2D),
+issue archiving into snapshots (arrives with writing_issues in Slice 3).
+
+## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
+
+The user's Directive V2.0 grants full autonomous engineering authority to complete the
+entire product (all PRD features, AI, monetization infrastructure, production readiness)
+without per-slice approval gates. Human approval is required only for: new material
+external costs, purchasing/activating paid services, irreversible destructive data
+operations, material legal/privacy risks, and public deployment/release. No partial,
+alpha, beta or early-access launch is permitted; internal builds and testing are.
+
+Engineering obligations per slice: tests with the implementation, narrowest relevant
+suite + lint/type checks run and reported honestly, contract/docs kept in sync
+(`TRACEABILITY_MATRIX.md` updated), small imperative commits on `main`, never
+force-push/reset, applied migrations never edited in place.
+
+Dependency-aware slice roadmap (internal execution decision, not an approval gate):
+
+| Slice | Scope | Depends on |
+|---|---|---|
+| 2B | Working Document GET/PUT (autosave, optimistic concurrency), snapshots, versions list/detail, restore; migration 0004 (writing_sessions, essay_edit_events, essay_versions.label) | 2A |
+| 2C | TipTap editor on /essays/[id]: autosave UI, save status, conflict handling, word count, undo/redo, left outline, version history + restore UI; unicode_codepoint↔ProseMirror mapping; OpenAPI type generation pipeline | 2B |
+| 2D | Writing sessions (assisted/independent), backend-enforced mode feature flags, submit → Final Snapshot; exam config; frontend mode controller | 2B |
+| 3 | Grammar core: LanguageTool service + custom rules, issue lifecycle, validate/reveal/ignore; LLM provider abstraction + prompt versioning + ai_usage_logs; contextual teaching | 2D |
+| 4 | Expression polish, Chinese→English, suggestion accept; knowledge base CRUD + archive | 3 |
+| 5 | Embeddings + pgvector RAG, search, previously-learned recommendations, extraction workflow; reviews (SM-2), progress, weakness profile + trends, learning summary | 4 |
+| 6 | IELTS question bank (original licensed-safe seed), tags, favorites, random | 2D |
+| 7 | Evaluations (IELTS 4-criteria estimates, queued), rewrites level 1–4, atomic accept | 3, 6 |
+| 8 | Outlines CRUD + confirm; Writing Planner / Learning Extractor / Study Planner LangGraph workflows (checkpointed, human confirmation) | 5, 7 |
+| 9 | Learning plans/tasks, personalized recommendations, analytics AI usage endpoints, dashboard analytics | 5 |
+| 10 | Commercialization: plans/entitlements/quotas/metering, subscription lifecycle, payment sandbox integration, billing history (activation gated on user approval) | 9 |
+| 11 | Production readiness: deployment config, backup/recovery, structured logging/monitoring, rate limiting hardening, CI/CD, security review, privacy (account deletion/export), performance + AI quality evaluation reports | all |
+
+## 3b-history. Earlier "TBC" note (superseded)
 
 `API_SPECIFICATION.md` section 21 lists MVP feature phases (Phase 1 Auth/Essay/Grammar,
 Phase 2 Expression/Evaluation, Phase 3 Knowledge Base/Review, Phase 4 IELTS/Outline/
-LangGraph/Analytics). Those are **product feature priorities**, not an approved
-engineering stage plan.
-
-Beyond the approved Stage 2 Slice 1 above, no further engineering stage plan has been
-approved. It is **TBC** and will not be invented here. System Design V1.1 is a
-prerequisite for architectural decisions in those stages.
+LangGraph/Analytics). Those are **product feature priorities**. The engineering slice
+roadmap above (Directive V2.0) supersedes the earlier "no approved stage plan" note.
 
 ## 4. Tracked issues awaiting decision
 
 | # | Issue | Detail | Blocking |
 |---|---|---|---|
 | 1 | ~~4 pre-existing OpenAPI validation errors~~ **RESOLVED (2026-11-14)** | User approved adding the missing path parameter declarations (additive only). Fixed on `PATCH /writing-sessions/{session_id}` (`session_id`), `PATCH /essays/{essay_id}/issues/{issue_id}` (`essay_id`, `issue_id`), `PATCH /outlines/{outline_id}` (`outline_id`). Full OpenAPI 3.1 validation now reports **0 errors**; structural diff vs the pre-Health baseline confirms only the approved Stage 0 additions plus these 4 declarations changed. `info.version` stays 1.1.1 (omission fix, no semantic change). | No longer blocking |
-| 2 | **System Design V1.1 missing** | No approved architecture document in workspace | Architectural decisions beyond bootstrap |
+| 2 | ~~System Design V1.1 missing~~ **RESOLVED (2026-11-14)** | User supplied `docs/AI_Writing_Coach_System_Design_V1.1.md`; committed in `7baeb36` | No longer blocking |
 | 3 | **OpenAPI uses YAML anchors/aliases** | e.g. `WorkingDocumentUpdate: *id002`. Validation handles them; type generation must resolve aliases first | Future type generation |
 | 4 | ~~Docker daemon not running~~ **RESOLVED (2026-11-14)** | User started Docker Desktop manually (decision E). `awc-db` (pgvector/pgvector:pg17) is up and healthy; real integration tests executed and passed. No Docker/WSL/system config changes made | No longer blocking |
-| 5 | **Git not initialized** | Deliberately left uninitialized during Stage 1 per user instruction "不提交 Git，等待我审查". `git init` + branch `feature/bootstrap-monorepo` + first commit await explicit user approval | Git-based checks (`git diff --check` etc.) deferred |
+| 5 | ~~Git not initialized~~ **RESOLVED** | Repository on `main`: baseline `7e4aa60` (infra + auth), checkpoint `7baeb36` (Slice 2A essay management + System Design V1.1 + handoff). Directive V2.0 authorizes ordinary commits; force-push/reset remain forbidden | No longer blocking |
 | 6 | **pip global index unreachable** | Global config points at a Tsinghua mirror that returned no distributions. Official PyPI used per-command via `--index-url`; global config left untouched | Dependency installs need explicit `--index-url` |
 | 7 | **Port 3000 excluded by Windows** | Hyper-V/WinNAT reserved range 2955–3054 blocks binding 3000 (EACCES). Frontend adapted to port **3500**; CORS default origin updated. System port exclusions were NOT modified. Ranges can shift across reboots; if 3500 is ever reserved, pick another free port and update `CORS_ORIGINS` + scripts | None (worked around in app config) |
 | 8 | **Starlette TestClient deprecation warning** | starlette 1.10 warns that httpx-based TestClient is deprecated in favor of httpx2. Tests pass; warning only. Revisit when upgrading test tooling | None |
@@ -211,5 +275,6 @@ prerequisite for architectural decisions in those stages.
 
 | Version | Change |
 |---|---|
+| Plan 2026-11-15 | Directive V2.0 autonomous execution adopted; slice roadmap 2B→11 added; System Design V1.1 present; Slice 2A re-verified and committed (`7baeb36`); `TRACEABILITY_MATRIX.md` created with reconciliation record R1–R12 |
 | Contract 1.1.1 | Additive `GET /health` endpoint, `HealthResponse` schema, `Health` tag; API Spec revision V1.1.1 adds section 23 and error code `DATABASE_UNAVAILABLE`. No approved business semantics changed |
 | Contract 1.1.1 (omission fix, 2026-11-14) | User-approved: declared the 4 previously omitted path parameters on three `PATCH` operations. Additive declarations only; no business semantics changed, version unchanged. Full OpenAPI 3.1 validation: 0 errors |
