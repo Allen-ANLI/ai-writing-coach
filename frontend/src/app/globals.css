@@ -126,3 +126,99 @@ body {
   pointer-events: none;
   height: 0;
 }
+
+/* Inline grammar feedback (PRD FR-02.3): underline colors by category.
+   Decorations and hint widgets are never part of the persisted document. */
+.awc-issue {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.awc-issue--grammar,
+.awc-issue--spelling {
+  text-decoration-color: #ef4444;
+}
+
+.awc-issue--vocabulary,
+.awc-issue--collocation {
+  text-decoration-color: #f59e0b;
+}
+
+.awc-issue--naturalness {
+  text-decoration-color: #3b82f6;
+}
+
+.awc-issue--style {
+  text-decoration-color: #a1a1aa;
+  text-decoration-style: dotted;
+}
+
+.awc-hint {
+  display: block;
+  margin: 2px 0 6px;
+  padding: 4px 8px;
+  border-left: 2px solid #e4e4e7;
+  background: rgba(113, 113, 122, 0.06);
+  border-radius: 0 6px 6px 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #52525b;
+  user-select: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .awc-hint {
+    border-left-color: #3f3f46;
+    color: #a1a1aa;
+  }
+}
+
+.awc-hint__text {
+  margin-right: 8px;
+}
+
+.awc-hint__answer {
+  margin-right: 8px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(113, 113, 122, 0.15);
+  filter: blur(5px);
+  user-select: none;
+}
+
+.awc-hint__answer--revealed {
+  filter: none;
+  font-weight: 600;
+  color: #18181b;
+}
+
+@media (prefers-color-scheme: dark) {
+  .awc-hint__answer--revealed {
+    color: #f4f4f5;
+  }
+}
+
+.awc-hint__actions button {
+  margin-right: 4px;
+  padding: 1px 6px;
+  border: 1px solid #d4d4d8;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 0.72rem;
+  color: #52525b;
+  cursor: pointer;
+}
+
+.awc-hint__actions button:hover {
+  background: rgba(113, 113, 122, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  .awc-hint__actions button {
+    border-color: #3f3f46;
+    color: #a1a1aa;
+  }
+}

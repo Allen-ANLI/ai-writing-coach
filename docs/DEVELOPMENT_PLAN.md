@@ -287,6 +287,48 @@ Scope delivered:
 
 Out of scope (next slices): grammar checking + issue lifecycle (3), LLM teaching (3).
 
+## 3g. Stage 2 — Slice 3: Grammar core + LLM abstraction + inline feedback
+
+**Status:** IMPLEMENTED 2026-11-15 under Directive V2.0, verified: backend
+**204 passed** (46 new), Playwright **37 passed** (7 new), vitest 12,
+tsc/ESLint/build/ruff clean. Migration `0006` applied.
+
+Scope delivered:
+
+- Infrastructure: LanguageTool self-hosted via Docker Compose (meyay/languagetool
+  image, host port 8010, loopback-only). The erikvl87 :latest build ships 0-byte
+  jars and :6.6 ships Java 11 for Java-17 classes — both rejected. Docker data
+  moved C:→D: with user authorization (C: was full; junctions keep paths stable).
+- Migration 0006: writing_issues, issue_suggestions, issue_teachings,
+  ai_usage_logs (ERD §7, §14); deferred edit-event issue/suggestion FKs attached.
+- Rule-first pipeline (SD §5): LanguageTool + custom deterministic rules
+  (Chinese punctuation, missing space after punctuation), category mapping per
+  PRD FR-02.3, Chinese short-explanation templates, reliability classification;
+  LLM deep check ONLY for uncertain fragments (max 3/check); deterministic hits
+  never call an LLM (asserted by tests). Graceful degradation to custom rules
+  with check_status=partial when LanguageTool is down.
+- Issue lifecycle: grammar-check (mode + revision + text_range validation),
+  list/detail (masked suggestions), validate (atomic: rule re-check accepts any
+  valid alternative, re-anchors incorrect issues, stale-marks siblings, Edit
+  Event, second revision check), reveal (explicit only), ignore, teaching
+  (context-hash cache, personalized_note forced null without verified history).
+- LLM abstraction (SD §7): provider protocol, deterministic mock (dev/test,
+  zero cost, labeled), OpenAI-compatible adapter (config-driven, retries,
+  timeout mapping), Pydantic-validated structured outputs, versioned prompt
+  registry, ai_usage_logs for every call (provider/model/prompt/tokens/latency/
+  cost/status). **No provider keys configured — real-provider activation and
+  AI linguistic-quality evaluation await user keys (reported decision).**
+- Frontend: grammar TipTap extension (category-colored wavy underlines, hint
+  widgets with blurred •••• answers, transaction-mapped ranges dropped when
+  unreliable), use-grammar orchestration (checks after saves, stale discard,
+  auto-validation of edited issues, reveal/ignore/teach, Alt+R/T/I shortcuts),
+  floating teaching card, Check now + issue count controls, independent-mode
+  enforcement (no controls, backend 403).
+- Offsets: unicode_codepoint end-to-end; LT UTF-16 converted at the adapter
+  boundary; emoji/CJK round-trip tests on both sides.
+
+Out of scope (next slices): expression polish/translation (4), knowledge base (5).
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

@@ -18,5 +18,20 @@ services:
       timeout: 5s
       retries: 10
 
+  languagetool:
+    # erikvl87 builds are broken (:latest has 0-byte jars, :6.6 ships Java 11
+    # for Java-17 classes); meyay is a maintained minimal image (port 8081).
+    image: meyay/languagetool:latest
+    container_name: awc-languagetool
+    ports:
+      # Loopback only: the grammar service is internal infrastructure.
+      - "127.0.0.1:${LANGUAGE_TOOL_PORT:-8010}:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/v2/languages > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
 volumes:
   pgdata:

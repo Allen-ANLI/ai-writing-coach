@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import auth, essays, health, users, writing_sessions
+from app.api.v1 import auth, essays, grammar, health, users, writing_sessions
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["Health"])
@@ -8,3 +8,4 @@ api_router.include_router(auth.router, tags=["Auth"])
 api_router.include_router(users.router, tags=["Users"])
 api_router.include_router(essays.router, tags=["Essays"])
 api_router.include_router(writing_sessions.router, tags=["Writing Sessions"])
+api_router.include_router(grammar.router, tags=["Grammar"])

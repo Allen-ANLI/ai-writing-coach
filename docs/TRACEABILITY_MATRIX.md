@@ -50,10 +50,11 @@ authoritative starting references; resolutions below are the adopted engineering
 | FR-11 snapshots/restore | Essays | essay_versions, essay_edit_events | POST snapshots, POST restore | **IV** 2026-11-15 (Slice 2B; migration 0004) | **IV** 2026-11-15 (checkpoint creation + confirmed restore) | 16 version/restore tests; E2E restore flow |
 | FR-11.2 edit events | Essays | essay_edit_events | (internal to atomic ops) | **IV** 2026-11-15 (restore events; more event types with later slices) | n/a | restore event assertions |
 | FR-13 / SD §10 writing modes + sessions | Writing Sessions | writing_sessions | POST/GET /essays/{id}/sessions, GET/PATCH /writing-sessions/{id}, POST submit | **IV** 2026-11-15 (Slice 2D; migration 0005; server-derived enabled_features; atomic submit with Final Snapshot + shared-original case) | **IV** 2026-11-15 (mode picker, exam countdown, submit/cancel controls) | 14 session integration tests incl. DB-level same-owner FK; 5 session E2E tests |
-| FR-02.2–.7 rule-first grammar check | Grammar | writing_issues, issue_suggestions | POST grammar-check, GET issues, GET issues/{id} | **NI** | **NI** | — |
-| FR-02.4 self-correction validation | Grammar | writing_issues, essay_edit_events | POST issues/validate | **NI** | **NI** | — |
-| FR-02.4 reveal / ignore | Grammar | issue_suggestions | POST reveal, PATCH issues/{id} | **NI** | **NI** | — |
-| FR-02.4 contextual teaching (R1) | Teaching | issue_teachings | POST issues/{id}/teaching | **NI** | **NI** | — |
+| FR-02.2–.7 rule-first grammar check | Grammar | writing_issues, issue_suggestions | POST grammar-check, GET issues, GET issues/{id} | **IV** 2026-11-15 (Slice 3: LanguageTool 6.6 + custom rules, classification, Chinese short explanations, LLM only for uncertain fragments, codepoint offsets, masked answers) | **IV** 2026-11-15 (category-colored underlines, inline hints, debounced checks, stale-result discard) | 13 check integration tests vs real LT; 9 rule unit tests; 7 grammar E2E |
+| FR-02.4 self-correction validation | Grammar | writing_issues, essay_edit_events | POST issues/validate | **IV** 2026-11-15 (atomic, rule-first re-check, accepts valid alternatives, re-anchors on incorrect, LLM judgement outside transaction) | **IV** 2026-11-15 (auto-validate after save; correct clears highlight) | 6 validation integration tests; E2E correct/incorrect flows |
+| FR-02.4 reveal / ignore | Grammar | issue_suggestions | POST reveal, PATCH issues/{id} | **IV** 2026-11-15 (reveal returns full suggestions only on explicit request) | **IV** 2026-11-15 (blurred •••• until Reveal; Alt+R/T/I shortcuts) | reveal/ignore tests; E2E blurred-answer assertions |
+| FR-02.4 contextual teaching (R1) | Teaching | issue_teachings | POST issues/{id}/teaching | **IV** 2026-11-15 pipeline (context-hash cache, usage logging, personalized_note null without verified history); **IU** linguistic quality — mock provider until LLM keys configured | **IV** 2026-11-15 (floating teaching card near the error) | 5 teaching integration tests; E2E card flow |
+| SD §7 LLM provider abstraction | AI layer | ai_usage_logs | (internal) | **IV** 2026-11-15 (mock + OpenAI-compatible adapter, Pydantic-validated outputs, versioned prompts, full usage/cost logging); real-provider activation awaits user keys | n/a | 7 AI unit tests; usage-log assertions |
 | FR-02.8 expression polish | Expressions | (suggestion records) | POST expression-suggestions, POST accept | **NI** | **NI** | — |
 | FR-03 Chinese→English | Expressions | — | POST translations | **NI** | **NI** | — |
 | FR-04 knowledge base CRUD | Expressions | user_expressions, expression_sources | POST/GET /expressions, GET/PATCH/DELETE /expressions/{id}, POST archive | **NI** | **NI** | — |
@@ -77,11 +78,11 @@ authoritative starting references; resolutions below are the adopted engineering
 ## 3. Contract operation inventory (87 operations)
 
 Verified 2026-11-15 by script comparing `contracts/openapi.yaml` paths against the
-FastAPI-generated OpenAPI: **26 implemented, 61 missing, 0 out-of-contract routes**
-(15 at baseline; +6 Slice 2B; +5 Slice 2D). Enforced permanently by
+FastAPI-generated OpenAPI: **33 implemented, 54 missing, 0 out-of-contract routes**
+(15 at baseline; +6 Slice 2B; +5 Slice 2D; +7 Slice 3). Enforced permanently by
 `tests/test_contract.py::test_no_out_of_contract_routes`.
 
-### Implemented (26) — all IV
+### Implemented (33) — all IV
 
 | Method | Path | Slice |
 |---|---|---|
@@ -111,13 +112,18 @@ FastAPI-generated OpenAPI: **26 implemented, 61 missing, 0 out-of-contract route
 | GET | /writing-sessions/{session_id} | 2D |
 | PATCH | /writing-sessions/{session_id} | 2D |
 | POST | /writing-sessions/{session_id}/submit | 2D |
+| POST | /essays/{essay_id}/grammar-check | 3 |
+| GET | /essays/{essay_id}/issues | 3 |
+| GET | /essays/{essay_id}/issues/{issue_id} | 3 |
+| POST | /essays/{essay_id}/issues/validate | 3 |
+| PATCH | /essays/{essay_id}/issues/{issue_id} | 3 |
+| POST | /essays/{essay_id}/issues/{issue_id}/reveal | 3 |
+| POST | /essays/{essay_id}/issues/{issue_id}/teaching | 3 |
 
-### Missing (61) — grouped by planned slice
+### Missing (54) — grouped by planned slice
 
 | Slice | Operations |
 |---|---|
-| 3 Grammar core | POST grammar-check; GET issues; GET issues/{id}; POST issues/validate; PATCH issues/{id}; POST reveal (6) |
-| 3 Teaching | POST issues/{id}/teaching (1) |
 | 4 Expressions & translation | POST expression-suggestions; POST accept; POST translations; POST/GET /expressions; GET/PATCH/DELETE /expressions/{id}; POST archive; POST search; POST extract (10) |
 | 5 Learning & weakness | GET reviews/due; POST reviews; GET progress; GET summary; POST/GET plans; GET tasks; PATCH tasks/{id}; GET weaknesses; GET weaknesses/{category}; GET trends; POST practice (12) |
 | 6 IELTS | GET questions; GET questions/{id}; GET tags; GET random; POST/DELETE favorite (6) |
@@ -128,7 +134,7 @@ FastAPI-generated OpenAPI: **26 implemented, 61 missing, 0 out-of-contract route
 | 1 Users preferences | GET/PATCH /users/me/preferences (2) |
 | Later additive (R7/R8/R9) | password reset, billing/quotas, account deletion/export — not yet in contract |
 
-(6+1+10+12+6+7+7+5+3+2 = 59; plus 2 preferences counted above = 61 total.)
+(10+12+6+7+7+5+3 = 50; plus 2 preferences + 2 later-additive counted above = 54 total.)
 
 ## 4. ERD entity inventory (29 entities)
 
@@ -143,9 +149,9 @@ FastAPI-generated OpenAPI: **26 implemented, 61 missing, 0 out-of-contract route
 | essay_versions | 0003 + 0004 label | **IV** (snapshots/versions/restore, Slice 2B) |
 | writing_sessions | 0005 | **IV** (modes, exam config, atomic submit; DB-level same-owner FK) |
 | essay_edit_events | 0004 | **IV** (restore events; further event types with later slices) |
-| writing_issues | phase B | **NI** |
-| issue_suggestions | phase B | **NI** |
-| issue_teachings | phase B | **NI** |
+| writing_issues | 0006 | **IV** (revision-anchored, codepoint offsets, lifecycle) |
+| issue_suggestions | 0006 | **IV** (server-side answers, masked until reveal) |
+| issue_teachings | 0006 | **IV** (context-hash cache, contextual only) |
 | essay_evaluations | phase B | **NI** |
 | essay_rewrites | phase B | **NI** |
 | user_expressions | phase B | **NI** |
@@ -162,7 +168,7 @@ FastAPI-generated OpenAPI: **26 implemented, 61 missing, 0 out-of-contract route
 | outline_nodes | phase C | **NI** |
 | learning_plans | phase C | **NI** |
 | learning_tasks | phase C | **NI** |
-| ai_usage_logs | phase C | **NI** |
+| ai_usage_logs | 0006 | **IV** (every LLM call logged: provider/model/prompt/tokens/latency/cost/status) |
 
 ## 5. Verification deliverables (Directive §8/§11) — status
 
@@ -187,6 +193,7 @@ FastAPI-generated OpenAPI: **26 implemented, 61 missing, 0 out-of-contract route
 
 | Date | Change |
 |---|---|
+| 2026-11-15 (Slice 3) | Grammar core implemented + verified: LanguageTool 6.6 self-hosted (Docker; broken :latest/6.6 erikvl87 builds rejected, meyay image used), custom deterministic rules (Chinese punctuation, missing space), classification + Chinese short explanations, LLM deep-check only for uncertain fragments (capped), issue lifecycle (check/list/detail/validate/reveal/ignore/teaching), atomic self-correction with re-anchoring, contextual teaching with context-hash caching, LLM provider abstraction (mock + OpenAI-compatible) with versioned prompts and full usage logging. Migration 0006. Frontend: category-colored inline underlines, hint widgets with blurred answers, reveal/teach/ignore + Alt+R/T/I shortcuts, floating teaching card, independent-mode enforcement. Verification: backend **204 passed** (46 new), Playwright **37 passed** (7 new), vitest 12, tsc/ESLint/build/ruff clean. Environment: Docker data moved to D: (user-authorized; C: was full), LanguageTool container added. **Open decision: real LLM provider keys needed for AI linguistic quality verification (mock provider active).** |
 | 2026-11-15 (Slice 2D) | Writing sessions implemented + verified: two modes with server-derived enabled_features (backend enforcement), exam config + deadline, one-active-session rule, cancel, atomic submit (Final Snapshot, shared-original optimization, Edit Event, Idempotency-Key). Migration 0005 adds writing_sessions + essays UNIQUE(id,user_id) + composite same-owner FK. Frontend session controls: mode picker, exam countdown, submit/cancel. Verification: backend **158 passed** (14 new), Playwright **30 passed** (5 new), vitest 12, tsc/ESLint/build clean, ruff clean. Contract operations 26/87. |
 | 2026-11-15 (Slice 2C) | TipTap writing editor live on /essays/[id]: debounced autosave + Ctrl+S + save status + conflict recovery (keep local / copy / load latest), word count, undo/redo, formatting toolbar, collapsible left outline (expanded by default), version history dialog with checkpoints + confirmed restore, IME-composition-safe saving. Unicode codepoint↔UTF-16↔ProseMirror mapping utilities with 12 unit tests. OpenAPI type generation pipeline (R11). Verification: Playwright **25 passed** (7 new editor tests), vitest 12 passed, tsc/ESLint/build clean. Fixed real defects: toolbar no-op on fresh unfocused editor; descendants() pruning in position mapping; E2E rate-limit exhaustion (E2E-only env relaxation). `awc-screenshots.mjs` review utility recreated. |
 | 2026-11-15 (Slice 2B) | Working Document GET/PUT, snapshots, versions, restore implemented + verified: backend **144 passed** (50 new), ruff clean. Migration 0004 (essay_edit_events, essay_versions.label, idempotency_keys). Fixed two real defects found by tests: stale identity-map read under FOR UPDATE (populate_existing) and unreliable ON CONFLICT rowcount (RETURNING). ERD V1.2.1 increments recorded. Contract operations 21/87. |

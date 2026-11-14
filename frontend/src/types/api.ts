@@ -1,18 +1,15 @@
 // Minimal mirrors of components/schemas/HealthResponse and ErrorResponse in
 // contracts/openapi.yaml (v1.1.1). Closed contract schemas are GENERATED into
 // ./generated.ts (npm run generate:api) and re-exported below; response bodies
-// the contract leaves open are hand-mirrored here and kept in sync.
+// the contract leaves open are hand-mirrored here and kept in sync. Grammar
+// shapes are hand-mirrored from the backend schemas (richer than the
+// contract's open descriptions) and take precedence over generated names.
 
 export type {
   EvaluationCreate,
-  GrammarCheckResponse,
   GrammarIssue,
-  IssueValidationRequest,
-  IssueValidationResponse,
   RewriteAccept,
   SnapshotCreate,
-  TeachingRequest,
-  TeachingResponse,
   TextRange,
   WorkingDocumentSaved,
   WorkingDocumentUpdate,
@@ -339,5 +336,129 @@ export interface SubmitData {
 
 export interface SubmitResponse {
   data: SubmitData;
+  meta?: RequestMeta;
+}
+
+// --- Grammar (Stage 2 Slice 3) ---
+// Mirrors backend app/modules/grammar/schemas.py + contract GrammarIssue.
+
+export type IssueCategory =
+  | "grammar"
+  | "spelling"
+  | "vocabulary"
+  | "collocation"
+  | "naturalness"
+  | "style";
+
+export interface SuggestionStub {
+  id: string;
+  display_text: string;
+  answer_revealed: boolean;
+}
+
+export interface IssueData {
+  id: string;
+  category: IssueCategory;
+  sub_category: string | null;
+  source: "rule_engine" | "llm" | "hybrid";
+  rule_id: string | null;
+  severity: "high" | "medium" | "low";
+  source_server_revision: number;
+  essay_version_id: string | null;
+  start_offset: number;
+  end_offset: number;
+  offset_unit: "unicode_codepoint";
+  anchor_text: string;
+  short_explanation: string | null;
+  status: "detected" | "resolved" | "ignored" | "stale";
+  suggestions: SuggestionStub[];
+}
+
+export interface GrammarCheckRequest {
+  session_id: string;
+  server_revision: number;
+  client_revision: number;
+  text: string;
+  text_range: { start: number; end: number; offset_unit: "unicode_codepoint" };
+  context?: { previous_sentence?: string | null; next_sentence?: string | null; paragraph_text?: string | null };
+}
+
+export interface GrammarCheckData {
+  server_revision: number;
+  client_revision: number;
+  check_status: "completed" | "partial";
+  issues: IssueData[];
+}
+
+export interface GrammarCheckResponse {
+  data: GrammarCheckData;
+  meta?: RequestMeta;
+}
+
+export interface IssueListResponse {
+  data: { items: IssueData[] };
+  meta?: RequestMeta;
+}
+
+export interface IssueResponse {
+  data: IssueData;
+  meta?: RequestMeta;
+}
+
+export interface RevealedSuggestion {
+  id: string;
+  suggested_text: string;
+  explanation: string | null;
+  is_recommended: boolean;
+}
+
+export interface RevealResponse {
+  data: { issue_id: string; suggestions: RevealedSuggestion[] };
+  meta?: RequestMeta;
+}
+
+export interface IssueValidationRequest {
+  issue_id: string;
+  base_revision: number;
+  client_revision: number;
+  content_json: TipTapDocument;
+  plain_text?: string;
+  word_count?: number;
+  modified_range: { start: number; end: number; offset_unit: "unicode_codepoint" };
+}
+
+export interface IssueValidationData {
+  issue_id: string;
+  validation_status: "correct" | "incorrect" | "needs_review";
+  is_resolved: boolean;
+  server_revision: number;
+}
+
+export interface IssueValidationResponse {
+  data: IssueValidationData;
+  meta?: RequestMeta;
+}
+
+export interface TeachingRequest {
+  server_revision: number;
+  client_revision: number;
+  current_sentence: string;
+  paragraph_context?: string | null;
+  user_current_text?: string | null;
+}
+
+export interface TeachingData {
+  teaching_id: string;
+  issue_id: string;
+  source_server_revision: number;
+  title: string;
+  why_wrong: string;
+  grammar_rule: string;
+  recommended_correction: string;
+  personalized_note: string | null;
+}
+
+export interface TeachingResponse {
+  data: TeachingData;
   meta?: RequestMeta;
 }

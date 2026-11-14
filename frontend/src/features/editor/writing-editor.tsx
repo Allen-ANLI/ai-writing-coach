@@ -7,13 +7,16 @@
  * restore. Grammar/AI feedback arrives inline in later slices.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useQuery } from "@tanstack/react-query";
 
 import { WRITING_TYPE_LABELS } from "@/features/essays/essay-dialogs";
+import { createGrammarExtension } from "@/features/editor/grammar/grammar-extension";
+import { TeachingCard } from "@/features/editor/grammar/teaching-card";
+import { useGrammar } from "@/features/editor/grammar/use-grammar";
 import { OutlinePanel } from "@/features/editor/outline-panel";
 import { SessionControls } from "@/features/editor/session-controls";
 import { useAutosave, type AutosaveApi, type SaveStatus } from "@/features/editor/use-autosave";
@@ -21,6 +24,7 @@ import { VersionHistory } from "@/features/editor/version-history";
 import { BLOCK_SEPARATOR, countWords } from "@/lib/document-text";
 import { getEssay } from "@/services/essays";
 import { getWorkingDocument } from "@/services/documents";
+import { listSessions } from "@/services/sessions";
 import type { TipTapDocument } from "@/types/api";
 
 const SAVE_STATUS_LABELS: Record<SaveStatus, string> = {
@@ -44,12 +48,20 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     queryKey: ["working-document", essayId],
     queryFn: async () => (await getWorkingDocument(essayId)).data,
   });
+  const sessionsQuery = useQuery({
+    queryKey: ["sessions", essayId],
+    queryFn: async () => (await listSessions(essayId)).data.items,
+  });
+  const activeSession =
+    sessionsQuery.data?.find((session) => session.status === "active") ?? null;
 
   const suppressUpdateRef = useRef(false);
   const initializedRef = useRef(false);
   const composingChangedRef = useRef(false);
   const editorRef = useRef<Editor | null>(null);
   const autosaveRef = useRef<AutosaveApi | null>(null);
+
+  const grammarExtension = useMemo(() => createGrammarExtension(), []);
 
   const applyContent = useCallback((content: TipTapDocument) => {
     const currentEditor = editorRef.current;
@@ -64,7 +76,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
   }, []);
 
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions: [StarterKit, grammarExtension],
     content: { type: "doc", content: [] },
     immediatelyRender: false,
     editorProps: {
@@ -98,6 +110,8 @@ export function WritingEditor({ essayId }: { essayId: string }) {
   useEffect(() => {
     autosaveRef.current = autosave;
   }, [autosave]);
+
+  const grammar = useGrammar({ essayId, editor, session: activeSession, autosave });
 
   // Initialize once per essay when both the editor and the document are ready.
   useEffect(() => {
@@ -236,6 +250,25 @@ export function WritingEditor({ essayId }: { essayId: string }) {
         >
           History
         </button>
+        {activeSession?.enabled_features.realtime_grammar && (
+          <>
+            <button
+              type="button"
+              data-testid="check-now"
+              onClick={() => grammar.checkNow()}
+              disabled={grammar.checking}
+              className={toolbarButton}
+            >
+              {grammar.checking ? "Checking…" : "Check now"}
+            </button>
+            <span
+              data-testid="issue-count"
+              className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+            >
+              {grammar.issueCount} issues
+            </span>
+          </>
+        )}
       </header>
 
       <SessionControls
@@ -374,6 +407,10 @@ export function WritingEditor({ essayId }: { essayId: string }) {
           onClose={() => setHistoryOpen(false)}
           onRestored={handleRestored}
         />
+      )}
+
+      {grammar.teaching && (
+        <TeachingCard teaching={grammar.teaching} onClose={grammar.closeTeaching} />
       )}
     </main>
   );

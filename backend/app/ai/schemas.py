@@ -1,0 +1,75 @@
+"""Structured LLM output schemas (SD §7, PRD §7.2). Every model output is
+validated against these before it can influence user data."""
+
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+Severity = Literal["high", "medium", "low"]
+
+
+class DeepCheckIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirmed: bool
+    category: str = Field(min_length=1, max_length=30)
+    sub_category: str | None = Field(default=None, max_length=80)
+    severity: Severity
+    short_explanation: str = Field(min_length=1, max_length=500)
+    suggestions: list[str] = Field(min_length=1, max_length=3)
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class DeepCheckResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    issues: list[DeepCheckIssue] = Field(default_factory=list, max_length=10)
+
+
+class TeachingContent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=200)
+    why_wrong: str = Field(min_length=1, max_length=2000)
+    grammar_rule: str = Field(min_length=1, max_length=2000)
+    recommended_correction: str = Field(min_length=1, max_length=500)
+    personalized_note: str | None = Field(default=None, max_length=1000)
+    examples: list[str] = Field(min_length=2, max_length=3)
+    practice: str | None = Field(default=None, max_length=1000)
+
+
+class PolishSuggestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=500)
+    meaning: str = Field(min_length=1, max_length=500)
+    usage: str = Field(min_length=1, max_length=500)
+    formality: str = Field(min_length=1, max_length=30)
+
+
+class PolishResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    suggestions: list[PolishSuggestion] = Field(min_length=1, max_length=6)
+
+
+class TranslationCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    english_text: str = Field(min_length=1, max_length=500)
+    chinese_meaning: str = Field(min_length=1, max_length=500)
+    usage_note: str = Field(min_length=1, max_length=500)
+    formality: str = Field(min_length=1, max_length=30)
+
+
+class TranslationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidates: list[TranslationCandidate] = Field(min_length=2, max_length=4)
+
+
+class ValidationJudgement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["correct", "incorrect", "needs_review"]
+    reason: str = Field(min_length=1, max_length=1000)

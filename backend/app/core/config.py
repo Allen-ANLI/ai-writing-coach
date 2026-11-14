@@ -37,6 +37,24 @@ class Settings(BaseSettings):
     auth_rate_limit_max_requests: int = 20
     auth_rate_limit_window_seconds: int = 300
 
+    # --- Grammar checking (Stage 2 Slice 3) ---
+    language_tool_url: str = "http://127.0.0.1:8010"
+    language_tool_timeout_seconds: float = 15.0
+    language_tool_language: str = "en-US"
+
+    # --- LLM provider abstraction (Stage 2 Slice 3) ---
+    # mock: deterministic dev/test provider, zero cost, never for production.
+    # openai_compat: any OpenAI-compatible chat completions endpoint.
+    llm_provider: str = "mock"
+    llm_base_url: str = ""
+    llm_api_key: str = ""
+    llm_model: str = ""
+    llm_timeout_seconds: float = 60.0
+    llm_max_retries: int = 1
+    # Optional pricing for cost estimates (USD per 1K tokens).
+    llm_input_cost_per_1k: float = 0.0
+    llm_output_cost_per_1k: float = 0.0
+
 
 @lru_cache
 def get_settings() -> Settings:
