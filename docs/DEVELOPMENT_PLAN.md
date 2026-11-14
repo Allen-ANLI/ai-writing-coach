@@ -220,6 +220,41 @@ Scope delivered:
 Out of scope (next slices): TipTap editor frontend (2C), writing sessions (2D),
 issue archiving into snapshots (arrives with writing_issues in Slice 3).
 
+## 3e. Stage 2 — Slice 2C: TipTap writing editor
+
+**Status:** IMPLEMENTED 2026-11-15 under Directive V2.0, verified: Playwright
+**25 passed** (7 new editor tests), Vitest **12 passed**, tsc/ESLint/build clean.
+
+Scope delivered:
+
+- `/essays/[id]` is now the writing editor (confirmed inline-first layout: wide
+  center canvas, collapsible left outline expanded by default, no right panel;
+  narrow screens get an outline overlay). Existing essay E2E contracts preserved.
+- TipTap StarterKit: paragraphs/headings/bold/italic/lists/quote, undo/redo.
+- Autosave: 1.5s debounce, optimistic concurrency, save-status bar, Ctrl/Cmd+S,
+  beforeunload guard, IME-composition-safe (no saves mid-composition).
+- Conflict recovery: 409 keeps local edits, pauses saving, offers Copy my text /
+  Load latest version; never silently overwrites.
+- Version history dialog: list, read-only view, checkpoint creation (label +
+  Idempotency-Key), confirmed restore (atomic server-side; editor refreshed).
+- `lib/text-positions.ts`: unicode_codepoint ↔ UTF-16 ↔ ProseMirror mapping
+  (AGENTS invariant) + `lib/document-text.ts` word-count rule mirroring the
+  server; 12 Vitest unit tests incl. emoji/CJK round-trips.
+- OpenAPI type generation (R11 resolved): `npm run generate:api` resolves YAML
+  anchors and emits `src/types/generated.ts` (15 schemas); api.ts re-exports.
+- Dependencies: @tiptap/react, @tiptap/starter-kit, @tiptap/pm; dev: vitest, yaml,
+  @types/node ^22 (matches the portable Node 22 runtime; vitest 5 peer requires it).
+- Defects found and fixed by tests: toolbar commands were no-ops on a fresh
+  unfocused editor (selection at doc level) — ensureFocus places caret inside the
+  document; descendants() callback pruning broke position mapping; the longer
+  E2E suite exhausted production register rate limits — relaxed ONLY in the
+  isolated E2E backend env.
+- `awc-screenshots.mjs` review utility recreated (referenced by the user but absent
+  from the repository); captures landing/login/register/profile/dashboard/editor/
+  history against the dev stack into gitignored test-results/screenshots.
+
+Out of scope (next slices): writing sessions + modes (2D), grammar feedback (3).
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

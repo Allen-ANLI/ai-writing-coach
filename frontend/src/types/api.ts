@@ -1,6 +1,22 @@
 // Minimal mirrors of components/schemas/HealthResponse and ErrorResponse in
-// contracts/openapi.yaml (v1.1.1). Full OpenAPI type generation is a later
-// stage; until then these shapes must be kept in sync with the contract.
+// contracts/openapi.yaml (v1.1.1). Closed contract schemas are GENERATED into
+// ./generated.ts (npm run generate:api) and re-exported below; response bodies
+// the contract leaves open are hand-mirrored here and kept in sync.
+
+export type {
+  EvaluationCreate,
+  GrammarCheckResponse,
+  GrammarIssue,
+  IssueValidationRequest,
+  IssueValidationResponse,
+  RewriteAccept,
+  SnapshotCreate,
+  TeachingRequest,
+  TeachingResponse,
+  TextRange,
+  WorkingDocumentSaved,
+  WorkingDocumentUpdate,
+} from "@/types/generated";
 
 export interface HealthData {
   status: "ok";
@@ -135,5 +151,121 @@ export interface EssayListData {
 
 export interface EssayListResponse {
   data: EssayListData;
+  meta?: RequestMeta;
+}
+
+// --- Working Document, snapshots, versions, restore (Stage 2 Slice 2B/2C) ---
+// Mirrors backend app/modules/essays/schemas.py; request shapes follow the
+// contract's WorkingDocumentUpdate / WorkingDocumentSaved / SnapshotCreate.
+
+export interface WorkingDocumentData {
+  essay_id: string;
+  content_json: TipTapDocument;
+  plain_text: string;
+  word_count: number;
+  server_revision: number;
+  content_hash: string;
+  last_saved_at: string;
+  updated_at: string;
+}
+
+export interface WorkingDocumentResponse {
+  data: WorkingDocumentData;
+  meta?: RequestMeta;
+}
+
+/** Minimal TipTap/ProseMirror JSON document shape. */
+export interface TipTapNode {
+  type: string;
+  text?: string;
+  content?: TipTapNode[];
+  attrs?: Record<string, unknown>;
+  marks?: { type: string; attrs?: Record<string, unknown> }[];
+}
+
+export interface TipTapDocument extends TipTapNode {
+  type: "doc";
+}
+
+export interface SaveWorkingDocumentRequest {
+  base_revision: number;
+  client_revision: number;
+  content_json: TipTapDocument;
+  plain_text?: string;
+  word_count?: number;
+}
+
+export interface WorkingDocumentSavedData {
+  essay_id: string;
+  server_revision: number;
+  client_revision: number;
+  saved: boolean;
+  saved_at: string;
+}
+
+export interface WorkingDocumentSavedResponse {
+  data: WorkingDocumentSavedData;
+  meta?: RequestMeta;
+}
+
+export type SnapshotVersionType = "checkpoint" | "assisted" | "final";
+
+export interface CreateSnapshotRequest {
+  source_revision: number;
+  version_type: SnapshotVersionType;
+  label?: string | null;
+}
+
+export interface VersionData {
+  id: string;
+  essay_id: string;
+  version_no: number;
+  version_type: string;
+  label: string | null;
+  word_count: number;
+  source_revision: number;
+  parent_version_id: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface VersionDetailData extends VersionData {
+  content_json: TipTapDocument;
+  plain_text: string;
+  content_hash: string;
+}
+
+export interface VersionResponse {
+  data: VersionDetailData;
+  meta?: RequestMeta;
+}
+
+export interface VersionListData {
+  items: VersionData[];
+  next_cursor: string | null;
+  limit: number;
+}
+
+export interface VersionListResponse {
+  data: VersionListData;
+  meta?: RequestMeta;
+}
+
+export interface RestoreRequest {
+  version_id: string;
+  base_revision: number;
+}
+
+export interface RestoreData {
+  essay_id: string;
+  server_revision: number;
+  restored_version_id: string;
+  word_count: number;
+  content_hash: string;
+  saved_at: string;
+}
+
+export interface RestoreResponse {
+  data: RestoreData;
   meta?: RequestMeta;
 }

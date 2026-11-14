@@ -41,6 +41,9 @@ export default defineConfig({
         DATABASE_URL: "postgresql+psycopg://awc:awc_local_dev@127.0.0.1:5432/ai_writing_coach_test",
         ACCESS_TOKEN_TTL_SECONDS: "2",
         CORS_ORIGINS: '["http://localhost:3600"]',
+        // The suite registers many users from one IP; production rate limits
+        // stay untouched, the isolated E2E backend relaxes them.
+        AUTH_RATE_LIMIT_MAX_REQUESTS: "1000",
       },
     },
     {

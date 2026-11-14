@@ -1,9 +1,9 @@
 # Frontend — AI Writing Coach (Next.js)
 
 Next.js 16 App Router + TypeScript strict + Tailwind CSS 4 + ESLint 9 + TanStack Query。
-当前进度：Stage 1 骨架 + **Stage 2 Slice 1.5 前端认证**（注册/登录/会话恢复/自动刷新/
-保护路由/当前用户资料）。Essay CRUD、编辑器等产品功能仍为后续阶段。
-工程约束见仓库根 `AGENTS.md`。
+当前进度：Stage 1 骨架 + Slice 1.5 前端认证 + Slice 2A Essay 管理 + Slice 2B 文档生命周期
+API + **Slice 2C TipTap 写作编辑器**（自动保存/冲突恢复/字数/撤销重做/左侧大纲/版本历史
+与恢复）。语法反馈、AI 辅助等为后续切片。工程约束见仓库根 `AGENTS.md`。
 
 ## 环境
 
@@ -50,6 +50,8 @@ npm run lint          :: ESLint（eslint-config-next）
 npx tsc --noEmit      :: TypeScript strict 检查
 npm run build         :: 生产构建
 npm run start         :: 运行生产构建
+npm run test:unit     :: Vitest 单元测试（位置映射 / 字数规则）
+npm run generate:api  :: 从 contracts/openapi.yaml 生成 src/types/generated.ts
 ```
 
 ## E2E 测试（Playwright）
@@ -70,14 +72,38 @@ npx playwright test               :: 运行 e2e/auth.spec.ts + e2e/essays.spec.t
 恰好 1 次）、refresh 失败退出、logout 后会话不可恢复、未登录保护重定向、登录后正常
 访问、Cookie 对 JavaScript 不可见且 HttpOnly/Secure/SameSite=Strict/Path 正确；
 Essay：Dashboard 加载态/空态、创建与列表刷新、改名、删除确认（取消保留）、详情导航、
-删除后详情错误态、未登录保护。
+删除后详情错误态、未登录保护；编辑器：输入自动保存并刷新后保留、字数、撤销重做、
+Ctrl+S、checkpoint + 恢复、保存冲突保留本地并可恢复、标题生成左侧大纲。
+E2E 后端放宽注册限流（`AUTH_RATE_LIMIT_MAX_REQUESTS`，仅隔离栈；生产默认不变）。
 
 ## Essay 管理（Stage 2 Slice 2A）
 
 - `/dashboard`（受保护）：Essay 列表、创建（标题可选 + writing_type）、改名、
   删除需确认对话框；加载/空/错误三态齐全；TanStack Query mutation + 失效刷新。
-- `/essays/[id]`（受保护）：元数据 + 工作文档摘要（字数/revision）；动态参数组件
-  包裹于 Suspense（Next 16 预渲染要求）。**不含 TipTap 编辑器**（后续阶段）。
+
+## 写作编辑器（Stage 2 Slice 2C）
+
+`/essays/[id]`（受保护）即写作编辑器，确认布局：宽中央编辑区 + 左侧可折叠大纲
+（默认展开，窄屏为浮层），**无常驻右侧 AI 面板**。
+
+- **TipTap / ProseMirror**（StarterKit）：段落/标题/加粗/斜体/列表/引用/撤销重做。
+- **自动保存**：编辑防抖 1.5s 后 PUT working-document（乐观并发 base_revision）；
+  Ctrl/Cmd+S 立即保存；底部状态条显示 Saved / Unsaved / Saving… / 冲突 / 失败。
+- **冲突恢复**：409 时保留本地编辑、暂停保存，提供「Copy my text」与
+  「Load latest version」；绝不静默覆盖。
+- **字数**：与后端同一规则（空白分词），服务端会再次推导校验。
+- **中文输入法**：composition 期间不触发保存，compositionend 后再保存。
+- **版本历史**：History 对话框列出不可变快照，可只读查看、创建 checkpoint
+  （可选 label，Idempotency-Key 去重）、确认后恢复（原子更新 + Edit Event）。
+- **位置映射**：`lib/text-positions.ts` 提供 unicode_codepoint ↔ UTF-16 ↔
+  ProseMirror 位置转换（AGENTS 硬性不变量），Vitest 单测覆盖 emoji/CJK。
+- 装饰与提示不进入持久化正文（后续语法切片同样遵守）。
+
+## UI 截图（审查用）
+
+```bat
+node awc-screenshots.mjs   :: 需 :8000 后端 + :3500 前端运行中；输出 test-results/screenshots/
+```
 
 ## 环境变量
 
@@ -92,16 +118,23 @@ Next.js 只读取 `frontend/` 目录下的 env 文件；`.env.local` 已被 `.gi
 ```text
 src/
 ├── app/                    # layout + providers、/、/login、/register、/profile、
-│                           # /dashboard、/essays/[id]
+│                           # /dashboard、/essays/[id]（写作编辑器）
 ├── components/             # health-status、auth-nav、dialog（可访问模态框）
 ├── features/auth/          # auth-provider（Context）、require-auth、login/register 表单
-├── features/essays/        # essay-dialogs（创建/改名/删除确认）、essay-detail
-├── lib/                    # config.ts、api-client.ts（内存 token + 单飞刷新 + 一次性重试）
-├── services/               # health.ts、auth.ts、essays.ts（类型化 API 调用）
-└── types/                  # api.ts（契约类型手写镜像：health + auth + me + sessions + essays）
-e2e/                        # global-setup.ts、auth.spec.ts、essays.spec.ts
+├── features/essays/        # essay-dialogs（创建/改名/删除确认）
+├── features/editor/        # writing-editor、use-autosave、outline-panel、
+│                           # version-history、editor-route
+├── lib/                    # config、api-client（内存 token + 单飞刷新）、
+│                           # text-positions（codepoint↔UTF-16↔PM）、document-text
+├── services/               # health、auth、essays、documents（类型化 API 调用）
+└── types/                  # api.ts（开放响应体手写镜像）+ generated.ts（契约生成）
+e2e/                        # global-setup、auth.spec、essays.spec、editor.spec
+scripts/generate-api-types.mjs  # 契约 → TS 类型生成（解析 YAML 锚点）
+awc-screenshots.mjs         # UI 截图审查工具
 playwright.config.ts        # 隔离 E2E 栈定义
+vitest.config.ts            # 单元测试配置
 ```
 
-API 类型手写在 `src/types/api.ts` 并与 `contracts/openapi.yaml` / API Spec §3.2 对齐；
-完整的 OpenAPI 类型生成在后续阶段引入（契约含 YAML 锚点，需先解析）。
+API 类型：契约中封闭的 schema 由 `npm run generate:api` 生成到 `src/types/generated.ts`
+并在 `api.ts` 重导出；契约未定义形状的响应体仍在 `api.ts` 手写镜像并与
+`contracts/openapi.yaml` / API Spec 对齐。契约变更后需重新生成。

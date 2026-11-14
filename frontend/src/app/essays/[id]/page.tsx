@@ -1,21 +1,21 @@
 import { Suspense } from "react";
 
 import { RequireAuth } from "@/features/auth/require-auth";
-import { EssayDetailRoute } from "@/features/essays/essay-detail";
+import { EditorRoute } from "@/features/editor/editor-route";
 
-export default function EssayDetailPage() {
+export default function EssayEditorPage() {
   return (
     <RequireAuth>
       <Suspense
         fallback={
-          <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-12">
+          <main className="flex flex-1 items-center justify-center">
             <p role="status" className="text-sm text-zinc-500 dark:text-zinc-400">
-              Loading essay…
+              Loading editor…
             </p>
           </main>
         }
       >
-        <EssayDetailRoute />
+        <EditorRoute />
       </Suspense>
     </RequireAuth>
   );
