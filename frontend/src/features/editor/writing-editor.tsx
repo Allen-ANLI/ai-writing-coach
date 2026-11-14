@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { WRITING_TYPE_LABELS } from "@/features/essays/essay-dialogs";
 import { OutlinePanel } from "@/features/editor/outline-panel";
+import { SessionControls } from "@/features/editor/session-controls";
 import { useAutosave, type AutosaveApi, type SaveStatus } from "@/features/editor/use-autosave";
 import { VersionHistory } from "@/features/editor/version-history";
 import { BLOCK_SEPARATOR, countWords } from "@/lib/document-text";
@@ -236,6 +237,12 @@ export function WritingEditor({ essayId }: { essayId: string }) {
           History
         </button>
       </header>
+
+      <SessionControls
+        essayId={essayId}
+        serverRevision={autosave.serverRevision}
+        saveStatus={autosave.status}
+      />
 
       {autosave.status === "conflict" && (
         <div

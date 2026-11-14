@@ -255,6 +255,38 @@ Scope delivered:
 
 Out of scope (next slices): writing sessions + modes (2D), grammar feedback (3).
 
+## 3f. Stage 2 — Slice 2D: Writing sessions and modes
+
+**Status:** IMPLEMENTED 2026-11-15 under Directive V2.0, verified: backend
+**158 passed** (14 new session tests), Playwright **30 passed** (5 new), vitest 12,
+tsc/ESLint/build clean, ruff clean. Migration `0005` applied to dev + test DBs.
+
+Scope delivered:
+
+- Migration 0005: `writing_sessions` (ERD §6.3) + `essays UNIQUE(id, user_id)` +
+  composite FK `(essay_id, user_id) → essays(id, user_id)` enforcing same-owner
+  at the database level (ERD §15.1). Session status enumeration adopted:
+  active / submitted / cancelled (recorded in ERD).
+- 5 endpoints: POST/GET `/essays/{id}/sessions`, GET/PATCH `/writing-sessions/{id}`,
+  POST `/writing-sessions/{id}/submit` (Idempotency-Key dedup).
+- Exactly two modes; `enabled_features` always server-derived (SD §10): independent
+  disables realtime grammar/LLM/Chinese→English/expression recommendations/Ghost
+  Text/paragraph analysis; autosave + post-submission evaluation stay on. Grammar
+  and AI slices must check these flags backend-side.
+- exam_config validated (mock_exam only): exam_type, task_type, duration_minutes
+  (1–180), optional word_limit; deadline_at derived; submit after deadline → 400.
+- One active session per essay (409 RESOURCE_ALREADY_EXISTS); cancel frees it.
+- Atomic submit: revision check (409 WORKING_DOCUMENT_CONFLICT, no partial write),
+  Final Snapshot — shared with Original when content hashes match (API Spec §5),
+  essay.final_version_id pointer, session state, submit Edit Event.
+- Frontend: session controls bar in the editor — start dialog (mode/activity/exam
+  config), mode chip, independent-mode notice, live exam countdown, submit with
+  confirmation (requires clean save state), cancel, submitted state.
+- Defect fixed during implementation: composite FK remote columns must be fully
+  qualified (`essays.user_id`) in both migration and model.
+
+Out of scope (next slices): grammar checking + issue lifecycle (3), LLM teaching (3).
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

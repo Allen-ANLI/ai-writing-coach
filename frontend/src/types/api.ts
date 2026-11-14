@@ -269,3 +269,75 @@ export interface RestoreResponse {
   data: RestoreData;
   meta?: RequestMeta;
 }
+
+// --- Writing sessions (Stage 2 Slice 2D) ---
+// Mirrors backend app/modules/writing_sessions/schemas.py (API Spec §5).
+
+export type WritingMode = "assisted" | "independent";
+export type ActivityType = "free_writing" | "practice" | "mock_exam";
+
+export interface ExamConfig {
+  exam_type: string;
+  task_type: "task1" | "task2";
+  duration_minutes: number;
+  word_limit?: number | null;
+}
+
+export interface EnabledFeatures {
+  realtime_grammar: boolean;
+  llm_assistance: boolean;
+  chinese_to_english: boolean;
+  expression_recommendations: boolean;
+  ghost_text: boolean;
+  paragraph_analysis: boolean;
+  autosave: boolean;
+  post_submission_evaluation: boolean;
+}
+
+export interface SessionData {
+  id: string;
+  essay_id: string;
+  mode: WritingMode;
+  activity_type: ActivityType;
+  exam_config: ExamConfig | null;
+  started_at: string;
+  deadline_at: string | null;
+  submitted_at: string | null;
+  status: "active" | "submitted" | "cancelled";
+  created_at: string;
+  enabled_features: EnabledFeatures;
+}
+
+export interface SessionResponse {
+  data: SessionData;
+  meta?: RequestMeta;
+}
+
+export interface SessionListResponse {
+  data: { items: SessionData[] };
+  meta?: RequestMeta;
+}
+
+export interface CreateSessionRequest {
+  mode: WritingMode;
+  activity_type: ActivityType;
+  exam_config?: ExamConfig | null;
+}
+
+export interface SubmitSessionRequest {
+  expected_server_revision: number;
+}
+
+export interface SubmitData {
+  session_id: string;
+  status: string;
+  submitted_at: string;
+  final_version_id: string;
+  server_revision: number;
+  shared_original: boolean;
+}
+
+export interface SubmitResponse {
+  data: SubmitData;
+  meta?: RequestMeta;
+}

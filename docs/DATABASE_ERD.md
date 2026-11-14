@@ -197,10 +197,13 @@ erDiagram
 | `started_at` | TIMESTAMPTZ | NOT NULL |
 | `deadline_at` | TIMESTAMPTZ | NULL |
 | `submitted_at` | TIMESTAMPTZ | NULL |
-| `status` | VARCHAR(20) | NOT NULL |
+| `status` | VARCHAR(20) | NOT NULL；取值 active / submitted / cancelled（V1.2.1 记录已采用枚举） |
 | `created_at` | TIMESTAMPTZ | NOT NULL |
 
 用户必须与 Essay 所有者一致。独立模式由后端关闭实时辅助。
+
+V1.2.1：复合外键 `(essay_id, user_id) → essays(id, user_id)` 在数据库层强制
+会话用户与作文所有者一致（迁移 0005 同时为 essays 增加 UNIQUE(id, user_id)）。
 
 ### 6.4 `essay_versions`
 
