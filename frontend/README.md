@@ -55,8 +55,8 @@ npm run start         :: 运行生产构建
 ## E2E 测试（Playwright）
 
 ```bat
-npx playwright install chromium   :: 首次（下载浏览器）
-npx playwright test               :: 运行 e2e/auth.spec.ts
+npx playwright install chromium   :: 首次（下载浏览器；本机 CDN 停滞时配置已用 msedge 通道）
+npx playwright test               :: 运行 e2e/auth.spec.ts + e2e/essays.spec.ts
 ```
 
 测试使用**完全隔离的栈**（`playwright.config.ts` 的 webServer 自动起停）：
@@ -68,7 +68,16 @@ npx playwright test               :: 运行 e2e/auth.spec.ts
 
 覆盖：注册、登录成功/失败、页面刷新恢复、过期自动刷新、并发 401 单飞刷新（计数断言
 恰好 1 次）、refresh 失败退出、logout 后会话不可恢复、未登录保护重定向、登录后正常
-访问、Cookie 对 JavaScript 不可见且 HttpOnly/Secure/SameSite=Strict/Path 正确。
+访问、Cookie 对 JavaScript 不可见且 HttpOnly/Secure/SameSite=Strict/Path 正确；
+Essay：Dashboard 加载态/空态、创建与列表刷新、改名、删除确认（取消保留）、详情导航、
+删除后详情错误态、未登录保护。
+
+## Essay 管理（Stage 2 Slice 2A）
+
+- `/dashboard`（受保护）：Essay 列表、创建（标题可选 + writing_type）、改名、
+  删除需确认对话框；加载/空/错误三态齐全；TanStack Query mutation + 失效刷新。
+- `/essays/[id]`（受保护）：元数据 + 工作文档摘要（字数/revision）；动态参数组件
+  包裹于 Suspense（Next 16 预渲染要求）。**不含 TipTap 编辑器**（后续阶段）。
 
 ## 环境变量
 
@@ -82,13 +91,15 @@ Next.js 只读取 `frontend/` 目录下的 env 文件；`.env.local` 已被 `.gi
 
 ```text
 src/
-├── app/                    # layout + providers、/、/login、/register、/profile
-├── components/             # health-status.tsx、auth-nav.tsx
+├── app/                    # layout + providers、/、/login、/register、/profile、
+│                           # /dashboard、/essays/[id]
+├── components/             # health-status、auth-nav、dialog（可访问模态框）
 ├── features/auth/          # auth-provider（Context）、require-auth、login/register 表单
+├── features/essays/        # essay-dialogs（创建/改名/删除确认）、essay-detail
 ├── lib/                    # config.ts、api-client.ts（内存 token + 单飞刷新 + 一次性重试）
-├── services/               # health.ts、auth.ts（类型化 API 调用）
-└── types/                  # api.ts（契约类型手写镜像：health + auth + me + sessions）
-e2e/                        # global-setup.ts、auth.spec.ts
+├── services/               # health.ts、auth.ts、essays.ts（类型化 API 调用）
+└── types/                  # api.ts（契约类型手写镜像：health + auth + me + sessions + essays）
+e2e/                        # global-setup.ts、auth.spec.ts、essays.spec.ts
 playwright.config.ts        # 隔离 E2E 栈定义
 ```
 

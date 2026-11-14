@@ -85,7 +85,7 @@ CORS 方法与请求头为**显式白名单**（`app/main.py`）：方法 `GET/P
 先启动数据库（仓库根）：`docker compose up -d db`。
 
 ```bat
-.venv\Scripts\alembic.exe upgrade head        :: 应用迁移（0001 pgvector；0002 认证四表）
+.venv\Scripts\alembic.exe upgrade head        :: 应用迁移（0001 pgvector；0002 认证；0003 essays）
 .venv\Scripts\alembic.exe current             :: 查看当前版本
 .venv\Scripts\alembic.exe downgrade -1        :: 回退一步
 .venv\Scripts\alembic.exe revision --autogenerate -m "..."   :: 未来新增模型后生成迁移
@@ -98,7 +98,21 @@ CORS 方法与请求头为**显式白名单**（`app/main.py`）：方法 `GET/P
 - 迁移 `0002` 创建 `users`、`user_profiles`、`auth_sessions`、`auth_refresh_tokens`
   （ERD V1.2 §5）：邮箱唯一、Token 哈希唯一、每会话至多一个有效未消费 Token 的部分唯一
   索引、ERD 指定索引、替换链自引用外键。downgrade 按依赖逆序删表。
+- 迁移 `0003` 创建 `essays`、`essay_working_documents`、`essay_versions`
+  （ERD V1.2 §6.1–6.4）：复合外键保证 version 指针/父链属于同一 Essay，
+  UNIQUE(essay_id, version_no)、UNIQUE(essay_id, id)，无 current_version_id。
+  `question_id` 的 FK 延后到 ielts_questions 建表时添加（当前仅 UUID 格式校验）。
+  `essays.status` 暂用 CHECK ('active','archived')（ERD 未枚举，待批）。
 - Docker 首次初始化也会执行 `infrastructure/postgres/init.sql`（同样幂等）。
+
+## Essay 模块（Stage 2 Slice 2A）
+
+`POST/GET /essays`、`GET/PATCH/DELETE /essays/{id}`，全部需认证、按用户隔离，
+他人/已删除资源一律 404，软删除（deleted_at）。创建在**单一事务**内原子生成
+Essay + 空工作文档（revision 1）+ 不可变 Original 快照（version_no 1）。
+游标分页：opaque base64 (created_at, id) seek，limit 1–100 默认 20。
+PATCH 仅接受 title；Idempotency-Key 按契约接受，去重存储留待后续切片。
+分层：`api/v1/essays.py` → `modules/essays/service.py` → `repository.py`。
 
 ## 测试
 
@@ -116,9 +130,11 @@ CORS 方法与请求头为**显式白名单**（`app/main.py`）：方法 `GET/P
 | `tests/test_health_integration.py` | 真实 `SELECT 1` 健康检查、pgvector 扩展存在 | 是（不可达时自动 skip） |
 | `tests/test_migration_downgrade.py` | downgrade 不删除 vector 扩展，随后恢复 head | 是（不可达时自动 skip） |
 | `tests/auth/` | 认证全量集成测试：注册/登录/哈希、Access Token 校验、轮换与重用检测、会话与登出、资料隔离、Cookie/CSRF/限流、并发刷新、唯一约束 | 是（独立测试库） |
+| `tests/essays/` | Essay 集成测试：原子创建三实体、事务回滚、游标分页、用户隔离、改名、软删除、删除后访问、非法 question_id、同 Essay 版本约束、快照不可变 | 是（独立测试库） |
 
-认证测试使用**独立测试数据库** `ai_writing_coach_test`（会话级夹具自动创建并迁移，
-每个测试前 TRUNCATE 隔离），不触碰开发库数据；开发库不可达时认证测试会失败而非静默跳过。
+认证与 Essay 测试使用**独立测试数据库** `ai_writing_coach_test`（共享夹具
+`tests/pg_fixtures.py`：会话级自动创建并迁移，每个测试前 TRUNCATE 隔离），
+不触碰开发库数据；开发库不可达时测试会失败而非静默跳过。
 
 ## Lint / 格式
 

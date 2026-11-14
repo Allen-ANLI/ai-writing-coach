@@ -93,3 +93,47 @@ export interface SessionsResponse {
   data: SessionItem[];
   meta?: RequestMeta;
 }
+
+// --- Essays (Stage 2 Slice 2A) ---
+// Mirrors backend app/modules/essays/schemas.py (contract leaves essay
+// response bodies open; shapes follow API Spec §2 + ERD V1.2 §6).
+
+export type WritingType = "free_writing" | "ielts_task1" | "ielts_task2" | "other";
+
+export interface EssayData {
+  id: string;
+  title: string | null;
+  writing_type: WritingType;
+  status: string;
+  question_id: string | null;
+  original_version_id: string | null;
+  final_version_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkingDocumentSummary {
+  server_revision: number;
+  word_count: number;
+  last_saved_at: string;
+}
+
+export interface EssayDetailData extends EssayData {
+  working_document: WorkingDocumentSummary;
+}
+
+export interface EssayResponse {
+  data: EssayDetailData;
+  meta?: RequestMeta;
+}
+
+export interface EssayListData {
+  items: EssayData[];
+  next_cursor: string | null;
+  limit: number;
+}
+
+export interface EssayListResponse {
+  data: EssayListData;
+  meta?: RequestMeta;
+}

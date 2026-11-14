@@ -1,9 +1,9 @@
 # AI Writing Coach
 
-英语写作训练 Web 应用。当前进度：**Stage 1 Bootstrap + Stage 2 Slice 1 后端认证 +
-Slice 1.5 前端认证**（注册/登录页、内存 Access Token、HttpOnly Cookie 刷新、单飞自动
-刷新、保护路由、当前用户资料；Playwright E2E 11/11 通过）。Essay CRUD、编辑器、
-语法检查、LLM 等仍为后续阶段。
+英语写作训练 Web 应用。当前进度：**Stage 1 Bootstrap + Stage 2 Slice 1/1.5 认证 +
+Slice 2A Essay 管理**（原子创建 Essay+工作文档+Original 快照、游标分页、软删除、
+归属隔离；Dashboard 列表/创建/改名/删除确认/详情导航）。编辑器、语法检查、LLM 等
+仍为后续阶段。Git 基线提交 `feat: complete infrastructure and authentication` 已建立。
 
 - 工程约束：[`AGENTS.md`](AGENTS.md)（必读）
 - API 契约：[`contracts/openapi.yaml`](contracts/openapi.yaml)（OpenAPI 3.1，v1.1.1，唯一事实来源）

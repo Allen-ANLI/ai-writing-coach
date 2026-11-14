@@ -110,8 +110,8 @@ Document, TipTap, LanguageTool, LLM, RAG, LangGraph, Redis, Celery, Kubernetes.
 
 ## 3b. Stage 2 — Slice 1.5: Frontend Authentication
 
-**Status:** IMPLEMENTED 2026-11-14 (explicit user approval), verified, awaiting review.
-No Git commits. No backend or database changes in this slice.
+**Status:** IMPLEMENTED 2026-11-14, verified, **included in baseline commit 7e4aa60**.
+No backend or database changes in this slice.
 
 Scope delivered:
 
@@ -139,6 +139,49 @@ Scope delivered:
 - Browser channel: Playwright CDN download stalls on this machine; tests run on the
   installed Chromium-based Edge via `channel: "msedge"` (config documents how to
   switch to the bundled Chromium).
+
+## 3c. Stage 2 — Slice 2A: Essay Management
+
+**Status:** IMPLEMENTED 2026-11-14 (explicit user approval), verified, **NOT committed**
+(awaiting review per instruction).
+
+Phase 0 (stable baseline):
+
+- Contract fix (user-approved): `POST /auth/register` now documents
+  `409 RESOURCE_ALREADY_EXISTS` (ErrorResponse schema). Full OpenAPI 3.1 validation:
+  0 errors; no unrelated API changes; permanent regression test added.
+- `.gitignore` audited; `git check-ignore` confirms .env, node_modules, .venv,
+  .tools, .next, test-results, caches, egg-info all excluded.
+- Baseline commit `7e4aa60` `feat: complete infrastructure and authentication`
+  (111 files: Stage 1 + Slice 1 backend auth + Slice 1.5 frontend auth). No temp
+  files or local test data included.
+
+Phase 1 scope delivered:
+
+- Migration `0003_essay_tables`: `essays`, `essay_working_documents`,
+  `essay_versions` (ERD V1.2 §6.1–6.4). Composite FKs enforce same-essay version
+  pointers and parent chains; UNIQUE(essay_id, version_no) and UNIQUE(essay_id, id);
+  ERD indexes. No `current_version_id`. `question_id` FK deferred until
+  ielts_questions exists (later slice); UUID format validated now.
+- 5 endpoints: POST/GET list/GET/PATCH/DELETE `/essays[/{id}]`, all authenticated,
+  user-scoped, foreign/deleted resources → 404, soft delete via deleted_at.
+- Atomic creation: essay + empty working document (revision 1, sha256 content hash)
+  + immutable original snapshot (version_no 1) in one transaction; rollback test
+  proves all-or-nothing.
+- Cursor pagination: opaque base64 (created_at, id) seek, limit 1–100 default 20.
+- PATCH accepts title only (extra fields rejected); Idempotency-Key accepted per
+  contract, dedup storage reserved for a later slice.
+- Frontend: protected `/dashboard` (list/create/rename/delete-with-confirmation,
+  loading/empty/error states) and `/essays/[id]` detail (Suspense-wrapped dynamic
+  param for Next 16 prerendering); TanStack Query mutations with invalidation.
+- Tests: backend **94 passed** (16 new essay integration tests on real PostgreSQL:
+  atomicity, rollback, pagination, isolation, soft delete, invalid question id,
+  same-essay constraint, snapshot immutability); frontend E2E **18/18 passed**
+  (7 new essay scenarios incl. loading state, delete confirmation, detail nav).
+  ruff / tsc / ESLint / production build all pass.
+- Decisions flagged for approval: provisional essays.status CHECK
+  ('active','archived') — ERD does not enumerate values; essay list/detail response
+  shapes (contract leaves them open) follow API Spec §2 envelope + ERD fields.
 
 ## 3a. Later stages — TBC
 
