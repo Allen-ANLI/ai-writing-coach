@@ -1,0 +1,50 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local toolchain (portable Node.js, downloaded binaries)
+.tools/
+
+# Python
+backend/.venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node / Next.js
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+
+# Playwright
+test-results/
+playwright-report/
+
+# Local databases and volumes
+*.sqlite
+*.sqlite3
+*.db
+pgdata/
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# One-off preparation helpers
+_prep_*.py
+_prep_*.ps1

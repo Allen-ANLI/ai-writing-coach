@@ -1,0 +1,22 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: awc-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ai_writing_coach}
+      POSTGRES_USER: ${POSTGRES_USER:-awc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-awc_local_dev}
+    ports:
+      # Loopback only: never expose PostgreSQL to other network interfaces.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/10-enable-vector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-awc} -d ${POSTGRES_DB:-ai_writing_coach}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

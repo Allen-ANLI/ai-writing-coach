@@ -1,0 +1,2762 @@
+openapi: 3.1.0
+info:
+  title: AI Writing Coach API
+  version: 1.1.1
+  description: Final API contract aligned with Database ERD V1.2. Working documents use server_revision; immutable
+    snapshots use version_no. Refresh tokens are HttpOnly cookies. 1.1.1 adds the additive
+    infrastructure endpoint GET /health (200 database reachable, 503 database unavailable);
+    no approved business endpoint semantics were changed.
+servers:
+- url: https://api.example.com/api/v1
+  description: Production placeholder
+- url: http://localhost:8000/api/v1
+  description: Local development
+security:
+- bearerAuth: []
+tags:
+- name: Auth
+- name: Users
+- name: Essays
+- name: Writing Sessions
+- name: Grammar
+- name: Teaching
+- name: Expressions
+- name: Learning
+- name: IELTS
+- name: Evaluations
+- name: Outlines
+- name: Workflows
+- name: Analytics
+- name: Health
+  description: Infrastructure health check. Not a product feature endpoint.
+paths:
+  /health:
+    get:
+      tags:
+      - Health
+      summary: Infrastructure health check
+      description: 'Reports service liveness and real PostgreSQL connectivity. Returns
+        200 only when the database is reachable; returns 503 when it is not. Public
+        operational endpoint: no authentication required. Added as an additive infrastructure
+        endpoint; no approved business endpoint semantics were changed.'
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: Service is healthy and the database is reachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service is up but the database is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/register:
+    post:
+      tags:
+      - Auth
+      summary: Register and create device session
+      responses:
+        '201':
+          description: Registered; refresh cookie set
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '409':
+          description: Email is already registered (error code RESOURCE_ALREADY_EXISTS)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 10
+                  writeOnly: true
+                display_name:
+                  type:
+                  - string
+                  - 'null'
+              required:
+              - email
+              - password
+      security: []
+  /auth/login:
+    post:
+      tags:
+      - Auth
+      summary: Login and create device session
+      responses:
+        '200':
+          description: Authenticated; refresh cookie set
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  writeOnly: true
+              required:
+              - email
+              - password
+      security: []
+  /auth/refresh:
+    post:
+      tags:
+      - Auth
+      summary: Rotate refresh token in same device session
+      responses:
+        '200':
+          description: New access token and rotated cookie
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: refresh_token
+        in: cookie
+        required: false
+        schema:
+          type: string
+      security: []
+  /auth/logout:
+    post:
+      tags:
+      - Auth
+      summary: Revoke current device session
+      responses:
+        '204':
+          description: Session revoked
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+  /auth/logout-all:
+    post:
+      tags:
+      - Auth
+      summary: Revoke all user sessions
+      responses:
+        '200':
+          description: All sessions revoked
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+  /auth/sessions:
+    get:
+      tags:
+      - Auth
+      summary: List stable device sessions
+      responses:
+        '200':
+          description: Device sessions
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+  /auth/sessions/{session_id}:
+    delete:
+      tags:
+      - Auth
+      summary: Revoke device session
+      responses:
+        '204':
+          description: Session revoked
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /users/me:
+    get:
+      tags:
+      - Users
+      summary: Get current user
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+    patch:
+      tags:
+      - Users
+      summary: Update current user
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: &id001
+              type: object
+              properties: {}
+              additionalProperties: true
+  /users/me/preferences:
+    get:
+      tags:
+      - Users
+      summary: Get preferences
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+    patch:
+      tags:
+      - Users
+      summary: Patch preferences
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+  /essays:
+    post:
+      tags:
+      - Essays
+      summary: Create Essay, Working Document and Original Snapshot atomically
+      responses:
+        '201':
+          description: Created
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type:
+                  - string
+                  - 'null'
+                writing_type:
+                  type: string
+                  enum:
+                  - free_writing
+                  - ielts_task1
+                  - ielts_task2
+                  - other
+                question_id:
+                  type:
+                  - string
+                  - 'null'
+                  format: uuid
+              required:
+              - writing_type
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+    get:
+      tags:
+      - Essays
+      summary: List current user's essays
+      responses:
+        '200':
+          description: Cursor-paginated list
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /essays/{essay_id}:
+    get:
+      tags:
+      - Essays
+      summary: Get essay metadata
+      responses:
+        '200':
+          description: Metadata
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      tags:
+      - Essays
+      summary: Update essay metadata
+      responses:
+        '200':
+          description: Updated
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      tags:
+      - Essays
+      summary: Soft-delete essay
+      responses:
+        '204':
+          description: Soft-deleted
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/working-document:
+    get:
+      tags:
+      - Essays
+      summary: Get current Working Document
+      responses:
+        '200':
+          description: Working Document
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags:
+      - Essays
+      summary: Autosave Working Document; no snapshot
+      responses:
+        '200':
+          description: Saved; 409 on revision conflict
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: &id002
+              type: object
+              properties:
+                base_revision:
+                  type: integer
+                  minimum: 1
+                client_revision:
+                  type: integer
+                  minimum: 0
+                content_json:
+                  type: object
+                plain_text:
+                  type: string
+                word_count:
+                  type: integer
+                  minimum: 0
+              required:
+              - base_revision
+              - client_revision
+              - content_json
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/snapshots:
+    post:
+      tags:
+      - Essays
+      summary: Create snapshot and archive only matching-revision Issues
+      responses:
+        '201':
+          description: Snapshot created
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: &id007
+              type: object
+              properties:
+                source_revision:
+                  type: integer
+                version_type:
+                  type: string
+                  enum:
+                  - original
+                  - checkpoint
+                  - assisted
+                  - ai_rewrite
+                  - final
+                label:
+                  type:
+                  - string
+                  - 'null'
+              required:
+              - source_revision
+              - version_type
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /essays/{essay_id}/versions:
+    get:
+      tags:
+      - Essays
+      summary: List immutable versions
+      responses:
+        '200':
+          description: Version list
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /essays/{essay_id}/versions/{version_id}:
+    get:
+      tags:
+      - Essays
+      summary: Get immutable version
+      responses:
+        '200':
+          description: Version detail
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/restore:
+    post:
+      tags:
+      - Essays
+      summary: Restore snapshot into Working Document
+      responses:
+        '200':
+          description: Restored; 409 on conflict
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                version_id:
+                  type: string
+                  format: uuid
+                base_revision:
+                  type: integer
+              required:
+              - version_id
+              - base_revision
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/sessions:
+    post:
+      tags:
+      - Writing Sessions
+      summary: Start assisted or independent session
+      responses:
+        '201':
+          description: Session created; feature flags server-derived
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mode:
+                  type: string
+                  enum:
+                  - assisted
+                  - independent
+                activity_type:
+                  type: string
+                  enum:
+                  - free_writing
+                  - practice
+                  - mock_exam
+                exam_config:
+                  type:
+                  - object
+                  - 'null'
+                  additionalProperties: true
+              required:
+              - mode
+              - activity_type
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+      - Writing Sessions
+      summary: List sessions
+      responses:
+        '200':
+          description: Session list
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /writing-sessions/{session_id}:
+    get:
+      tags:
+      - Writing Sessions
+      summary: Get session
+      responses:
+        '200':
+          description: Session detail
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      tags:
+      - Writing Sessions
+      summary: Update allowed session fields
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /writing-sessions/{session_id}/submit:
+    post:
+      tags:
+      - Writing Sessions
+      summary: Submit and create Final Snapshot atomically
+      responses:
+        '201':
+          description: Submitted
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expected_server_revision:
+                  type: integer
+              required:
+              - expected_server_revision
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /essays/{essay_id}/grammar-check:
+    post:
+      tags:
+      - Grammar
+      summary: Rule-first check against Working Document revision
+      responses:
+        '200':
+          description: Issues; unrevealed answers excluded
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                session_id:
+                  type: string
+                  format: uuid
+                server_revision:
+                  type: integer
+                client_revision:
+                  type: integer
+                text:
+                  type: string
+                text_range:
+                  $ref: '#/components/schemas/TextRange'
+                context:
+                  type: object
+                  additionalProperties: true
+              required:
+              - session_id
+              - server_revision
+              - client_revision
+              - text
+              - text_range
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/issues:
+    get:
+      tags:
+      - Grammar
+      summary: List issues
+      responses:
+        '200':
+          description: Issue list
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/issues/{issue_id}:
+    get:
+      tags:
+      - Grammar
+      summary: Get issue
+      responses:
+        '200':
+          description: Issue detail
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      tags:
+      - Grammar
+      summary: Ignore issue
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  const: ignored
+              required:
+              - status
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/issues/validate:
+    post:
+      tags:
+      - Grammar
+      summary: Atomically save edited document, validate Issue, update state and record event
+      responses:
+        '200':
+          description: Validation outcome; 409 means no partial write
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: &id003
+              type: object
+              properties:
+                issue_id:
+                  type: string
+                  format: uuid
+                base_revision:
+                  type: integer
+                client_revision:
+                  type: integer
+                content_json:
+                  type: object
+                plain_text:
+                  type: string
+                word_count:
+                  type: integer
+                modified_range:
+                  $ref: '#/components/schemas/TextRange'
+              required:
+              - issue_id
+              - base_revision
+              - client_revision
+              - content_json
+              - plain_text
+              - modified_range
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /essays/{essay_id}/issues/{issue_id}/reveal:
+    post:
+      tags:
+      - Grammar
+      summary: Reveal answer after explicit user action
+      responses:
+        '200':
+          description: Revealed suggestions
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/issues/{issue_id}/teaching:
+    post:
+      tags:
+      - Teaching
+      summary: Generate contextual teaching for current revision
+      responses:
+        '200':
+          description: Contextual teaching or 409 stale context
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: &id004
+              type: object
+              properties:
+                server_revision:
+                  type: integer
+                client_revision:
+                  type: integer
+                current_sentence:
+                  type: string
+                paragraph_context:
+                  type:
+                  - string
+                  - 'null'
+                user_current_text:
+                  type:
+                  - string
+                  - 'null'
+              required:
+              - server_revision
+              - client_revision
+              - current_sentence
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/expression-suggestions:
+    post:
+      tags:
+      - Expressions
+      summary: Generate context-aware alternatives
+      responses:
+        '200':
+          description: Suggestions
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/translations:
+    post:
+      tags:
+      - Expressions
+      summary: Translate Chinese phrase in context
+      responses:
+        '200':
+          description: Translation alternatives
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/expression-suggestions/{suggestion_id}/accept:
+    post:
+      tags:
+      - Expressions
+      summary: Atomically apply suggestion to Working Document
+      responses:
+        '200':
+          description: Document updated and Edit Event recorded
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: suggestion_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /expressions:
+    post:
+      tags:
+      - Expressions
+      summary: Create personal expression
+      responses:
+        '201':
+          description: Created
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                english_text:
+                  type: string
+                chinese_meaning:
+                  type:
+                  - string
+                  - 'null'
+                usage_context:
+                  type:
+                  - string
+                  - 'null'
+                topic:
+                  type:
+                  - string
+                  - 'null'
+                register:
+                  type:
+                  - string
+                  - 'null'
+                grammar_pattern:
+                  type:
+                  - string
+                  - 'null'
+              required:
+              - english_text
+    get:
+      tags:
+      - Expressions
+      summary: List personal expressions
+      responses:
+        '200':
+          description: Expression list
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /expressions/{expression_id}:
+    get:
+      tags:
+      - Expressions
+      summary: Get expression
+      responses:
+        '200':
+          description: Get expression
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: expression_id
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      tags:
+      - Expressions
+      summary: Update expression
+      responses:
+        '200':
+          description: Update expression
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - name: expression_id
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      tags:
+      - Expressions
+      summary: Delete expression
+      responses:
+        '204':
+          description: Delete expression
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: expression_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /expressions/{expression_id}/archive:
+    post:
+      tags:
+      - Expressions
+      summary: Archive expression
+      responses:
+        '200':
+          description: Archived
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: expression_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /expressions/search:
+    post:
+      tags:
+      - Expressions
+      summary: Search current user's expressions
+      responses:
+        '200':
+          description: User-scoped results
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+  /essays/{essay_id}/expressions/extract:
+    post:
+      tags:
+      - Expressions
+      summary: Extract candidates from immutable version
+      responses:
+        '202':
+          description: Extraction accepted
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /learning/reviews/due:
+    get:
+      tags:
+      - Learning
+      summary: Get due review prompts without answer leakage
+      responses:
+        '200':
+          description: Due reviews
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+  /learning/reviews:
+    post:
+      tags:
+      - Learning
+      summary: Submit translation review
+      responses:
+        '201':
+          description: Review evaluated and progress updated
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /expressions/{expression_id}/progress:
+    get:
+      tags:
+      - Learning
+      summary: Get expression progress
+      responses:
+        '200':
+          description: Progress
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: expression_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /learning/summary:
+    get:
+      tags:
+      - Learning
+      summary: Get learning summary
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+  /learning/plans:
+    post:
+      tags:
+      - Learning
+      summary: Create learning plan
+      responses:
+        '201':
+          description: Created
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+    get:
+      tags:
+      - Learning
+      summary: List learning plans
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+  /learning/tasks:
+    get:
+      tags:
+      - Learning
+      summary: List learning tasks
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+  /learning/tasks/{task_id}:
+    patch:
+      tags:
+      - Learning
+      summary: Update learning task
+      responses:
+        '200':
+          description: Updated
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /users/me/weaknesses:
+    get:
+      tags:
+      - Learning
+      summary: Get weakness profile
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+  /users/me/weaknesses/{category}:
+    get:
+      tags:
+      - Learning
+      summary: Get weakness category
+      responses:
+        '200':
+          description: Category detail
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: category
+        in: path
+        required: true
+        schema:
+          type: string
+  /users/me/weaknesses/trends:
+    get:
+      tags:
+      - Learning
+      summary: Get writing-volume-adjusted trends
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+  /users/me/weaknesses/practice:
+    post:
+      tags:
+      - Learning
+      summary: Generate targeted practice
+      responses:
+        '202':
+          description: Accepted
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+  /ielts/questions:
+    get:
+      tags:
+      - IELTS
+      summary: Search published and permitted questions
+      responses:
+        '200':
+          description: Question list
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+      - name: task_type
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: topic
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: question_type
+        in: query
+        required: false
+        schema:
+          type: string
+  /ielts/questions/{question_id}:
+    get:
+      tags:
+      - IELTS
+      summary: Get permitted question
+      responses:
+        '200':
+          description: Question detail
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /ielts/tags:
+    get:
+      tags:
+      - IELTS
+      summary: List question tags
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+  /ielts/questions/random:
+    get:
+      tags:
+      - IELTS
+      summary: Get random permitted question
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+  /ielts/questions/{question_id}/favorite:
+    post:
+      tags:
+      - IELTS
+      summary: Favorite question
+      responses:
+        '201':
+          description: Favorited
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      tags:
+      - IELTS
+      summary: Unfavorite question
+      responses:
+        '204':
+          description: Unfavorited
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/evaluations:
+    post:
+      tags:
+      - Evaluations
+      summary: Queue evaluation against immutable version
+      responses:
+        '202':
+          description: Evaluation queued
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: &id005
+              type: object
+              properties:
+                version_id:
+                  type: string
+                  format: uuid
+                evaluation_type:
+                  type: string
+                  enum:
+                  - ielts
+                  - general
+                task_type:
+                  type:
+                  - string
+                  - 'null'
+                  enum:
+                  - task1
+                  - task2
+                  - null
+              required:
+              - version_id
+              - evaluation_type
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+    get:
+      tags:
+      - Evaluations
+      summary: List evaluations
+      responses:
+        '200':
+          description: Evaluation history
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /evaluations/{evaluation_id}:
+    get:
+      tags:
+      - Evaluations
+      summary: Get evaluation
+      responses:
+        '200':
+          description: Evaluation detail
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: evaluation_id
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      tags:
+      - Evaluations
+      summary: Delete evaluation
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: evaluation_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /evaluations/{evaluation_id}/rewrite:
+    post:
+      tags:
+      - Evaluations
+      summary: Create rewrite task
+      responses:
+        '202':
+          description: Rewrite queued
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                modification_level:
+                  type: string
+                  enum:
+                  - level_1
+                  - level_2
+                  - level_3
+                  - level_4
+              required:
+              - modification_level
+      parameters:
+      - name: evaluation_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /rewrites/{rewrite_id}:
+    get:
+      tags:
+      - Evaluations
+      summary: Get rewrite result
+      responses:
+        '200':
+          description: Rewrite detail
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: rewrite_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /rewrites/{rewrite_id}/accept:
+    post:
+      tags:
+      - Evaluations
+      summary: Atomically accept rewrite, update document and create ai_rewrite snapshot
+      responses:
+        '200':
+          description: Accepted; 409 on conflict or duplicate acceptance
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: &id006
+              type: object
+              properties:
+                base_revision:
+                  type: integer
+                client_revision:
+                  type: integer
+              required:
+              - base_revision
+              - client_revision
+      parameters:
+      - name: rewrite_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /essays/{essay_id}/outlines/generate:
+    post:
+      tags:
+      - Outlines
+      summary: Generate outline
+      responses:
+        '202':
+          description: Accepted
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/outlines:
+    get:
+      tags:
+      - Outlines
+      summary: List outlines
+      responses:
+        '200':
+          description: Outline list
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /outlines/{outline_id}:
+    get:
+      tags:
+      - Outlines
+      summary: Get outline
+      responses:
+        '200':
+          description: Detail
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: outline_id
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      tags:
+      - Outlines
+      summary: Update outline
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - name: outline_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /outlines/{outline_id}/confirm:
+    post:
+      tags:
+      - Outlines
+      summary: Confirm outline
+      responses:
+        '200':
+          description: Confirmed
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: outline_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /outlines/{outline_id}/nodes:
+    post:
+      tags:
+      - Outlines
+      summary: Create outline node
+      responses:
+        '201':
+          description: Created
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - name: outline_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /outlines/{outline_id}/nodes/{node_id}:
+    patch:
+      tags:
+      - Outlines
+      summary: Update outline node
+      responses:
+        '200':
+          description: Updated
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - name: outline_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: node_id
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      tags:
+      - Outlines
+      summary: Delete outline node
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: outline_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: node_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /workflows:
+    post:
+      tags:
+      - Workflows
+      summary: Create LangGraph business workflow
+      responses:
+        '202':
+          description: Accepted
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                workflow_type:
+                  type: string
+                  enum:
+                  - writing_planner
+                  - learning_extractor
+                  - personalized_study_planner
+                essay_id:
+                  type:
+                  - string
+                  - 'null'
+                  format: uuid
+                input:
+                  type: object
+                  additionalProperties: true
+              required:
+              - workflow_type
+              - input
+  /workflows/{workflow_id}:
+    get:
+      tags:
+      - Workflows
+      summary: Get status without exposing graph state
+      responses:
+        '200':
+          description: Workflow status
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /workflows/{workflow_id}/resume:
+    post:
+      tags:
+      - Workflows
+      summary: Resume workflow with allowed business action
+      responses:
+        '202':
+          description: Resumed
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                  enum:
+                  - confirm
+                  - reject
+                  - revise
+                  - continue
+                input:
+                  type: object
+                  additionalProperties: true
+              required:
+              - action
+      parameters:
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /workflows/{workflow_id}/cancel:
+    post:
+      tags:
+      - Workflows
+      summary: Cancel workflow
+      responses:
+        '200':
+          description: Cancellation requested
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /workflows/{workflow_id}/events:
+    get:
+      tags:
+      - Workflows
+      summary: List workflow events
+      responses:
+        '200':
+          description: Events
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /analytics/ai-usage:
+    get:
+      tags:
+      - Analytics
+      summary: Get current user's AI usage
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+  /analytics/ai-usage/by-feature:
+    get:
+      tags:
+      - Analytics
+      summary: Get usage by feature
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+  /analytics/ai-usage/trends:
+    get:
+      tags:
+      - Analytics
+      summary: Get cost trends
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    HealthResponse:
+      type: object
+      description: Success envelope for the infrastructure health check.
+      properties:
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              const: ok
+            database:
+              type: string
+              enum:
+              - connected
+          required:
+          - status
+          - database
+        meta:
+          type: object
+          properties:
+            request_id:
+              type: string
+      required:
+      - data
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  reason:
+                    type: string
+          required:
+          - code
+          - message
+        meta:
+          type: object
+          properties:
+            request_id:
+              type: string
+      required:
+      - error
+    TextRange:
+      type: object
+      properties:
+        start:
+          type: integer
+          minimum: 0
+        end:
+          type: integer
+          minimum: 1
+        offset_unit:
+          type: string
+          const: unicode_codepoint
+      required:
+      - start
+      - end
+      - offset_unit
+    WorkingDocumentUpdate: *id002
+    WorkingDocumentSaved:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            essay_id:
+              type: string
+              format: uuid
+            server_revision:
+              type: integer
+            client_revision:
+              type: integer
+            saved:
+              type: boolean
+            saved_at:
+              type: string
+              format: date-time
+      required:
+      - data
+    GrammarIssue:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        category:
+          type: string
+        sub_category:
+          type:
+          - string
+          - 'null'
+        source:
+          type: string
+          enum:
+          - rule_engine
+          - llm
+          - hybrid
+        source_server_revision:
+          type: integer
+        essay_version_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        start_offset:
+          type: integer
+        end_offset:
+          type: integer
+        offset_unit:
+          type: string
+          const: unicode_codepoint
+        anchor_text:
+          type: string
+        short_explanation:
+          type:
+          - string
+          - 'null'
+        suggestions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              display_text:
+                type: string
+              answer_revealed:
+                type: boolean
+                const: false
+        status:
+          type: string
+          enum:
+          - detected
+          - resolved
+          - ignored
+          - stale
+    GrammarCheckResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            server_revision:
+              type: integer
+            client_revision:
+              type: integer
+            check_status:
+              type: string
+              enum:
+              - completed
+              - partial
+            issues:
+              type: array
+              items:
+                $ref: '#/components/schemas/GrammarIssue'
+      required:
+      - data
+    IssueValidationRequest: *id003
+    TeachingRequest: *id004
+    EvaluationCreate: *id005
+    RewriteAccept: *id006
+    SnapshotCreate: *id007
+    GenericObject: *id001
+    IssueValidationResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            issue_id:
+              type: string
+              format: uuid
+            validation_status:
+              type: string
+              enum:
+              - correct
+              - incorrect
+              - needs_review
+            is_resolved:
+              type: boolean
+            server_revision:
+              type: integer
+      required:
+      - data
+    TeachingResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            teaching_id:
+              type: string
+              format: uuid
+            issue_id:
+              type: string
+              format: uuid
+            source_server_revision:
+              type: integer
+            title:
+              type: string
+            why_wrong:
+              type: string
+            grammar_rule:
+              type: string
+            recommended_correction:
+              type: string
+            personalized_note:
+              type:
+              - string
+              - 'null'
+      required:
+      - data
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        maxLength: 200
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+  responses:
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: NotFound
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: ValidationError
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
