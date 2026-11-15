@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 
 import { defineConfig } from "@playwright/test";
@@ -11,7 +12,15 @@ import { defineConfig } from "@playwright/test";
  * The dev servers (:8000 / :3500) keep running untouched.
  */
 const backendDir = path.resolve(__dirname, "../backend");
-const backendPython = path.join(backendDir, ".venv", "Scripts", "python.exe");
+// Windows dev uses the project venv; CI (Linux) installs the package into the
+// runner's Python, so fall back to `python` when no venv interpreter exists.
+const venvWindows = path.join(backendDir, ".venv", "Scripts", "python.exe");
+const venvPosix = path.join(backendDir, ".venv", "bin", "python");
+const backendPython = fs.existsSync(venvWindows)
+  ? venvWindows
+  : fs.existsSync(venvPosix)
+    ? venvPosix
+    : "python";
 
 export default defineConfig({
   testDir: "./e2e",

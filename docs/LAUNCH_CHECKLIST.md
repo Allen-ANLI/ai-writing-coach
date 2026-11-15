@@ -9,15 +9,17 @@ or deploys publicly.
 - [x] All PRD loops implemented (Writing / Learning / Improvement).
 - [x] Full API contract implemented — 99/99 operations (1.4.0).
 - [x] Reconciliations R1–R12 resolved and documented.
-- [x] Backend 360 tests, Playwright 65 E2E (3.5 m), vitest 21 — all green.
+- [x] Backend 362 tests, Playwright 65 E2E (3.7 m), vitest 21 — all green.
 - [x] tsc / ESLint / production build (13 routes) / ruff (197 files) clean.
 - [x] Migrations 0001–0017 additive; backup/restore round-trip re-verified
       (40 tables, identical row counts).
 - [x] Structured logging, request tracing, health check, auth + general
       per-IP rate limiting (limiter trip observed live during probing).
 - [x] Deployment stack (Dockerfiles + .dockerignore, prod compose validated,
-      nginx) defined; image builds deferred to approved deployment.
-- [x] CI pipeline (backend / frontend / E2E + dependency audits) defined.
+      nginx) defined; image builds verified by CI docker job (dev machine
+      cannot reach Docker Hub); runtime-dep closure guarded by test.
+- [x] CI pipeline (backend / frontend / E2E / docker build + dependency
+      audits) defined; E2E config made cross-platform for Linux runners.
 - [x] Security review: pip-audit clean, npm production audit clean
       (8 moderate dev-only lint advisories accepted, documented).
 - [x] Performance probe re-run: worst P95 60.1 ms < 500 ms (30 samples).

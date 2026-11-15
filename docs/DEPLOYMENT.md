@@ -29,9 +29,13 @@ origin.
 | `.env.production.example` | All required settings with CHANGE_ME markers |
 
 `docker compose -f docker-compose.prod.yml config` validated 2026-11-15.
-Image builds themselves are deferred to the approved deployment step (they
-pull base images and run `npm ci`; no public deployment happens before
-authorization).
+Image builds are verified by the CI `docker` job (build-only, no push, no
+deployment): the dev machine cannot reach Docker Hub (`auth.docker.io`
+times out), so local `docker build` is network-blocked here. The backend
+image's runtime dependency closure is additionally guarded by
+`tests/test_runtime_dependencies.py` (caught httpx being dev-only while
+providers import it — fixed 2026-11-15). No public deployment happens
+before authorization.
 
 ## Deploy
 

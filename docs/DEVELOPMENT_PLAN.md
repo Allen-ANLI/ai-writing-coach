@@ -698,8 +698,14 @@ fixed gaps and committed):
   500 ms); pip-audit clean (venv pip upgraded 25.2→26.3); npm production
   audit clean; 8 moderate dev-only lint advisories documented as accepted
   risk; mock AI eval harness re-validated (15 calls, 0 errors — pipeline
-  evidence only). Full regression: backend **360 passed**, Playwright
-  **65 passed** (3.5 m), vitest 21, tsc/ESLint/build/ruff clean.
+  evidence only). Full regression: backend **362 passed**, Playwright
+  **65 passed** (3.7 m), vitest 21, tsc/ESLint/build/ruff clean.
+- Takeover-session defect fixes: httpx was dev-only while app code imports
+  it at runtime (production image would crash) — moved to main dependencies
+  + `tests/test_runtime_dependencies.py` guard; Playwright config and
+  global-setup hardcoded the Windows venv path — made cross-platform for
+  Linux CI; CI docker build-only job added because Docker Hub is unreachable
+  from the dev machine.
 - Docs: DEPLOYMENT, BACKUP_RECOVERY, SECURITY_REVIEW, PERFORMANCE_REPORT,
   AI_QUALITY_REPORT, LAUNCH_CHECKLIST, ADR-023.
 
