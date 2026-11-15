@@ -48,3 +48,6 @@ Thumbs.db
 # One-off preparation helpers
 _prep_*.py
 _prep_*.ps1
+
+# Local dev management scripts runtime state and logs
+.dev/

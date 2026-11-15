@@ -10,6 +10,42 @@ Slice 2A Essay 管理**（原子创建 Essay+工作文档+Original 快照、游�
 - 文档权威索引：[`docs/README.md`](docs/README.md)
 - 阶段计划：[`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md)
 
+## 一键启动 / 停止 / 状态（推荐）
+
+仓库根目录提供三个 PowerShell 脚本（Windows PowerShell 5.1+，无需管理员权限）：
+
+| 脚本 | 作用 |
+|---|---|
+| `start-dev.ps1` | 检查 Docker Desktop → 启动并等待 `awc-db` / `awc-languagetool` 健康 → 用项目内 venv 启动 FastAPI（:8000）、便携 Node 22 启动 Next.js（:3500）→ 健康检查 → 自动打开浏览器 |
+| `stop-dev.ps1` | **只停止本项目的后端/前端进程**（按命令行特征精确匹配，不误杀其他项目；排除 E2E 的 :8001/:3600）。默认保留容器；加 `-Infrastructure` 同时停止容器（容器与数据卷保留） |
+| `status-dev.ps1` | 只读查看 Docker / 容器健康 / 前后端进程 PID / 端点健康 / 日志位置 |
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-dev.ps1
+powershell -ExecutionPolicy Bypass -File .\status-dev.ps1
+powershell -ExecutionPolicy Bypass -File .\stop-dev.ps1
+powershell -ExecutionPolicy Bypass -File .\stop-dev.ps1 -Infrastructure   # 同时停止容器（不删数据卷）
+```
+
+行为与安全保证：
+
+- **幂等**：已运行且健康的服务不会重复启动（端口 + 健康检查 + 进程特征识别）；
+  端口被占用但健康检查失败时报错退出，不会盲目再起一个实例。
+- **仅项目内工具链**：`backend\.venv` 的 Python、`.tools\` 便携 Node 22；
+  PATH 前置仅作用于脚本进程及其子进程，**不修改系统 PATH / 注册表 / 全局 Python**。
+- **Docker Desktop 由用户手动启动**：脚本只检查，未运行时提示并退出，不改动任何系统配置。
+- **停止策略**：应用进程与基础设施分离。默认只停应用；`-Infrastructure` 用
+  `docker compose stop` 停容器，**从不执行 `down -v`，数据卷（pgdata）永不删除**。
+- **不输出任何密钥或环境变量值**；日志只含进程/健康/容器状态信息。
+- **日志**：`.dev\logs\`（已 gitignore）——`start-dev.log` / `stop-dev.log` /
+  `status-dev.log`、`backend.out.log` / `backend.err.log`（uvicorn 日志在 stderr）、
+  `frontend.out.log` / `frontend.err.log`（每次启动覆盖为最新一次运行）。
+  进程 PID 记录在 `.dev\state.json`。
+- `start-dev.ps1 -NoBrowser` 可跳过自动打开浏览器。
+
+首次使用前请先完成下方「快速开始」的第 1、3 步（`.env` / `.env.local` 与依赖安装），
+并确保数据库已迁移（第 4 步）。
+
 ## 仓库结构
 
 ```text
