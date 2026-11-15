@@ -29,7 +29,7 @@ from app.modules.essays import repository as essay_repository
 from app.modules.essays import tiptap
 from app.modules.essays.models import EssayEditEvent
 from app.modules.essays.service import get_essay
-from app.modules.expressions import repository
+from app.modules.expressions import knowledge, repository
 from app.modules.expressions.models import (
     ExpressionSource,
     ExpressionSuggestion,
@@ -99,6 +99,7 @@ def create_expression(db: Session, user: User, payload: CreateExpressionRequest)
             created_at=now,
         )
     )
+    knowledge.ensure_embedding(db, expression)
     db.commit()
     db.refresh(expression)
     return expression
@@ -141,6 +142,7 @@ def update_expression(
     for field, value in updates.items():
         setattr(expression, field, value)
     expression.updated_at = utcnow()
+    knowledge.ensure_embedding(db, expression)
     db.commit()
     db.refresh(expression)
     return expression
@@ -171,7 +173,11 @@ def _assisted_session(db: Session, user: User, essay_id: uuid.UUID, session_id: 
 
 
 def _previously_learned_context(db: Session, user: User, text: str) -> str:
-    candidates = repository.keyword_candidates(db, user.id, text)
+    # Semantic recall first (user-scoped pgvector); keyword fallback when
+    # embeddings are unavailable. Suitability is still judged by the LLM.
+    candidates = knowledge.semantic_candidates(db, user.id, text)
+    if not candidates:
+        candidates = repository.keyword_candidates(db, user.id, text)
     if not candidates:
         return "none"
     return "; ".join(
@@ -224,9 +230,10 @@ def polish_expression(
     )
     db.add(suggestion)
     db.flush()
-    learned_texts = {
-        c.english_text.lower() for c in repository.keyword_candidates(db, user.id, payload.sentence)
-    }
+    learned_pool = knowledge.semantic_candidates(db, user.id, payload.sentence)
+    if not learned_pool:
+        learned_pool = repository.keyword_candidates(db, user.id, payload.sentence)
+    learned_texts = {c.english_text.lower() for c in learned_pool}
     for order, item in enumerate(result.suggestions[: payload.max_suggestions]):
         is_learned = item.text.strip().lower() in learned_texts
         expression_id = None

@@ -55,6 +55,17 @@ class Settings(BaseSettings):
     llm_input_cost_per_1k: float = 0.0
     llm_output_cost_per_1k: float = 0.0
 
+    # --- Embeddings / RAG (Stage 2 Slice 5) ---
+    # mock: deterministic pseudo-vectors for tests (NOT semantic).
+    # openai_compat: any OpenAI-compatible embeddings endpoint.
+    embedding_provider: str = "mock"
+    embedding_base_url: str = ""
+    embedding_api_key: str = ""
+    embedding_model: str = ""
+    # Must match the VECTOR(n) column (migration 0010 uses 1536).
+    embedding_dimensions: int = 1536
+    embedding_timeout_seconds: float = 30.0
+
 
 @lru_cache
 def get_settings() -> Settings:

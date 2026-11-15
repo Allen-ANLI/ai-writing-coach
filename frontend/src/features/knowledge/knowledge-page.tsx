@@ -30,6 +30,7 @@ export function KnowledgePage() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [searchMode, setSearchMode] = useState<"keyword" | "semantic" | "hybrid">("keyword");
   const [addOpen, setAddOpen] = useState(false);
   const [english, setEnglish] = useState("");
   const [chinese, setChinese] = useState("");
@@ -37,13 +38,14 @@ export function KnowledgePage() {
   const [error, setError] = useState<string | null>(null);
 
   const expressionsQuery = useQuery({
-    queryKey: ["expressions", query, statusFilter],
+    queryKey: ["expressions", query, statusFilter, searchMode],
     queryFn: async () =>
       (
         await listExpressions({
           limit: 50,
           query: query || undefined,
           status: statusFilter || undefined,
+          mode: searchMode,
         })
       ).data,
   });
@@ -123,6 +125,17 @@ export function KnowledgePage() {
               {label}
             </option>
           ))}
+        </select>
+        <select
+          data-testid="kb-search-mode"
+          value={searchMode}
+          onChange={(event) => setSearchMode(event.target.value as "keyword" | "semantic" | "hybrid")}
+          className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          title="Semantic search uses your personal embeddings (user-scoped)"
+        >
+          <option value="keyword">Keyword</option>
+          <option value="semantic">Semantic</option>
+          <option value="hybrid">Hybrid</option>
         </select>
       </div>
 

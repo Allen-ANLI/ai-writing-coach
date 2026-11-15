@@ -129,3 +129,51 @@ test("independent mode: no expression assistance", async ({ page }) => {
   await page.waitForTimeout(1000);
   await expect(page.getByTestId("expression-assist")).toHaveCount(0);
 });
+
+test("knowledge base: semantic and hybrid search modes", async ({ page }) => {
+  await register(page);
+  await page.goto("/knowledge");
+  await page.getByTestId("add-expression").click();
+  await page.getByTestId("kb-english-input").fill("gain hands-on experience");
+  await page.getByTestId("kb-chinese-input").fill("获得实践经验");
+  await page.getByTestId("kb-save").click();
+  await expect(page.getByTestId("kb-item")).toHaveCount(1);
+
+  await page.getByTestId("kb-search-mode").selectOption("semantic");
+  await page.getByTestId("kb-search").fill("practical skills");
+  await expect(page.getByTestId("kb-item")).toHaveCount(1, { timeout: 10_000 });
+
+  await page.getByTestId("kb-search-mode").selectOption("hybrid");
+  await expect(page.getByTestId("kb-item")).toHaveCount(1, { timeout: 10_000 });
+});
+
+test("extraction: candidates from a version require confirmation before saving", async ({ page }) => {
+  await register(page);
+  await openEditorWithSession(page, "assisted");
+
+  await page.getByTestId("editor-content").click();
+  await page.keyboard.type("Students should gain hands-on experience before graduation.");
+  await expect(page.getByTestId("save-status")).toContainText("Saved", { timeout: 15_000 });
+
+  // Create a checkpoint, then extract from it via History.
+  await page.getByTestId("open-history").click();
+  await page.getByTestId("create-checkpoint").click();
+  await expect(page.getByTestId("version-list")).toContainText("Checkpoint", { timeout: 10_000 });
+  await page.getByTestId("extract-2").click();
+
+  await expect(page.getByTestId("extraction-candidates")).toBeVisible({ timeout: 20_000 });
+  // Nothing saved before confirmation.
+  await page.goto("/knowledge");
+  await expect(page.getByTestId("kb-empty")).toBeVisible();
+
+  // Back to the editor, confirm extraction.
+  await page.goBack();
+  await page.getByTestId("open-history").click();
+  await page.getByTestId("extract-2").click();
+  await expect(page.getByTestId("extraction-candidates")).toBeVisible({ timeout: 20_000 });
+  await page.getByTestId("extraction-save").click();
+  await expect(page.getByTestId("extraction-saved")).toBeVisible({ timeout: 15_000 });
+
+  await page.goto("/knowledge");
+  await expect(page.getByTestId("kb-item")).toHaveCount(1, { timeout: 10_000 });
+});

@@ -403,6 +403,43 @@ Scope delivered:
 Out of scope (next slices): semantic RAG + extraction + learning (5), IELTS (6),
 evaluations/rewrites as post-writing actions (7), outlines/LangGraph (8).
 
+## 3j. Stage 2 — Slice 5A: Semantic RAG + expression extraction
+
+**Status:** IMPLEMENTED 2026-11-15, verified: backend **245 passed** (15 new),
+Playwright **44 passed** (2 new), vitest 21, tsc/ESLint/build/ruff clean.
+Migration 0010 applied. Contract operations 45/87.
+
+Scope delivered:
+
+- Embedding provider abstraction (`app/ai/embeddings.py`): deterministic mock
+  (tests only, NOT semantic) + OpenAI-compatible endpoint adapter with
+  dimension validation. Config: EMBEDDING_PROVIDER/BASE_URL/API_KEY/MODEL/
+  DIMENSIONS (1536 must match the vector column).
+- Migration 0010: expression_embeddings VECTOR(1536), HNSW cosine index,
+  UNIQUE(expression_id, embedding_model, content_hash) — rebuildable vectors.
+- Embeddings written on expression create/update (best-effort: provider
+  failure never blocks knowledge-base writes).
+- Semantic retrieval ALWAYS user-scoped at query time (join + WHERE user_id),
+  never a post-filter; archived/deleted excluded. Keyword/semantic/hybrid
+  search modes; previously-learned recall upgraded to semantic-first with
+  keyword fallback (suitability still judged by the LLM).
+- Extraction (POST /essays/{id}/expressions/extract, 202): from an IMMUTABLE
+  version, LLM candidates returned for confirmation; nothing persisted until
+  the user saves via POST /expressions (source_type=essay).
+- Frontend: /knowledge search-mode selector; History → Extract per version →
+  confirmation dialog with per-candidate selection.
+- Tests: 3 embedding unit + 8 RAG/extraction integration + 2 E2E (semantic
+  modes, extraction confirmation flow).
+- Dependency added: pgvector>=0.3 (Python client for the vector column).
+
+**Quality caveat:** mock embeddings verify the pipeline only; real semantic
+quality requires a configured embedding endpoint (reported with the LLM key
+open item).
+
+Out of scope (next): Slice 5B reviews/SM-2/progress/weaknesses/summary, then
+IELTS (6), evaluations/rewrites (7), outlines/LangGraph (8), analytics (9),
+billing (10), production readiness (11).
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

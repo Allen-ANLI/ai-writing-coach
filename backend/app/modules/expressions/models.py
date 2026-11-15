@@ -3,6 +3,7 @@
 import uuid
 from datetime import datetime
 
+from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
@@ -11,6 +12,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -137,3 +139,31 @@ class ExpressionSuggestionItem(Base):
     )
 
     suggestion: Mapped[ExpressionSuggestion] = relationship(back_populates="items")
+
+
+class ExpressionEmbedding(Base):
+    """Rebuildable semantic vector (ERD §9.3). Model + content hash identify
+    stale embeddings when the provider or text changes."""
+
+    __tablename__ = "expression_embeddings"
+    __table_args__ = (
+        UniqueConstraint(
+            "expression_id",
+            "embedding_model",
+            "content_hash",
+            name="uq_expression_embeddings_expr_model_hash",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    expression_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_expressions.id"), nullable=False
+    )
+    embedding_model: Mapped[str] = mapped_column(String(100), nullable=False)
+    embedding_version: Mapped[str | None] = mapped_column(String(50))
+    dimensions: Mapped[int] = mapped_column(Integer, nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(VECTOR(1536), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )

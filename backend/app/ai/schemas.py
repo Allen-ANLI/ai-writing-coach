@@ -73,3 +73,21 @@ class ValidationJudgement(BaseModel):
 
     status: Literal["correct", "incorrect", "needs_review"]
     reason: str = Field(min_length=1, max_length=1000)
+
+
+class ExtractedExpression(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    english_text: str = Field(min_length=1, max_length=500)
+    chinese_meaning: str = Field(min_length=1, max_length=500)
+    original_text: str | None = Field(default=None, max_length=500)
+    learning_value_reason: str = Field(min_length=1, max_length=1000)
+    usage_context: str | None = Field(default=None, max_length=500)
+    topic: str | None = Field(default=None, max_length=80)
+    grammar_pattern: str | None = Field(default=None, max_length=500)
+
+
+class ExtractionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidates: list[ExtractedExpression] = Field(default_factory=list, max_length=10)

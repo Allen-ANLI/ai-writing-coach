@@ -1,6 +1,7 @@
 """Expression routes (thin): knowledge base CRUD + polish/translation/accept."""
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.infrastructure.database import get_db
-from app.modules.expressions import service
+from app.modules.expressions import knowledge, service
 from app.modules.expressions.schemas import (
     AcceptSuggestionRequest,
     AcceptSuggestionResponse,
@@ -95,6 +96,7 @@ class SearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: str | None = Field(default=None, max_length=500)
+    mode: Literal["keyword", "semantic", "hybrid"] = "keyword"
     status: str | None = None
     topic: str | None = None
     limit: int = Field(default=service.DEFAULT_LIST_LIMIT, ge=1, le=service.MAX_LIST_LIMIT)
@@ -107,6 +109,38 @@ def search_expressions(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ExpressionListResponse:
+    if payload.mode in ("semantic", "hybrid") and payload.query:
+        semantic_items = knowledge.semantic_candidates(
+            db, user.id, payload.query, limit=payload.limit
+        )
+        if payload.mode == "semantic":
+            return ExpressionListResponse.model_validate(
+                {
+                    "data": {"items": semantic_items, "next_cursor": None, "limit": payload.limit},
+                    "meta": {"request_id": new_request_id()},
+                }
+            )
+        keyword_items, _, _ = service.list_expressions(
+            db,
+            user,
+            limit=payload.limit,
+            cursor=None,
+            status=payload.status,
+            topic=payload.topic,
+            query=payload.query,
+        )
+        seen = {item.id for item in semantic_items}
+        merged = list(semantic_items) + [i for i in keyword_items if i.id not in seen]
+        return ExpressionListResponse.model_validate(
+            {
+                "data": {
+                    "items": merged[: payload.limit],
+                    "next_cursor": None,
+                    "limit": payload.limit,
+                },
+                "meta": {"request_id": new_request_id()},
+            }
+        )
     items, next_cursor, applied_limit = service.list_expressions(
         db,
         user,
@@ -197,3 +231,23 @@ def accept_suggestion(
     return AcceptSuggestionResponse.model_validate(
         {"data": data, "meta": {"request_id": new_request_id()}}
     )
+
+
+class ExtractRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version_id: uuid.UUID
+    extraction_scope: Literal["full", "assisted_changes"] = "full"
+
+
+@router.post("/essays/{essay_id}/expressions/extract", status_code=202)
+def extract_expressions(
+    essay_id: uuid.UUID,
+    payload: ExtractRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    data = knowledge.extract_expressions(
+        db, user, essay_id, payload.version_id, payload.extraction_scope
+    )
+    return {"data": data, "meta": {"request_id": new_request_id()}}

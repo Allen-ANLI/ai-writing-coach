@@ -5,6 +5,7 @@ import type {
   CreateExpressionRequest,
   ExpressionListResponse,
   ExpressionResponse,
+  ExtractionResponse,
   PolishRequest,
   SuggestionResponse,
   TranslationRequest,
@@ -16,7 +17,20 @@ export function listExpressions(params: {
   status?: string;
   topic?: string;
   query?: string;
+  mode?: "keyword" | "semantic" | "hybrid";
 }): Promise<ExpressionListResponse> {
+  if (params.mode && params.mode !== "keyword" && params.query) {
+    return apiFetch<ExpressionListResponse>("/expressions/search", {
+      method: "POST",
+      body: {
+        query: params.query,
+        mode: params.mode,
+        status: params.status,
+        topic: params.topic,
+        limit: params.limit ?? 50,
+      },
+    });
+  }
   const search = new URLSearchParams();
   if (params.limit !== undefined) search.set("limit", String(params.limit));
   if (params.cursor) search.set("cursor", params.cursor);
@@ -25,6 +39,16 @@ export function listExpressions(params: {
   if (params.query) search.set("query", params.query);
   const qs = search.toString();
   return apiFetch<ExpressionListResponse>(`/expressions${qs ? `?${qs}` : ""}`);
+}
+
+export function extractExpressions(
+  essayId: string,
+  payload: { version_id: string; extraction_scope?: "full" | "assisted_changes" },
+): Promise<ExtractionResponse> {
+  return apiFetch<ExtractionResponse>(`/essays/${essayId}/expressions/extract`, {
+    method: "POST",
+    body: payload,
+  });
 }
 
 export function createExpression(payload: CreateExpressionRequest): Promise<ExpressionResponse> {

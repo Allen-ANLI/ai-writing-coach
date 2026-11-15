@@ -599,3 +599,25 @@ export interface AcceptExpressionSuggestionResponse {
   data: AcceptExpressionSuggestionData;
   meta?: RequestMeta;
 }
+
+export interface ExtractionCandidate {
+  english_text: string;
+  chinese_meaning: string;
+  original_text: string | null;
+  learning_value_reason: string;
+  usage_context: string | null;
+  topic: string | null;
+  grammar_pattern: string | null;
+}
+
+export interface ExtractionData {
+  essay_id: string;
+  version_id: string;
+  extraction_scope: string;
+  candidates: ExtractionCandidate[];
+}
+
+export interface ExtractionResponse {
+  data: ExtractionData;
+  meta?: RequestMeta;
+}

@@ -121,6 +121,21 @@ GRAMMAR_VALIDATE_V1 = Prompt(
     ),
 )
 
+LEARNING_EXTRACT_V1 = Prompt(
+    feature="learning_extract",
+    version="v1",
+    system=(
+        "You identify expressions worth learning from a learner's essay. Select natural, "
+        "reusable English expressions (collocations, sentence patterns) that appear in or "
+        "can be directly improved from the text. For each: the English expression, its "
+        "Chinese meaning, the learner's original wording if different, WHY it is worth "
+        "learning, usage context, topic, and grammar pattern. Prefer quality over quantity "
+        "(at most 8). Do not invent expressions unrelated to the essay. Candidates are "
+        "shown to the learner for confirmation before saving."
+    ),
+    user_template=("Essay text ({scope}):\n{essay_text}\nReturn JSON with a 'candidates' array."),
+)
+
 PROMPTS: dict[tuple[str, str], Prompt] = {
     (prompt.feature, prompt.version): prompt
     for prompt in (
@@ -129,6 +144,7 @@ PROMPTS: dict[tuple[str, str], Prompt] = {
         EXPRESSION_POLISH_V1,
         CHINESE_TO_ENGLISH_V1,
         GRAMMAR_VALIDATE_V1,
+        LEARNING_EXTRACT_V1,
     )
 }
 

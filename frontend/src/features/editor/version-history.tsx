@@ -10,6 +10,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Dialog } from "@/components/dialog";
+import { ExtractionDialog } from "@/features/editor/extraction-dialog";
 import { ApiClientError } from "@/lib/api-client";
 import { createSnapshot, getVersion, listVersions, restoreVersion } from "@/services/documents";
 import type { TipTapDocument, VersionData, VersionDetailData } from "@/types/api";
@@ -40,6 +41,7 @@ export function VersionHistory({
   const [label, setLabel] = useState("");
   const [viewing, setViewing] = useState<VersionDetailData | null>(null);
   const [confirming, setConfirming] = useState<VersionData | null>(null);
+  const [extractingVersionId, setExtractingVersionId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const versionsQuery = useQuery({
@@ -178,6 +180,14 @@ export function VersionHistory({
                 </button>
                 <button
                   type="button"
+                  data-testid={`extract-${version.version_no}`}
+                  onClick={() => setExtractingVersionId(version.id)}
+                  className="rounded px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  Extract
+                </button>
+                <button
+                  type="button"
                   data-testid={`restore-${version.version_no}`}
                   disabled={!clean || restoreMutation.isPending}
                   onClick={() => setConfirming(version)}
@@ -226,6 +236,14 @@ export function VersionHistory({
             </button>
           </div>
         </Dialog>
+      )}
+
+      {extractingVersionId && (
+        <ExtractionDialog
+          essayId={essayId}
+          versionId={extractingVersionId}
+          onClose={() => setExtractingVersionId(null)}
+        />
       )}
     </Dialog>
   );
