@@ -6,6 +6,8 @@ from fastapi.responses import JSONResponse
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import ApiError
+from app.core.logging import RequestContextMiddleware, configure_logging
+from app.core.rate_limit import check_general_rate_limit
 from app.infrastructure.database import SessionLocal
 from app.schemas.common import new_request_id
 
@@ -29,17 +31,31 @@ def _error_envelope(
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_logging()
     application = FastAPI(title="AI Writing Coach API", version="1.1.1")
     # Background tasks (evaluations/rewrites) open their own sessions through
     # this factory; tests override it with the isolated test factory.
     application.state.session_factory = SessionLocal
+    application.add_middleware(RequestContextMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=CORS_ALLOW_METHODS,
         allow_headers=CORS_ALLOW_HEADERS,
+        expose_headers=["X-Request-ID"],
     )
+
+    @application.middleware("http")
+    async def general_rate_limit(request: Request, call_next):
+        path = request.url.path
+        if path.startswith("/api/v1") and path != "/api/v1/health":
+            host = request.client.host if request.client else "unknown"
+            if not check_general_rate_limit(host):
+                return _error_envelope(
+                    429, "RATE_LIMIT_EXCEEDED", "Too many requests. Try again later."
+                )
+        return await call_next(request)
 
     @application.exception_handler(ApiError)
     async def handle_api_error(request: Request, exc: ApiError) -> JSONResponse:

@@ -73,6 +73,14 @@ class Settings(BaseSettings):
     # Base URL used to build the reset link in the email body.
     frontend_base_url: str = "http://localhost:3500"
 
+    # --- Observability & hardening (Slice 11b) ---
+    log_level: str = "INFO"
+    log_format: str = "json"  # json | text
+    # General per-IP API rate limit (sliding window). Auth endpoints keep
+    # their own stricter limiter. 0 disables the general limiter.
+    api_rate_limit_max_requests: int = 300
+    api_rate_limit_window_seconds: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:

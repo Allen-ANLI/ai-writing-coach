@@ -670,6 +670,44 @@ backup/recovery, structured logging/monitoring, rate-limit hardening, CI/CD,
 security review, performance + AI quality evaluation reports, launch
 checklist (real email + LLM keys + payment activation are user-gated).
 
+## 3r. Slice 11b — Production readiness (2026-11-15)
+
+**Status: DONE, verified, committed. All engineering launch items complete;
+only user-gated blockers remain (LAUNCH_CHECKLIST.md).**
+
+Scope delivered (previous session implemented; takeover session verified,
+fixed gaps and committed):
+
+- Observability: structured JSON access logs + `X-Request-ID` tracing
+  (echo/generate), duration_ms, no bodies/tokens/cookies/keys ever logged;
+  health at DEBUG (`app/core/logging.py`, 4 tests).
+- Hardening: general per-IP sliding-window API rate limit (default 300/min,
+  0 disables) alongside the stricter auth limiter; single storage point for
+  future shared-store swap. Limiter trip observed live during perf probing.
+- Deployment: non-root backend/frontend Dockerfiles, `.dockerignore` (added
+  in takeover — secrets/build artifacts excluded from images), production
+  compose (only nginx exposed; config validated), nginx security headers,
+  `.env.production.example`. Image builds deferred to approved deployment.
+- Backup/recovery: `backup_db.py` / `restore_db.py` (live-DB restore refuses
+  without `--force`) / `verify_backup.py`; round-trip re-verified: 40 tables,
+  identical row counts, scratch DB auto-dropped.
+- CI: GitHub Actions backend (ruff+pytest+pip-audit), frontend
+  (eslint/tsc/vitest/build+npm prod audit), E2E (chromium via
+  PLAYWRIGHT_CHANNEL; local keeps Edge). Audits added in takeover.
+- Verification: perf probe re-run (30 samples/endpoint, worst P95 60.1 ms <
+  500 ms); pip-audit clean (venv pip upgraded 25.2→26.3); npm production
+  audit clean; 8 moderate dev-only lint advisories documented as accepted
+  risk; mock AI eval harness re-validated (15 calls, 0 errors — pipeline
+  evidence only). Full regression: backend **360 passed**, Playwright
+  **65 passed** (3.5 m), vitest 21, tsc/ESLint/build/ruff clean.
+- Docs: DEPLOYMENT, BACKUP_RECOVERY, SECURITY_REVIEW, PERFORMANCE_REPORT,
+  AI_QUALITY_REPORT, LAUNCH_CHECKLIST, ADR-023.
+
+**Blocked on user (launch-gated, unchanged):** rotated DeepSeek key
+(`LLM_API_KEY` empty — real AI quality evaluation), real embedding endpoint,
+real email provider, real payment activation, production secrets + TLS,
+public deployment approval.
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

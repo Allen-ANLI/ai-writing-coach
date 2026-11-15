@@ -4,6 +4,9 @@ import os
 # the developer's .env (real-provider separation requirement, 2026-11-15).
 # Set before any app import so the cached settings pick it up.
 os.environ["LLM_PROVIDER"] = "mock"
+# The suite fires thousands of requests from one test client; the general
+# per-IP limiter is exercised separately and disabled here.
+os.environ["API_RATE_LIMIT_MAX_REQUESTS"] = "0"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

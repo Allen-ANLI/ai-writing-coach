@@ -26,9 +26,9 @@ export default defineConfig({
     baseURL: "http://localhost:3600",
     trace: "retain-on-failure",
     // The Playwright CDN download stalls on this machine, so tests run on the
-    // installed Chromium-based Edge. To use the bundled browser instead:
-    // `npx playwright install chromium` and remove the channel line.
-    channel: "msedge",
+    // installed Chromium-based Edge. CI overrides with PLAYWRIGHT_CHANNEL=chromium
+    // after `npx playwright install chromium`.
+    channel: process.env.PLAYWRIGHT_CHANNEL || "msedge",
   },
   webServer: [
     {
@@ -44,6 +44,7 @@ export default defineConfig({
         // The suite registers many users from one IP; production rate limits
         // stay untouched, the isolated E2E backend relaxes them.
         AUTH_RATE_LIMIT_MAX_REQUESTS: "1000",
+        API_RATE_LIMIT_MAX_REQUESTS: "0",
         // E2E stays deterministic and never spends real API credits.
         LLM_PROVIDER: "mock",
       },

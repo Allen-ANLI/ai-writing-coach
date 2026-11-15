@@ -36,3 +36,26 @@ def enforce_auth_rate_limit(request: Request, scope: str) -> None:
         if len(entries) >= limit:
             raise ApiError(429, "RATE_LIMIT_EXCEEDED", "Too many requests. Try again later.")
         entries.append(now)
+
+
+def check_general_rate_limit(client_host: str) -> bool:
+    """Sliding-window per-IP limit for the whole API. True if allowed.
+
+    In-process (single worker) by design; the storage point is isolated so a
+    shared store (e.g. Redis) can replace it for multi-worker deployments.
+    """
+    settings = get_settings()
+    limit = settings.api_rate_limit_max_requests
+    if limit <= 0:
+        return True
+    key = f"api:{client_host}"
+    now = time.monotonic()
+    window = settings.api_rate_limit_window_seconds
+    with _lock:
+        entries = _windows[key]
+        while entries and now - entries[0] > window:
+            entries.popleft()
+        if len(entries) >= limit:
+            return False
+        entries.append(now)
+    return True
