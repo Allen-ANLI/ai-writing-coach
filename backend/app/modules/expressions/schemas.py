@@ -122,6 +122,8 @@ class SuggestionItemData(BaseModel):
     source: str
     expression_id: uuid.UUID | None
     previously_learned: bool
+    start_offset: int | None = None
+    end_offset: int | None = None
     status: str
 
 
@@ -140,6 +142,38 @@ class SuggestionData(BaseModel):
 
 class SuggestionResponse(BaseModel):
     data: SuggestionData
+    meta: RequestMeta | None = None
+
+
+class SuggestionListResponse(BaseModel):
+    data: dict
+    meta: RequestMeta | None = None
+
+
+class PolishSentenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: uuid.UUID
+    server_revision: int = Field(ge=1)
+    client_revision: int = Field(ge=0)
+    sentence: str = Field(min_length=1, max_length=5000)
+    sentence_range: dict
+    paragraph_context: str | None = Field(default=None, max_length=10000)
+    fragment_anchor: str | None = Field(default=None, max_length=300)
+    exclude: list[str] = Field(default_factory=list, max_length=30)
+
+
+class PolishSentenceFragmentData(BaseModel):
+    suggestion_id: uuid.UUID
+    anchor_text: str
+    start_offset: int
+    end_offset: int
+    note: str
+    items: list[SuggestionItemData]
+
+
+class PolishSentenceResponse(BaseModel):
+    data: dict
     meta: RequestMeta | None = None
 
 

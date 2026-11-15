@@ -69,33 +69,53 @@ test("knowledge base: add, search, archive, delete", async ({ page }) => {
   await expect(page.getByTestId("kb-empty")).toBeVisible({ timeout: 10_000 });
 });
 
-test("polish: select text, accept a candidate, save to knowledge base", async ({ page }) => {
+test("polish: automatic fragment underline, options, pagination, Tab replace, KB (ADR-026)", async ({ page }) => {
   await register(page);
   await openEditorWithSession(page, "assisted");
 
   await page.getByTestId("editor-content").click();
-  await page.keyboard.type("I want to get more experience in this field.");
+  await page.keyboard.type("I very like this book.");
   await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
 
-  // Select the sentence (deterministic keyboard selection).
-  await page.getByTestId("editor-content").click();
-  await page.keyboard.press("Control+a");
+  // 句点触发自动扫描：不地道片段获得琥珀色下划线（无需选区）。
+  const underline = page.locator(".awc-expression").first();
+  await expect(underline).toBeVisible({ timeout: 30_000 });
+  await underline.hover();
+  const card = page.getByTestId("polish-card");
+  await expect(card).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("polish-options").locator("button")).toHaveCount(3);
+  await expect(card).toContainText("第 1 页");
 
-  const assist = page.getByTestId("expression-assist");
-  await expect(assist).toBeVisible({ timeout: 10_000 });
-  await page.getByTestId("request-suggestions").click();
-  await expect(page.getByTestId("expression-candidates")).toBeVisible({ timeout: 15_000 });
+  // 翻页查看更多 → 第 2 页；上一页返回。
+  await page.getByTestId("polish-next-page").click();
+  await expect(card).toContainText("第 2 页", { timeout: 15_000 });
+  await page.getByTestId("polish-prev-page").click();
+  await expect(card).toContainText("第 1 页");
 
-  const firstItem = page.locator("[data-testid^='expression-item-']").first();
-  await firstItem.click();
-  await expect(page.getByTestId("expression-accepted")).toBeVisible({ timeout: 15_000 });
+  // 选中项加入知识库。
+  await page.getByTestId("polish-add-kb").click();
+  await expect(page.getByTestId("polish-add-kb")).toContainText("已加入知识库", { timeout: 10_000 });
 
-  await page.getByTestId("save-to-kb").click();
-  await expect(assist).toContainText("已保存到知识库", { timeout: 10_000 });
+  // Tab 一键替换第一个选项（really like）。
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("editor-content")).toContainText("I really like this book.", {
+    timeout: 15_000,
+  });
+  await expect(page.locator(".awc-expression")).toHaveCount(0);
 
-  await page.getByTestId("close-expression-assist").click();
   await page.goto("/knowledge");
   await expect(page.getByTestId("kb-item")).toHaveCount(1, { timeout: 10_000 });
+});
+
+test("polish: natural sentence gets no underline (ADR-026)", async ({ page }) => {
+  await register(page);
+  await openEditorWithSession(page, "assisted");
+
+  await page.getByTestId("editor-content").click();
+  await page.keyboard.type("She went to school yesterday.");
+  await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
+  await page.waitForTimeout(3000);
+  await expect(page.locator(".awc-expression")).toHaveCount(0);
 });
 
 test("translation: Chinese text gets English candidates and can be applied", async ({ page }) => {

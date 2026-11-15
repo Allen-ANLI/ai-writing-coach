@@ -15,17 +15,22 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { EvaluationDialog } from "@/features/editor/evaluation-dialog";
 import { ExpressionAssist } from "@/features/editor/expression-assist";
+import { createExpressionExtension } from "@/features/editor/expression-extension";
 import {
   advanceGhostHint,
   createGhostHintExtension,
   getGhostIndex,
   setGhostConfig,
+  setGhostIndex,
 } from "@/features/editor/ghost-hint-extension";
 import { createGrammarExtension } from "@/features/editor/grammar/grammar-extension";
 import { GrammarHoverCard } from "@/features/editor/grammar/grammar-hover-card";
 import { useGrammar } from "@/features/editor/grammar/use-grammar";
 import { PlannerChatPanel } from "@/features/editor/planner-chat-panel";
+import { PolishCard } from "@/features/editor/polish-card";
+import { RecordsDialog } from "@/features/editor/records-dialog";
 import { SessionControls } from "@/features/editor/session-controls";
+import { usePolish } from "@/features/editor/use-polish";
 import { useAutosave, type AutosaveApi, type SaveStatus } from "@/features/editor/use-autosave";
 import { VersionHistory } from "@/features/editor/version-history";
 import { BLOCK_SEPARATOR, countWords, splitSentences } from "@/lib/document-text";
@@ -48,6 +53,7 @@ const SAVE_STATUS_LABELS: Record<SaveStatus, string> = {
 export function WritingEditor({ essayId }: { essayId: string }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [evaluationOpen, setEvaluationOpen] = useState(false);
+  const [recordsOpen, setRecordsOpen] = useState(false);
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const [, setTick] = useState(0);
   const queryClient = useQueryClient();
@@ -131,7 +137,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
       void queryClient.invalidateQueries({ queryKey: ["preferences"] });
     },
   });
-  const [ghostIndex, setGhostIndex] = useState(0);
+  const [ghostIndex, setGhostIndexState] = useState(0);
   const guidanceDone = flatIdeas.length > 0 && ghostIndex >= flatIdeas.length;
 
   const suppressUpdateRef = useRef(false);
@@ -142,6 +148,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
 
   const grammarExtension = useMemo(() => createGrammarExtension(), []);
   const ghostExtension = useMemo(() => createGhostHintExtension(), []);
+  const expressionExtension = useMemo(() => createExpressionExtension(), []);
 
   const applyContent = useCallback((content: TipTapDocument) => {
     const currentEditor = editorRef.current;
@@ -156,7 +163,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
   }, []);
 
   const editor = useEditor({
-    extensions: [StarterKit, grammarExtension, ghostExtension],
+    extensions: [StarterKit, grammarExtension, ghostExtension, expressionExtension],
     content: { type: "doc", content: [] },
     immediatelyRender: false,
     editorProps: {
@@ -193,6 +200,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
   }, [autosave]);
 
   const grammar = useGrammar({ essayId, editor, session: activeSession, autosave, applyContent });
+  const polish = usePolish({ essayId, editor, session: activeSession, autosave, applyContent });
 
   // ADR-025: 句点完成 → 判断是否达成当前指引 → 达成则推进到下一句。
   const ghostEnabledRef = useRef(ghostEnabled);
@@ -234,7 +242,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
         const latest = editorRef.current;
         if (response.data.fulfilled && latest && getGhostIndex(latest.view) === index) {
           advanceGhostHint(latest.view);
-          setGhostIndex(index + 1);
+          setGhostIndexState(index + 1);
         }
       })
       .catch(() => {
@@ -262,16 +270,21 @@ export function WritingEditor({ essayId }: { essayId: string }) {
   }, [editor, documentQuery.data, applyContent, autosave]);
 
   // 已确认大纲 → 灰色中文指引（句子级循环，开关来自偏好设置）。
+  // ADR-026：大纲更新后按已完成句数续接，不再从第一句重新开始。
   useEffect(() => {
-    if (editor) {
-      const previousIndex = getGhostIndex(editor.view);
-      setGhostConfig(editor.view, flatIdeas, ghostEnabled);
-      const nextIndex = getGhostIndex(editor.view);
-      if (nextIndex !== previousIndex || nextIndex === 0) {
-        processedSentencesRef.current = 0;
-      }
-      queueMicrotask(() => setGhostIndex(nextIndex));
+    if (!editor) {
+      return;
     }
+    setGhostConfig(editor.view, flatIdeas, ghostEnabled);
+    let nextIndex = getGhostIndex(editor.view);
+    const plain = editor.getText({ blockSeparator: BLOCK_SEPARATOR });
+    const completedCount = splitSentences(plain).filter((s) => s.complete).length;
+    if (flatIdeas.length > 0 && completedCount > nextIndex) {
+      nextIndex = Math.min(completedCount, flatIdeas.length);
+      setGhostIndex(editor.view, nextIndex);
+    }
+    processedSentencesRef.current = completedCount;
+    queueMicrotask(() => setGhostIndexState(nextIndex));
   }, [editor, flatIdeas, ghostEnabled]);
 
   // IME composition: save after composition ends, never mid-composition.
@@ -417,6 +430,14 @@ export function WritingEditor({ essayId }: { essayId: string }) {
           className={toolbarButton}
         >
           评分
+        </button>
+        <button
+          type="button"
+          data-testid="open-records"
+          onClick={() => setRecordsOpen(true)}
+          className={toolbarButton}
+        >
+          错误与优化记录
         </button>
       </header>
 
@@ -589,10 +610,27 @@ export function WritingEditor({ essayId }: { essayId: string }) {
           state={grammar.hoverCard}
           onAccept={grammar.acceptCorrection}
           onIgnore={grammar.ignoreFromCard}
-          onRetryTeaching={grammar.retryTeaching}
+          onRequestTeaching={grammar.requestTeaching}
           onMouseEnter={grammar.onCardMouseEnter}
           onMouseLeave={grammar.onCardMouseLeave}
         />
+      )}
+
+      {polish.card && (
+        <PolishCard
+          state={polish.card}
+          onSelect={polish.selectItem}
+          onAccept={polish.acceptSelected}
+          onNextPage={polish.nextPage}
+          onPrevPage={polish.prevPage}
+          onAddToKb={polish.addSelectedToKb}
+          onMouseEnter={polish.onCardMouseEnter}
+          onMouseLeave={polish.onCardMouseLeave}
+        />
+      )}
+
+      {recordsOpen && (
+        <RecordsDialog essayId={essayId} onClose={() => setRecordsOpen(false)} />
       )}
 
       <ExpressionAssist

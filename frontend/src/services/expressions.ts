@@ -3,13 +3,38 @@ import type {
   AcceptExpressionSuggestionRequest,
   AcceptExpressionSuggestionResponse,
   CreateExpressionRequest,
+  EssaySuggestionListResponse,
   ExpressionListResponse,
   ExpressionResponse,
   ExtractionResponse,
   PolishRequest,
+  PolishSentenceResponse,
   SuggestionResponse,
   TranslationRequest,
 } from "@/types/api";
+
+export function polishSentence(
+  essayId: string,
+  payload: {
+    session_id: string;
+    server_revision: number;
+    client_revision: number;
+    sentence: string;
+    sentence_range: { start: number; end: number; offset_unit: "unicode_codepoint" };
+    paragraph_context?: string | null;
+    fragment_anchor?: string | null;
+    exclude?: string[];
+  },
+): Promise<PolishSentenceResponse> {
+  return apiFetch<PolishSentenceResponse>(`/essays/${essayId}/expressions/polish-sentence`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function listEssaySuggestions(essayId: string): Promise<EssaySuggestionListResponse> {
+  return apiFetch<EssaySuggestionListResponse>(`/essays/${essayId}/expression-suggestions`);
+}
 
 export function listExpressions(params: {
   limit?: number;

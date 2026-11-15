@@ -18,6 +18,9 @@ from app.modules.expressions.schemas import (
     ExpressionResponse,
     PatchExpressionRequest,
     PolishRequest,
+    PolishSentenceRequest,
+    PolishSentenceResponse,
+    SuggestionListResponse,
     SuggestionResponse,
     TranslationRequest,
 )
@@ -52,6 +55,8 @@ def _suggestion_response(suggestion) -> SuggestionResponse:
                 "source": item.source,
                 "expression_id": item.expression_id,
                 "previously_learned": item.source == "previously_learned",
+                "start_offset": item.start_offset,
+                "end_offset": item.end_offset,
                 "status": item.status,
             }
             for item in suggestion.items
@@ -59,6 +64,33 @@ def _suggestion_response(suggestion) -> SuggestionResponse:
     }
     return SuggestionResponse.model_validate(
         {"data": data, "meta": {"request_id": new_request_id()}}
+    )
+
+
+@router.post(
+    "/essays/{essay_id}/expressions/polish-sentence", response_model=PolishSentenceResponse
+)
+def polish_sentence(
+    essay_id: uuid.UUID,
+    payload: PolishSentenceRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PolishSentenceResponse:
+    data = service.polish_sentence(db, user, essay_id, payload)
+    return PolishSentenceResponse.model_validate(
+        {"data": data, "meta": {"request_id": new_request_id()}}
+    )
+
+
+@router.get("/essays/{essay_id}/expression-suggestions", response_model=SuggestionListResponse)
+def list_essay_suggestions(
+    essay_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SuggestionListResponse:
+    items = service.list_essay_suggestions(db, user, essay_id)
+    return SuggestionListResponse.model_validate(
+        {"data": {"items": items}, "meta": {"request_id": new_request_id()}}
     )
 
 

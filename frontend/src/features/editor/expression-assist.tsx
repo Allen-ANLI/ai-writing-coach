@@ -99,10 +99,11 @@ export function ExpressionAssist({
       const coords = editor.view.coordsAtPos(to);
       const isChinese = CJK_RE.test(selectedText);
       const currentSession = sessionRef.current;
-      if (isChinese && !currentSession?.enabled_features.chinese_to_english) {
+      // ADR-026: 英文润色改为句点自动触发（use-polish），选区辅助只保留中译英。
+      if (!isChinese) {
         return;
       }
-      if (!isChinese && !currentSession?.enabled_features.expression_recommendations) {
+      if (!currentSession?.enabled_features.chinese_to_english) {
         return;
       }
       setAssist((previous) =>

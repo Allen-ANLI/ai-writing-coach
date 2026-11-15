@@ -165,13 +165,28 @@ class TeachingRequest(BaseModel):
     user_current_text: str | None = Field(default=None, max_length=5000)
 
 
+class TeachingExamplePairData(BaseModel):
+    wrong: str
+    correct: str
+    note: str
+
+
+class TeachingKnowledgePointData(BaseModel):
+    explanation: str
+    pattern: str
+    examples: list[TeachingExamplePairData]
+
+
 class TeachingData(BaseModel):
+    """ADR-026 structured teaching: knowledge point first, then the
+    sentence-specific reason."""
+
     teaching_id: uuid.UUID
     issue_id: uuid.UUID
     source_server_revision: int
     title: str
-    why_wrong: str
-    grammar_rule: str
+    knowledge_point: TeachingKnowledgePointData
+    sentence_reason: str
     recommended_correction: str
     personalized_note: str | None
 

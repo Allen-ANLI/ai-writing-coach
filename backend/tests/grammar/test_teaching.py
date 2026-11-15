@@ -50,15 +50,18 @@ def test_teaching_generated_logged_and_personalized_note_null(client, db):
     assert data["issue_id"] == issue["id"]
     assert data["source_server_revision"] == 2
     assert data["title"]
-    assert data["why_wrong"]
-    assert data["grammar_rule"]
+    # ADR-026: structured v2 — knowledge point first, then sentence reason.
+    assert data["knowledge_point"]["explanation"]
+    assert data["knowledge_point"]["pattern"]
+    assert len(data["knowledge_point"]["examples"]) >= 2
+    assert data["sentence_reason"]
     assert data["recommended_correction"]
     assert data["personalized_note"] is None  # no verified weakness history yet
 
     logs = [log for log in db.execute(select(AiUsageLog)).scalars() if log.feature == "teaching"]
     assert len(logs) == 1
     assert logs[0].provider == "mock"
-    assert logs[0].prompt_version == "v1"
+    assert logs[0].prompt_version == "v2"
     assert logs[0].status == "success"
 
     teachings = list(db.execute(select(IssueTeaching)).scalars())

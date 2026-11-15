@@ -761,6 +761,22 @@ public deployment approval.
   开关移至构思助手面板（preferences.ghost_hints_enabled，无迁移）。
 - 契约 1.6.0（102 操作）；ADR-025、AGENTS §4 修订、矩阵更新。
 
+## 3u. ADR-026 — 片段润色 + 按需结构化教学 + 文末指引 + 记录 (2026-11-15)
+
+**Status: DONE, verified, committed.**
+
+- 幽灵提示移至文末；大纲更新按已完成句数续接。
+- 详细解释改"请求详细解释"按钮按需触发；teaching v2 结构化：先语法知识点
+  （讲解+结构公式+对错对照），后简短本句原因；缓存按 prompt_version 过滤。
+- 替换重复 bug：提示词 v2 约束片段级替换 + 接受时范围判定（整句/前后缀重叠
+  →扩展范围），单元+集成测试覆盖。
+- 润色 v2：句点/修改触发片段扫描，不地道片段琥珀下划线，3 选项词级 diff 高亮，
+  点击/Tab 替换，翻页更多/返回，加入知识库；自然句无提示（提示词强制）；
+  选区辅助仅保留中译英。迁移 0019（item 偏移）。
+- 记录：GET expression-suggestions + issues → "错误与优化记录"双分类对话框。
+- 契约 1.7.0（104 操作）；ADR-026、AGENTS §4、矩阵、清单更新。
+- 测试：backend 391、Playwright 69、vitest 26（+5 word-diff）、tsc/ESLint/build/ruff。
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

@@ -156,20 +156,32 @@ document is missing, do not invent its contents; report the missing dependency.
    metered). Opening the editor auto-creates an assisted session (unless the
    user explicitly cancelled one), so feedback works without manual setup.
 4. Hovering an underlined error floats a card (slightly transparent surface)
-   that shows the short explanation, the **correction directly (no blur, no
-   reveal click)**, alternatives, and the contextual detailed explanation
-   (LLM, cached) with loading/error/retry states. It must not obstruct editing.
+   that shows the short explanation and the **correction directly (no blur, no
+   reveal click)**. The detailed explanation is requested via an explicit
+   button (never auto-loaded) and rendered structured (ADR-026): grammar
+   knowledge point first (explanation + structure pattern + wrong→correct
+   examples), then a brief sentence-specific reason. It must not obstruct
+   editing. Acceptance resolves the replacement range so whole-sentence
+   suggestions never duplicate leading words.
 5. Tab replaces the original while the hover card is visible with a
    suggestion; otherwise Tab is normal. Acceptance applies the server-stored
    suggestion atomically. Esc closes; Alt+I ignores. Clicking an error only
    places the caret — no click-to-teach.
 6. Gray **Chinese** inline ghost hints guide sentence-by-sentence through the
-   flattened confirmed outline (ADR-025): the current idea persists at the
-   caret while the sentence is unfinished; on completion the planner/progress
-   endpoint judges fulfillment — fulfilled advances to the next idea, otherwise
-   the hint stays. The on/off switch lives in the planner panel
-   (preferences.ghost_hints_enabled). Guidance only: never persisted, never
-   counted, never auto-inserted into the essay.
+   flattened confirmed outline (ADR-025/026): the hint sits at the **end of the
+   written text**; on outline update it resumes at the completed-sentence
+   count. On sentence completion the planner/progress endpoint judges
+   fulfillment — fulfilled advances to the next idea, otherwise the hint stays.
+   The on/off switch lives in the planner panel (preferences.ghost_hints_enabled).
+   Guidance only: never persisted, never counted, never auto-inserted.
+6a. Expression polish is fragment-level and automatic (ADR-026): sentence
+   completion or editing a completed sentence triggers a scan; unnatural
+   fragments get amber dashed underlines; the option card offers 3 selectable
+   drop-in replacements with replaced words highlighted, click/Tab one-key
+   replace, pagination for more options, and add-to-knowledge-base. Natural
+   sentences produce nothing. Selection assist keeps only Chinese→English.
+6b. Completed essays expose a categorized record dialog (语法错误 / 表达优化)
+   backed by writing_issues and expression_suggestions.
 7. No Submit Essay button during writing; evaluation/assessment/rewrites are
    post-writing actions. The session submit API remains for that flow.
 8. The UI language is Simplified Chinese (mainland-China users); essay content,

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Writing Coach API
-  version: 1.6.0
+  version: 1.7.0
   description: Final API contract aligned with Database ERD V1.2. Working documents use server_revision; immutable
     snapshots use version_no. Refresh tokens are HttpOnly cookies. 1.1.1 adds the additive
     infrastructure endpoint GET /health (200 database reachable, 503 database unavailable);
@@ -19,7 +19,11 @@ info:
     confirmed versions (one current plan per essay); additive only. 1.6.0 (ADR-025)
     adds POST /essays/{essay_id}/planner/progress (ghost-guidance fulfillment
     judgment) and preferences.ghost_hints_enabled; grammar checks gain a
-    whole-sentence LLM scan (behavioral, same endpoint); additive only.
+    whole-sentence LLM scan (behavioral, same endpoint); additive only. 1.7.0
+    (ADR-026) adds POST /essays/{essay_id}/expressions/polish-sentence and GET
+    /essays/{essay_id}/expression-suggestions; teaching responses become
+    structured v2 (knowledge_point first, then sentence_reason); suggestion
+    items gain nullable start/end offsets; additive only.
 servers:
 - url: https://api.example.com/api/v1
   description: Production placeholder
@@ -1226,6 +1230,25 @@ paths:
         required: true
         schema:
           type: string
+    get:
+      tags:
+      - Expressions
+      summary: List polish/translation records for review (ADR-026)
+      responses:
+        '200':
+          description: Suggestion history with item statuses
+        '401':
+          description: Authentication required or token invalid
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
   /essays/{essay_id}/translations:
     post:
       tags:
@@ -2241,6 +2264,42 @@ paths:
           description: Request validation error
         '429':
           description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/expressions/polish-sentence:
+    post:
+      tags:
+      - Expressions
+      summary: Fragment-level sentence polish (ADR-026)
+      description: >-
+        Scan a completed sentence for unnatural fragments (empty when natural),
+        or fetch three more options for one fragment via fragment_anchor +
+        exclude. Items carry absolute codepoint offsets of the fragment they
+        replace; acceptance reuses the existing accept endpoint.
+      responses:
+        '200':
+          description: Fragments with replacement options (may be empty)
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden (independent mode)
+        '404':
+          description: Resource not found
+        '409':
+          description: Stale revision
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit or AI quota exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
       parameters:
       - name: essay_id
         in: path

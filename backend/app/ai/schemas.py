@@ -61,6 +61,65 @@ class GhostProgressResult(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class TeachingExamplePair(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    wrong: str = Field(min_length=1, max_length=300)
+    correct: str = Field(min_length=1, max_length=300)
+    note: str = Field(min_length=1, max_length=300)
+
+
+class TeachingKnowledgePoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    explanation: str = Field(min_length=1, max_length=2000)
+    pattern: str = Field(min_length=1, max_length=200)
+    examples: list[TeachingExamplePair] = Field(min_length=2, max_length=3)
+
+
+class TeachingContentV2(BaseModel):
+    """Structured teaching (ADR-026): knowledge point first, then the
+    sentence-specific reason. Rendered visually by the client."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=200)
+    knowledge_point: TeachingKnowledgePoint
+    sentence_reason: str = Field(min_length=1, max_length=1000)
+    recommended_correction: str = Field(min_length=1, max_length=500)
+    personalized_note: str | None = Field(default=None, max_length=1000)
+
+
+class PolishOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=500)
+    meaning: str = Field(min_length=1, max_length=500)
+    usage: str = Field(min_length=1, max_length=500)
+    formality: Literal["formal", "neutral", "informal"]
+
+
+class PolishFragment(BaseModel):
+    """One unnatural fragment with drop-in replacement options (ADR-026).
+
+    Offsets are unicode code points RELATIVE to the checked sentence.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    anchor_text: str = Field(min_length=1, max_length=300)
+    start_offset: int = Field(ge=0)
+    end_offset: int = Field(gt=0)
+    note: str = Field(min_length=1, max_length=500)
+    options: list[PolishOption] = Field(min_length=3, max_length=3)
+
+
+class PolishSentenceResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    fragments: list[PolishFragment] = Field(default_factory=list, max_length=5)
+
+
 class TeachingContent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

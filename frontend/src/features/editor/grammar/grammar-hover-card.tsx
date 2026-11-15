@@ -24,14 +24,14 @@ export function GrammarHoverCard({
   state,
   onAccept,
   onIgnore,
-  onRetryTeaching,
+  onRequestTeaching,
   onMouseEnter,
   onMouseLeave,
 }: {
   state: HoverCardState;
   onAccept: () => void;
   onIgnore: () => void;
-  onRetryTeaching: () => void;
+  onRequestTeaching: () => void;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }) {
@@ -103,9 +103,21 @@ export function GrammarHoverCard({
       </div>
 
       <div className="mt-2 border-t border-zinc-100 pt-2 dark:border-zinc-800">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
-          详细讲解
-        </h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+            详细讲解
+          </h3>
+          {!state.teaching && !state.teachingLoading && (
+            <button
+              type="button"
+              data-testid="request-teaching"
+              onClick={onRequestTeaching}
+              className="rounded-md bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            >
+              请求详细解释
+            </button>
+          )}
+        </div>
         {state.teachingLoading && (
           <p className="mt-1 text-xs text-zinc-400" data-testid="teaching-loading">
             正在结合你的句子生成讲解…
@@ -117,7 +129,7 @@ export function GrammarHoverCard({
             <button
               type="button"
               data-testid="retry-teaching"
-              onClick={onRetryTeaching}
+              onClick={onRequestTeaching}
               className="mt-1 rounded border border-zinc-300 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
               重试
@@ -125,23 +137,53 @@ export function GrammarHoverCard({
           </div>
         )}
         {state.teaching && (
-          <div className="mt-1 space-y-1.5" data-testid="teaching-content">
+          <div className="mt-1.5 space-y-2" data-testid="teaching-content">
             <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
               {state.teaching.title}
             </p>
-            <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
-              {state.teaching.why_wrong}
-            </p>
-            <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
-              <span className="font-medium text-zinc-700 dark:text-zinc-200">规则：</span>
-              {state.teaching.grammar_rule}
-            </p>
-            <p className="text-xs text-zinc-600 dark:text-zinc-300">
-              <span className="font-medium text-zinc-700 dark:text-zinc-200">推荐写法：</span>
-              <span className="font-semibold text-emerald-700 dark:text-emerald-300">
-                {state.teaching.recommended_correction}
-              </span>
-            </p>
+            {/* 先：语法知识点（可视化） */}
+            <div className="rounded-md bg-zinc-50 p-2 dark:bg-zinc-800">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                语法知识点
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
+                {state.teaching.knowledge_point.explanation}
+              </p>
+              <p className="mt-1.5 inline-block rounded bg-sky-100 px-2 py-0.5 font-mono text-[11px] font-medium text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                {state.teaching.knowledge_point.pattern}
+              </p>
+              <div className="mt-1.5 space-y-1">
+                {state.teaching.knowledge_point.examples.map((example, index) => (
+                  <div key={index} className="text-xs">
+                    <p>
+                      <span className="text-red-600 line-through dark:text-red-400">
+                        {example.wrong}
+                      </span>
+                      <span className="mx-1 text-zinc-400">→</span>
+                      <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                        {example.correct}
+                      </span>
+                    </p>
+                    <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{example.note}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* 后：本句为什么这样改（简短） */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                本句为什么这样改
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
+                {state.teaching.sentence_reason}
+              </p>
+              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
+                <span className="font-medium text-zinc-700 dark:text-zinc-200">推荐写法：</span>
+                <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                  {state.teaching.recommended_correction}
+                </span>
+              </p>
+            </div>
           </div>
         )}
       </div>

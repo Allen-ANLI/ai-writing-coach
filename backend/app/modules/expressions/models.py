@@ -133,6 +133,10 @@ class ExpressionSuggestionItem(Base):
     source: Mapped[str] = mapped_column(String(20), nullable=False)
     expression_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("user_expressions.id"))
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # ADR-026: absolute unicode_codepoint range of the fragment this option
+    # replaces (sentence-polish only; legacy selection items have NULL).
+    start_offset: Mapped[int | None] = mapped_column(Integer)
+    end_offset: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow

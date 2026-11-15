@@ -448,13 +448,25 @@ export interface TeachingRequest {
   user_current_text?: string | null;
 }
 
+export interface TeachingExamplePair {
+  wrong: string;
+  correct: string;
+  note: string;
+}
+
+export interface TeachingKnowledgePoint {
+  explanation: string;
+  pattern: string;
+  examples: TeachingExamplePair[];
+}
+
 export interface TeachingData {
   teaching_id: string;
   issue_id: string;
   source_server_revision: number;
   title: string;
-  why_wrong: string;
-  grammar_rule: string;
+  knowledge_point: TeachingKnowledgePoint;
+  sentence_reason: string;
   recommended_correction: string;
   personalized_note: string | null;
 }
@@ -915,6 +927,61 @@ export interface PlannerProgressData {
 
 export interface PlannerProgressResponse {
   data: PlannerProgressData;
+  meta?: RequestMeta;
+}
+
+// Fragment-level sentence polish (ADR-026, contract 1.7.0)
+
+export interface PolishSentenceItem {
+  id: string;
+  english_text: string;
+  chinese_meaning: string | null;
+  usage_note: string | null;
+  register: string | null;
+  source: string;
+  expression_id: string | null;
+  previously_learned: boolean;
+  start_offset: number | null;
+  end_offset: number | null;
+  status: string;
+}
+
+export interface PolishSentenceFragment {
+  suggestion_id: string;
+  anchor_text: string;
+  start_offset: number;
+  end_offset: number;
+  note: string;
+  items: PolishSentenceItem[];
+}
+
+export interface PolishSentenceResponse {
+  data: { fragments: PolishSentenceFragment[] };
+  meta?: RequestMeta;
+}
+
+export interface EssaySuggestionRecordItem {
+  id: string;
+  english_text: string;
+  chinese_meaning: string | null;
+  usage_note: string | null;
+  status: string;
+  start_offset: number | null;
+  end_offset: number | null;
+}
+
+export interface EssaySuggestionRecord {
+  id: string;
+  kind: "polish" | "translation";
+  selected_text: string;
+  sentence_context: string;
+  status: string;
+  created_at: string;
+  items: EssaySuggestionRecordItem[];
+}
+
+export interface EssaySuggestionListResponse {
+  data: { items: EssaySuggestionRecord[] };
   meta?: RequestMeta;
 }
 

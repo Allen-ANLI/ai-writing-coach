@@ -27,7 +27,7 @@ from app.ai.prompts.registry import get_prompt
 from app.ai.schemas import (
     DeepCheckResult,
     SentenceCheckResult,
-    TeachingContent,
+    TeachingContentV2,
     ValidationJudgement,
 )
 from app.core.exceptions import ApiError
@@ -82,7 +82,7 @@ def _sentence_llm_check(
         _SENTENCE_CACHE.move_to_end(key)
         return cached, True
 
-    prompt = get_prompt("grammar_sentence_check", "v1")
+    prompt = get_prompt("grammar_sentence_check", "v2")
     user_prompt = prompt.user_template.format(sentence=text, paragraph=paragraph or text)
     try:
         result, usage = llm.call_llm(
@@ -193,7 +193,7 @@ def _deep_check_uncertain(
     """LLM confirmation for uncertain fragments only; capped per check."""
     confirmed: list[rules.DetectedIssue] = []
     all_ok = True
-    prompt = get_prompt("grammar_deep_check", "v1")
+    prompt = get_prompt("grammar_deep_check", "v2")
     for detected in uncertain[:_MAX_LLM_FRAGMENTS_PER_CHECK]:
         user_prompt = prompt.user_template.format(
             sentence=text,
@@ -457,8 +457,11 @@ def accept_issue_suggestion(
     if suggestion.status != "pending":
         raise ApiError(409, "VALIDATION_ERROR", "This suggestion was already handled.")
 
+    rep_start, rep_end = _resolve_replacement_range(
+        document.plain_text, issue.start_offset, issue.end_offset, suggestion.suggested_text
+    )
     new_content = tiptap.replace_text_range(
-        document.content_json, issue.start_offset, issue.end_offset, suggestion.suggested_text
+        document.content_json, rep_start, rep_end, suggestion.suggested_text
     )
     new_text, word_count = tiptap.derive_text(new_content)
     now = utcnow()
@@ -518,6 +521,38 @@ def accept_issue_suggestion(
         "plain_text": new_text,
         "word_count": word_count,
     }
+
+
+def _resolve_replacement_range(
+    full_text: str, start: int, end: int, suggested: str
+) -> tuple[int, int]:
+    """ADR-026: keep acceptance duplication-free.
+
+    LLM suggestions sometimes rewrite the whole sentence (or include leading
+    context) while the issue anchors only a fragment. Replacing the anchor
+    verbatim would then duplicate the words before it. Detect the overlap
+    deterministically and widen the replacement range accordingly:
+    - suggestion contains the full sentence  -> replace the whole sentence;
+    - suggestion starts with the sentence's leading words -> widen start;
+    - suggestion ends with the sentence's trailing words  -> widen end;
+    - otherwise -> replace the anchor fragment only.
+    """
+    anchor = full_text[start:end]
+    if suggested.strip() == anchor.strip():
+        raise ApiError(422, "VALIDATION_ERROR", "This suggestion does not change the text.")
+    sentence, s_start = _sentence_around(full_text, start)
+    s_end = s_start + len(sentence)
+    prefix = full_text[s_start:start].strip()
+    suffix = full_text[end:s_end].strip()
+    text = suggested.strip()
+    if sentence.strip() and sentence.strip() in text:
+        return s_start, s_end
+    rep_start, rep_end = start, end
+    if prefix and text.startswith(prefix):
+        rep_start = s_start
+    if suffix and text.endswith(suffix):
+        rep_end = s_end
+    return rep_start, rep_end
 
 
 def _sentence_around(text: str, offset: int) -> tuple[str, int]:
@@ -687,19 +722,21 @@ def request_teaching(
         repr(sorted(context_snapshot.items())).encode("utf-8")
     ).hexdigest()
 
+    # ADR-026: only v2 (structured) teachings are served; older caches are
+    # ignored so the client always receives the visual-friendly shape.
     cached = db.execute(
         select(IssueTeaching).where(
             IssueTeaching.issue_id == issue.id,
             IssueTeaching.source_server_revision == payload.server_revision,
             IssueTeaching.context_hash == context_hash,
+            IssueTeaching.prompt_version == "v2",
         )
     ).scalar_one_or_none()
     if cached is not None:
         return _teaching_data(cached)
 
-    prompt = get_prompt("teaching", "v1")
-    # No verified weakness history exists yet (user_weaknesses arrives with the
-    # learning slice); never fabricate it — personalized_note stays null.
+    prompt = get_prompt("teaching", "v2")
+    # No verified weakness history exists yet; never fabricate it.
     user_prompt = prompt.user_template.format(
         current_sentence=payload.current_sentence,
         paragraph_context=payload.paragraph_context or "",
@@ -710,9 +747,8 @@ def request_teaching(
     )
     billing_service.guard_ai_call(db, user.id)
     content, usage = llm.call_llm(
-        system=prompt.system, user=user_prompt, response_model=TeachingContent
+        system=prompt.system, user=user_prompt, response_model=TeachingContentV2
     )
-    personalized_note = None  # enforced until verified weakness data exists
 
     now = utcnow()
     teaching = IssueTeaching(
@@ -723,12 +759,10 @@ def request_teaching(
         context_snapshot=context_snapshot,
         explanation_json={
             "title": content.title,
-            "why_wrong": content.why_wrong,
-            "grammar_rule": content.grammar_rule,
+            "knowledge_point": content.knowledge_point.model_dump(),
+            "sentence_reason": content.sentence_reason,
             "recommended_correction": content.recommended_correction,
-            "personalized_note": personalized_note,
-            "examples": content.examples,
-            "practice": content.practice,
+            "personalized_note": None,
         },
         model_name=usage.model_name,
         prompt_version=prompt.version,
@@ -755,8 +789,8 @@ def _teaching_data(teaching: IssueTeaching) -> dict:
         "issue_id": teaching.issue_id,
         "source_server_revision": teaching.source_server_revision,
         "title": explanation["title"],
-        "why_wrong": explanation["why_wrong"],
-        "grammar_rule": explanation["grammar_rule"],
+        "knowledge_point": explanation["knowledge_point"],
+        "sentence_reason": explanation["sentence_reason"],
         "recommended_correction": explanation["recommended_correction"],
         "personalized_note": explanation.get("personalized_note"),
     }

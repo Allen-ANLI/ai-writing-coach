@@ -62,23 +62,76 @@ def build_mock_instance(model: type[BaseModel], seed: str) -> BaseModel:
     return model(**kwargs)
 
 
+def _mock_polish(user: str):
+    """Deterministic fragment polish for E2E: flags 'very like' (Chinglish)
+    with valid sentence-relative offsets and 3 drop-in options; any other
+    sentence is treated as natural (empty fragments)."""
+    from app.ai.schemas import PolishFragment, PolishOption, PolishSentenceResult
+
+    sentence = ""
+    for line in user.splitlines():
+        if line.startswith("Sentence: "):
+            sentence = line[len("Sentence: ") :]
+            break
+    anchor = "very like"
+    start = sentence.find(anchor)
+    if start < 0:
+        return PolishSentenceResult(fragments=[])
+    options = [
+        PolishOption(
+            text="really like",
+            meaning="非常喜欢",
+            usage="口语与书面均自然",
+            formality="neutral",
+        ),
+        PolishOption(
+            text="am very fond of",
+            meaning="十分喜爱",
+            usage="更正式、书面化",
+            formality="formal",
+        ),
+        PolishOption(
+            text="love",
+            meaning="热爱",
+            usage="简洁强烈，口语常用",
+            formality="informal",
+        ),
+    ]
+    return PolishSentenceResult(
+        fragments=[
+            PolishFragment(
+                anchor_text=anchor,
+                start_offset=start,
+                end_offset=start + len(anchor),
+                note="[mock] very 不能直接修饰动词 like，表达不地道。",
+                options=options,
+            )
+        ]
+    )
+
+
 class MockProvider:
     def complete_json(
         self, *, system: str, user: str, response_model: type[BaseModel]
     ) -> LlmResult:
         started = time.monotonic()
-        instance = build_mock_instance(response_model, user)
-        # Deterministic planner-chat special case: the generic builder picks
-        # the first Literal value ("discuss"), which would never propose an
-        # outline. E2E needs the propose path to exercise confirmation.
-        from app.ai.schemas import PlannerChatResult, SentenceCheckResult
+        from app.ai.schemas import PlannerChatResult, PolishSentenceResult, SentenceCheckResult
 
-        if isinstance(instance, PlannerChatResult):
-            instance = instance.model_copy(update={"action": "propose"})
-        if isinstance(instance, SentenceCheckResult):
-            # Generic offsets would be invalid spans; the deterministic mock
-            # reports no sentence-level findings (rule engine still runs).
-            instance = instance.model_copy(update={"issues": []})
+        # PolishSentenceResult needs exactly 3 options per fragment; the
+        # generic builder only makes 2, so handle it before generic build.
+        if response_model is PolishSentenceResult:
+            instance = _mock_polish(user)
+        else:
+            instance = build_mock_instance(response_model, user)
+            # Deterministic planner-chat special case: the generic builder
+            # picks the first Literal value ("discuss"), which would never
+            # propose an outline. E2E needs the propose path.
+            if isinstance(instance, PlannerChatResult):
+                instance = instance.model_copy(update={"action": "propose"})
+            if isinstance(instance, SentenceCheckResult):
+                # Generic offsets would be invalid spans; the deterministic
+                # mock reports no sentence-level findings (rules still run).
+                instance = instance.model_copy(update={"issues": []})
         content = instance.model_dump(mode="json")
         latency_ms = int((time.monotonic() - started) * 1000)
         serialized = json.dumps(content, ensure_ascii=False)

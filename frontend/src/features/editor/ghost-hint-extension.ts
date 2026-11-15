@@ -24,6 +24,26 @@ export type GhostHintMeta =
   | { type: "advance" }
   | { type: "set-index"; index: number };
 
+/** ADR-026: the hint sits at the END of the written text (last non-empty
+ * block), not at the caret — it guides what to write next. */
+function endOfTextPos(state: EditorState): number | null {
+  const { doc } = state;
+  const blocks: { offset: number; nodeSize: number }[] = [];
+  doc.forEach((node, offset) => {
+    if (node.textContent.trim() !== "") {
+      blocks.push({ offset, nodeSize: node.nodeSize });
+    }
+  });
+  const last = blocks[blocks.length - 1];
+  if (last) {
+    return last.offset + last.nodeSize - 1; // inside the block, after its last character
+  }
+  if (doc.firstChild) {
+    return 1; // empty document: start of the first paragraph
+  }
+  return null;
+}
+
 function currentIdea(state: EditorState): { pos: number; text: string; index: number } | null {
   const pluginState = ghostHintPluginKey.getState(state);
   if (!pluginState || !pluginState.enabled) {
@@ -33,11 +53,11 @@ function currentIdea(state: EditorState): { pos: number; text: string; index: nu
   if (!idea) {
     return null; // outline guidance exhausted
   }
-  const { selection } = state;
-  if (!selection.empty || selection.$from.parent.type.name !== "paragraph") {
+  const pos = endOfTextPos(state);
+  if (pos === null) {
     return null;
   }
-  return { pos: selection.from, text: idea, index: pluginState.index };
+  return { pos, text: idea, index: pluginState.index };
 }
 
 export function createGhostHintExtension() {
@@ -119,4 +139,10 @@ export function advanceGhostHint(view: EditorView) {
 
 export function getGhostIndex(view: EditorView): number {
   return ghostHintPluginKey.getState(view.state)?.index ?? 0;
+}
+
+export function setGhostIndex(view: EditorView, index: number) {
+  view.dispatch(
+    view.state.tr.setMeta(ghostHintPluginKey, { type: "set-index", index } satisfies GhostHintMeta),
+  );
 }

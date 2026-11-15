@@ -76,7 +76,7 @@ test("completed sentence is checked automatically; hover shows correction direct
   await expect(page.getByTestId("blurred-answer")).toHaveCount(0);
 });
 
-test("hover card includes the contextual detailed explanation", async ({ page }) => {
+test("detailed explanation is requested via button and rendered structured (ADR-026)", async ({ page }) => {
   await openEditor(page);
   await typeAndWaitSaved(page, BAD_TEXT);
   await waitForFirstIssue(page);
@@ -84,12 +84,15 @@ test("hover card includes the contextual detailed explanation", async ({ page })
   await page.locator(".awc-issue--grammar").first().hover();
   const card = page.getByTestId("grammar-hover-card");
   await expect(card).toBeVisible({ timeout: 10_000 });
-  await expect(card).toContainText("详细讲解");
-  // mock provider 的讲解内容带 [mock:...] 前缀；此处验证管线而非语言质量。
+  // 不自动请求：先有按钮，点击后才加载。
+  await expect(page.getByTestId("teaching-content")).toHaveCount(0);
+  await page.getByTestId("request-teaching").click();
   const teaching = page.getByTestId("teaching-content");
   await expect(teaching).toBeVisible({ timeout: 20_000 });
+  // v2 结构：先语法知识点（含结构公式与对错对照），后本句原因。
+  await expect(teaching).toContainText("语法知识点");
+  await expect(teaching).toContainText("本句为什么这样改");
   await expect(teaching).toContainText("mock");
-  // 独立教学卡与教学图标已移除。
   await expect(page.getByTestId("teaching-card")).toHaveCount(0);
   await expect(page.getByTestId("teaching-icon")).toHaveCount(0);
 });
@@ -181,6 +184,20 @@ test("independent mode shows no grammar assistance", async ({ page }) => {
   await page.waitForTimeout(3000);
   await expect(page.locator(".awc-issue")).toHaveCount(0);
   await expect(page.getByTestId("issue-count")).toHaveCount(0);
+});
+
+test("records dialog reviews grammar errors and expression optimizations (ADR-026)", async ({ page }) => {
+  await openEditor(page);
+  await typeAndWaitSaved(page, BAD_TEXT);
+  await waitForFirstIssue(page);
+
+  await page.getByTestId("open-records").click();
+  await expect(page.getByTestId("records-dialog")).toBeVisible();
+  await expect(page.getByTestId("grammar-record").first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("grammar-record").first()).toContainText("主谓一致");
+
+  await page.getByTestId("records-tab-expression").click();
+  await expect(page.getByTestId("expression-records")).toBeVisible();
 });
 
 test("incomplete sentence is not checked prematurely", async ({ page }) => {

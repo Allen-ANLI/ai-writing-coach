@@ -18,11 +18,12 @@ import json
 import uuid
 from datetime import datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai import llm
 from app.ai.prompts.registry import get_prompt
-from app.ai.schemas import PolishResult, TranslationResult
+from app.ai.schemas import PolishResult, PolishSentenceResult, TranslationResult
 from app.core.exceptions import ApiError
 from app.core.time import utcnow
 from app.modules.billing import service as billing_service
@@ -42,6 +43,7 @@ from app.modules.expressions.schemas import (
     CreateExpressionRequest,
     PatchExpressionRequest,
     PolishRequest,
+    PolishSentenceRequest,
     TranslationRequest,
 )
 from app.modules.users.models import User
@@ -422,3 +424,168 @@ def accept_suggestion(
         "plain_text": new_text,
         "word_count": word_count,
     }
+
+
+def polish_sentence(
+    db: Session, user: User, essay_id: uuid.UUID, payload: PolishSentenceRequest
+) -> dict:
+    """ADR-026 fragment-level polish: scan a completed sentence (or fetch more
+    options for one fragment). Natural sentences yield zero fragments.
+    Offsets are validated against the sentence and stored absolute."""
+    get_essay(db, user, essay_id)
+    session = _assisted_session(db, user, essay_id, payload.session_id)
+    if not enabled_features(session.mode).expression_recommendations:
+        raise ApiError(
+            403,
+            "RESOURCE_ACCESS_DENIED",
+            "Expression assistance is disabled in independent writing mode.",
+        )
+    document = essay_repository.lock_working_document(db, essay_id)
+    if document.server_revision != payload.server_revision:
+        raise ApiError(
+            409, "STALE_AI_RESULT", "The document changed; retry at the current revision."
+        )
+    sentence_start = payload.sentence_range.get("start", 0)
+    learned = _previously_learned_context(db, user, payload.sentence)
+    db.commit()  # no transaction held during the LLM call
+
+    prompt = get_prompt("expression_polish", "v2")
+    user_prompt = prompt.user_template.format(
+        sentence=payload.sentence,
+        paragraph_context=payload.paragraph_context or payload.sentence,
+        previously_learned=learned,
+        exclude="; ".join(payload.exclude) or "(none)",
+        focus_fragment=payload.fragment_anchor or "",
+    )
+    billing_service.guard_ai_call(db, user.id)
+    result, usage = llm.call_llm(
+        system=prompt.system, user=user_prompt, response_model=PolishSentenceResult
+    )
+
+    now = utcnow()
+    cps = len(payload.sentence)
+    learned_pool = knowledge.semantic_candidates(db, user.id, payload.sentence)
+    if not learned_pool:
+        learned_pool = repository.keyword_candidates(db, user.id, payload.sentence)
+    learned_texts = {c.english_text.lower() for c in learned_pool}
+
+    fragments_out: list[dict] = []
+    for fragment in result.fragments:
+        start, end = fragment.start_offset, fragment.end_offset
+        if not (0 <= start < end <= cps):
+            continue
+        anchor = payload.sentence[start:end]
+        if anchor != fragment.anchor_text:
+            found = payload.sentence.find(fragment.anchor_text)
+            if found < 0:
+                continue
+            start, end = found, found + len(fragment.anchor_text)
+            anchor = fragment.anchor_text
+        if payload.fragment_anchor and anchor != payload.fragment_anchor:
+            continue
+        suggestion = ExpressionSuggestion(
+            essay_id=essay_id,
+            user_id=user.id,
+            kind="polish",
+            selected_text=anchor,
+            sentence_context=payload.sentence,
+            paragraph_context=payload.paragraph_context,
+            server_revision=payload.server_revision,
+            status="pending",
+            created_at=now,
+        )
+        db.add(suggestion)
+        db.flush()
+        items_out: list[dict] = []
+        for order, option in enumerate(fragment.options):
+            is_learned = option.text.strip().lower() in learned_texts
+            expression_id = None
+            if is_learned:
+                match = repository.find_duplicates(db, user.id, option.text.strip())
+                expression_id = match.id if match else None
+            item = ExpressionSuggestionItem(
+                suggestion_id=suggestion.id,
+                english_text=option.text,
+                chinese_meaning=option.meaning,
+                usage_note=option.usage,
+                register=option.formality,
+                source="previously_learned" if expression_id else "llm",
+                expression_id=expression_id,
+                sort_order=order,
+                start_offset=sentence_start + start,
+                end_offset=sentence_start + end,
+                created_at=now,
+            )
+            db.add(item)
+            db.flush()
+            items_out.append(
+                {
+                    "id": item.id,
+                    "english_text": item.english_text,
+                    "chinese_meaning": item.chinese_meaning,
+                    "usage_note": item.usage_note,
+                    "register": item.register,
+                    "source": item.source,
+                    "expression_id": item.expression_id,
+                    "previously_learned": item.source == "previously_learned",
+                    "start_offset": item.start_offset,
+                    "end_offset": item.end_offset,
+                    "status": item.status,
+                }
+            )
+        fragments_out.append(
+            {
+                "suggestion_id": suggestion.id,
+                "anchor_text": anchor,
+                "start_offset": sentence_start + start,
+                "end_offset": sentence_start + end,
+                "note": fragment.note,
+                "items": items_out,
+            }
+        )
+    llm.record_usage(
+        db,
+        user_id=user.id,
+        feature="expression_polish",
+        usage=usage,
+        prompt_version=prompt.version,
+        status="success",
+    )
+    db.commit()
+    return {"fragments": fragments_out}
+
+
+def list_essay_suggestions(db: Session, user: User, essay_id: uuid.UUID) -> list[dict]:
+    """ADR-026 records: polish/translation history for the essay review UI."""
+    get_essay(db, user, essay_id)
+    rows = db.execute(
+        select(ExpressionSuggestion)
+        .where(ExpressionSuggestion.essay_id == essay_id, ExpressionSuggestion.user_id == user.id)
+        .order_by(ExpressionSuggestion.created_at.desc())
+        .limit(200)
+    ).scalars()
+    out: list[dict] = []
+    for suggestion in rows:
+        out.append(
+            {
+                "id": suggestion.id,
+                "kind": suggestion.kind,
+                "selected_text": suggestion.selected_text,
+                "sentence_context": suggestion.sentence_context,
+                "status": suggestion.status,
+                "created_at": suggestion.created_at,
+                "items": [
+                    {
+                        "id": item.id,
+                        "english_text": item.english_text,
+                        "chinese_meaning": item.chinese_meaning,
+                        "usage_note": item.usage_note,
+                        "status": item.status,
+                        "start_offset": item.start_offset,
+                        "end_offset": item.end_offset,
+                    }
+                    for item in suggestion.items
+                ],
+            }
+        )
+    return out

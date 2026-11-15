@@ -33,7 +33,7 @@ import {
   getIssue,
   grammarCheck,
   ignoreIssue,
-  requestTeaching,
+  requestTeaching as requestTeachingApi,
   revealIssue,
   validateIssue,
 } from "@/services/grammar";
@@ -51,7 +51,7 @@ export interface GrammarApi {
   onCardMouseLeave: () => void;
   acceptCorrection: () => void;
   ignoreFromCard: () => void;
-  retryTeaching: () => void;
+  requestTeaching: () => void;
 }
 
 function dispatchMeta(editor: Editor, meta: GrammarMeta) {
@@ -416,7 +416,7 @@ export function useGrammar({
       const spans = splitSentences(plainText);
       const span = spans.find((s) => cp >= s.start && cp <= s.end);
       const sentence = span?.text ?? plainText;
-      void requestTeaching(essayId, issueId, {
+      void requestTeachingApi(essayId, issueId, {
         server_revision: autosaveRef.current.serverRevision,
         client_revision: autosaveRef.current.clientRevision,
         current_sentence: sentence,
@@ -469,6 +469,8 @@ export function useGrammar({
         setHover({ ...existing, top: detail.top, left: detail.left });
         return;
       }
+      // ADR-026: teaching is requested explicitly via the card button,
+      // never auto-loaded on hover (cost control).
       const cachedTeaching = teachingCacheRef.current.get(item.issue.id) ?? null;
       setHover({
         issueId: detail.issueId,
@@ -478,11 +480,10 @@ export function useGrammar({
         suggestions: item.revealed,
         suggestionsLoading: !item.revealed,
         teaching: cachedTeaching,
-        teachingLoading: !cachedTeaching,
+        teachingLoading: false,
         teachingError: null,
       });
       loadSuggestions(item);
-      loadTeaching(item);
     };
     const onHoverEnd = () => {
       if (hoverGraceRef.current) {
@@ -496,7 +497,7 @@ export function useGrammar({
       document.removeEventListener(GRAMMAR_EVENTS.hover, onHover);
       document.removeEventListener(GRAMMAR_EVENTS.hoverEnd, onHoverEnd);
     };
-  }, [setHover, loadSuggestions, loadTeaching]);
+  }, [setHover, loadSuggestions]);
 
   const onCardMouseEnter = useCallback(() => {
     if (hoverGraceRef.current) {
@@ -564,7 +565,7 @@ export function useGrammar({
     }
   }, [ignore]);
 
-  const retryTeaching = useCallback(() => {
+  const requestTeaching = useCallback(() => {
     const current = editorRef.current;
     const card = hoverRef.current;
     if (!current || !card) {
@@ -632,6 +633,6 @@ export function useGrammar({
     onCardMouseLeave,
     acceptCorrection,
     ignoreFromCard,
-    retryTeaching,
+    requestTeaching,
   };
 }
