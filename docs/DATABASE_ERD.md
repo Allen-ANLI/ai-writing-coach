@@ -53,6 +53,16 @@
 4. `essays.question_id` 外键正式附加 → `ielts_questions.id`（迁移 0012，
    解除 §0b.1 的延迟状态）；创建作文时校验题目存在/已授权、writing_type
    与 task_type 一致，缺省 question_prompt 自动取自题库。
+5. 评分与改写域（迁移 0013，§8 落地）：`essay_evaluations` 增加
+   `is_estimate BOOLEAN NOT NULL DEFAULT true`（AI 分数一律标记估分）；
+   复合外键 (essay_id, version_id) → essay_versions(essay_id, id) 保证
+   评分绑定同一作文的不可变版本。`essay_rewrites` 增加
+   `change_summary TEXT NULL`（改写说明，UI 展示）；复合外键
+   (evaluation_id, source_version_id) → essay_evaluations(id, version_id)
+   在数据库层强制 source_version_id = evaluation.version_id；
+   evaluation 删除级联删除其 rewrites。`essay_edit_events` 增加
+   `rewrite_id UUID NULL FK → essay_rewrites.id (SET NULL)`，event_type
+   枚举扩展 `accept_rewrite`；已生成的 ai_rewrite 版本与事件不随删除丢失。
 
 ## 1. V1.2 变更摘要
 

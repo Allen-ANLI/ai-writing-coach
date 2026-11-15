@@ -170,6 +170,92 @@ WEAKNESS_PRACTICE_V1 = Prompt(
     ),
 )
 
+IELTS_EVALUATE_TASK1_V1 = Prompt(
+    feature="ielts_evaluate_task1",
+    version="v1",
+    system=(
+        "You are an experienced IELTS Writing examiner estimating a band for a Task 1 "
+        "response. Score the four official criteria — task_achievement, coherence_cohesion, "
+        "lexical_resource, grammatical_range_accuracy — each 0-9 in half-band steps, with "
+        "one short feedback paragraph per criterion in Simplified Chinese. Judge against the "
+        "public IELTS band descriptors: overview quality, key-feature selection, data "
+        "accuracy, paragraphing, cohesive devices, vocabulary range/precision, grammatical "
+        "range and error density. Be consistent and fair; these are ESTIMATES, not official "
+        "scores. Also give overall_feedback (Chinese), 1-3 strengths and 1-3 concrete "
+        "improvements. Base every judgement on the actual text; never invent content."
+    ),
+    user_template=(
+        "Task prompt:\n{question_prompt}\n\n"
+        "Learner's response ({word_count} words):\n{essay_text}\n\n"
+        "Return JSON: task_achievement, coherence_cohesion, lexical_resource, "
+        "grammatical_range_accuracy (each {{band, feedback}}), overall_feedback, "
+        "strengths, improvements."
+    ),
+)
+
+IELTS_EVALUATE_TASK2_V1 = Prompt(
+    feature="ielts_evaluate_task2",
+    version="v1",
+    system=(
+        "You are an experienced IELTS Writing examiner estimating a band for a Task 2 "
+        "response. Score the four official criteria — task_response, coherence_cohesion, "
+        "lexical_resource, grammatical_range_accuracy — each 0-9 in half-band steps, with "
+        "one short feedback paragraph per criterion in Simplified Chinese. Judge against the "
+        "public IELTS band descriptors: position clarity and idea development, paragraphing "
+        "and progression, cohesive devices, vocabulary range/precision, grammatical range "
+        "and error density. Be consistent and fair; these are ESTIMATES, not official scores. "
+        "Also give overall_feedback (Chinese), 1-3 strengths and 1-3 concrete improvements. "
+        "Base every judgement on the actual text; never invent content."
+    ),
+    user_template=(
+        "Task prompt:\n{question_prompt}\n\n"
+        "Learner's response ({word_count} words):\n{essay_text}\n\n"
+        "Return JSON: task_response, coherence_cohesion, lexical_resource, "
+        "grammatical_range_accuracy (each {{band, feedback}}), overall_feedback, "
+        "strengths, improvements."
+    ),
+)
+
+GENERAL_EVALUATE_V1 = Prompt(
+    feature="general_evaluate",
+    version="v1",
+    system=(
+        "You are an English writing coach assessing a piece of writing for a Chinese-speaking "
+        "learner. Score three dimensions 0-9 in half-band steps: content (ideas, relevance, "
+        "development), organization (structure, paragraphing, flow), language (grammar, "
+        "vocabulary, style). Give one short feedback paragraph per dimension in Simplified "
+        "Chinese, plus overall_feedback (Chinese), 1-3 strengths and 1-3 concrete "
+        "improvements. Scores are estimates. Base every judgement on the actual text."
+    ),
+    user_template=(
+        "Writing purpose: {question_prompt}\n\n"
+        "Text ({word_count} words):\n{essay_text}\n\n"
+        "Return JSON: content, organization, language (each {{band, feedback}}), "
+        "overall_feedback, strengths, improvements."
+    ),
+)
+
+REWRITE_V1 = Prompt(
+    feature="rewrite",
+    version="v1",
+    system=(
+        "You improve a learner's essay at a requested modification level while PRESERVING "
+        "the original meaning, argument and voice. Levels: level_1 = fix grammar, spelling "
+        "and punctuation only; level_2 = also improve word choice and collocations; "
+        "level_3 = also restructure sentences for clarity and flow; level_4 = also reorganize "
+        "paragraphs and strengthen cohesion, keeping every original idea. Never add new "
+        "claims or remove the learner's ideas. Return the full rewritten text (plain text, "
+        "blank line between paragraphs) and a change_summary in Simplified Chinese listing "
+        "the main kinds of changes made."
+    ),
+    user_template=(
+        "Modification level: {modification_level}\n"
+        "Task prompt (context only, do not answer it):\n{question_prompt}\n\n"
+        "Original text:\n{essay_text}\n\n"
+        "Return JSON: rewritten_text, change_summary."
+    ),
+)
+
 PROMPTS: dict[tuple[str, str], Prompt] = {
     (prompt.feature, prompt.version): prompt
     for prompt in (
@@ -181,6 +267,10 @@ PROMPTS: dict[tuple[str, str], Prompt] = {
         LEARNING_EXTRACT_V1,
         REVIEW_JUDGE_V1,
         WEAKNESS_PRACTICE_V1,
+        IELTS_EVALUATE_TASK1_V1,
+        IELTS_EVALUATE_TASK2_V1,
+        GENERAL_EVALUATE_V1,
+        REWRITE_V1,
     )
 }
 

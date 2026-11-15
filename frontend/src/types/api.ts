@@ -752,3 +752,87 @@ export interface IeltsFavoriteResponse {
   data: { question_id: string; favorited: boolean };
   meta?: RequestMeta;
 }
+
+// Evaluations & rewrites (Slice 7, API Spec §13)
+
+export type EvaluationType = "ielts" | "general";
+export type EvaluationStatus = "queued" | "processing" | "completed" | "failed" | "cancelled";
+export type ModificationLevel = "level_1" | "level_2" | "level_3" | "level_4";
+
+export interface CriterionScore {
+  band: number;
+  feedback: string;
+}
+
+export interface EvaluationData {
+  id: string;
+  essay_id: string;
+  version_id: string;
+  evaluation_type: EvaluationType;
+  task_type: "task1" | "task2" | null;
+  status: EvaluationStatus;
+  overall_band: number | null;
+  criteria_scores: Record<string, CriterionScore> | null;
+  feedback_json: {
+    overall_feedback: string;
+    strengths: string[];
+    improvements: string[];
+  } | null;
+  is_estimate: boolean;
+  model_name: string | null;
+  prompt_version: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface EvaluationQueuedResponse {
+  data: { evaluation_id: string; status: EvaluationStatus };
+  meta?: RequestMeta;
+}
+
+export interface EvaluationListResponse {
+  data: { items: EvaluationData[] };
+  meta?: RequestMeta;
+}
+
+export interface EvaluationResponse {
+  data: EvaluationData;
+  meta?: RequestMeta;
+}
+
+export interface RewriteData {
+  id: string;
+  evaluation_id: string;
+  source_version_id: string;
+  result_version_id: string | null;
+  modification_level: ModificationLevel;
+  status: EvaluationStatus;
+  result_plain_text: string | null;
+  change_summary: string | null;
+  model_name: string | null;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface RewriteQueuedResponse {
+  data: { rewrite_id: string; status: EvaluationStatus };
+  meta?: RequestMeta;
+}
+
+export interface RewriteResponse {
+  data: RewriteData;
+  meta?: RequestMeta;
+}
+
+export interface AcceptRewriteResponse {
+  data: {
+    rewrite_id: string;
+    result_version_id: string;
+    server_revision: number;
+    word_count: number;
+  };
+  meta?: RequestMeta;
+}

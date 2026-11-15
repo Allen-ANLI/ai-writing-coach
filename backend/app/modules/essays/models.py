@@ -140,7 +140,7 @@ class EssayEditEvent(Base):
         ),
         CheckConstraint(
             "event_type IN ('accept_suggestion', 'manual_revision', 'ignore_suggestion', "
-            "'restore', 'submit')",
+            "'restore', 'submit', 'accept_rewrite')",
             name="ck_essay_edit_events_event_type",
         ),
         ForeignKeyConstraint(
@@ -165,6 +165,9 @@ class EssayEditEvent(Base):
     suggestion_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     expression_suggestion_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("expression_suggestion_items.id")
+    )
+    rewrite_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("essay_rewrites.id", ondelete="SET NULL")
     )
     actor_type: Mapped[str] = mapped_column(String(20), nullable=False)
     event_type: Mapped[str] = mapped_column(String(30), nullable=False)

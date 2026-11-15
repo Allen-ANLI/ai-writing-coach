@@ -64,8 +64,8 @@ authoritative starting references; resolutions below are the adopted engineering
 | FR-06 previously-learned recommendations | Knowledge | user_expressions, expression_embeddings | (within polish/translation) | **IV** 2026-11-15 pipeline: semantic recall (pgvector) with keyword fallback + LLM suitability judgment + labeling; quality awaits real embeddings | **IV** badge in candidate card | assist + RAG tests |
 | FR-07 weakness profile + trends | Learning | user_weaknesses | GET weaknesses, /{category}, /trends, POST practice | **IV** 2026-11-15 (aggregation on detection, volume-adjusted weekly trends, LLM practice generation) | **IV** 2026-11-15 (weakness list on /learning) | weakness integration tests |
 | FR-08 IELTS question bank | IELTS | ielts_questions, question_tags, ielts_question_tags, user_favorite_questions | GET questions/{id}/random/tags, POST/DELETE favorite | **IV** 2026-11-15 (Slice 6: 60 original licensed-safe questions covering all Task 1/2 types + 18 topics; published+license gate; essays.question_id FK attached; migration 0012) | **IV** 2026-11-15 (/ielts browse/filter/favorite/random → start writing) | 18 IELTS integration tests + contract test; 4 IELTS E2E |
-| FR-09 IELTS evaluation (4 criteria, estimates) | Evaluations | essay_evaluations | POST/GET /essays/{id}/evaluations, GET/DELETE /evaluations/{id} | **NI** | **NI** | — |
-| FR-09.3 rewrite levels 1–4 + accept | Evaluations | essay_rewrites | POST rewrite, GET /rewrites/{id}, POST accept | **NI** | **NI** | — |
+| FR-09 IELTS evaluation (4 criteria, estimates) | Evaluations | essay_evaluations | POST/GET /essays/{id}/evaluations, GET/DELETE /evaluations/{id} | **IV** 2026-11-15 (Slice 7: immutable-version binding via composite FK, 202 queued + background processing, Task1/Task2/general schemas, server-computed overall band, is_estimate always true, usage logging; migration 0013) | **IV** 2026-11-15 (Evaluate dialog: band + criteria + Chinese feedback, estimate badge, history/delete) | 19 evaluation integration tests; 3 evaluation E2E |
+| FR-09.3 rewrite levels 1–4 + accept | Evaluations | essay_rewrites | POST rewrite, GET /rewrites/{id}, POST accept | **IV** 2026-11-15 (Slice 7: levels 1–4, server-stored results, atomic accept with revision check + ai_rewrite version + edit event, duplicate/conflict 409, Original preserved) | **IV** 2026-11-15 (level picker, preview, explicit accept) | acceptance/conflict/duplicate/ownership integration tests; rewrite E2E |
 | FR-10 writing planner / outline | Workflows | writing_outlines, outline_nodes | POST outlines/generate, GET/PATCH outlines, confirm, nodes CRUD | **NI** | **NI** | — |
 | FR-10.4 Ghost Text | Editor | — | (outline-driven) | n/a | **NI** | — |
 | FR-12 personalized learning plans | Learning | learning_plans, learning_tasks | POST/GET plans, GET tasks, PATCH tasks/{id}, GET /learning/summary | **NI** | **NI** | — |
@@ -78,11 +78,11 @@ authoritative starting references; resolutions below are the adopted engineering
 ## 3. Contract operation inventory (88 operations)
 
 Verified 2026-11-15 by script comparing `contracts/openapi.yaml` paths against the
-FastAPI-generated OpenAPI: **59 implemented, 29 missing, 0 out-of-contract routes**
-(15 baseline; +6 2B; +5 2D; +7 3; +1 accept 3UX; +10 Slice 4; +1 extract 5A; +8 Slice 5B learning; +6 Slice 6 IELTS).
+FastAPI-generated OpenAPI: **66 implemented, 22 missing, 0 out-of-contract routes**
+(15 baseline; +6 2B; +5 2D; +7 3; +1 accept 3UX; +10 Slice 4; +1 extract 5A; +8 Slice 5B learning; +6 Slice 6 IELTS; +7 Slice 7 evaluations/rewrites).
 Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`.
 
-### Implemented (59) — all IV
+### Implemented (66) — all IV
 
 | Method | Path | Slice |
 |---|---|---|
@@ -145,20 +145,26 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 | GET | /ielts/tags | 6 |
 | POST | /ielts/questions/{question_id}/favorite | 6 |
 | DELETE | /ielts/questions/{question_id}/favorite | 6 |
+| POST | /essays/{essay_id}/evaluations | 7 |
+| GET | /essays/{essay_id}/evaluations | 7 |
+| GET | /evaluations/{evaluation_id} | 7 |
+| DELETE | /evaluations/{evaluation_id} | 7 |
+| POST | /evaluations/{evaluation_id}/rewrite | 7 |
+| GET | /rewrites/{rewrite_id} | 7 |
+| POST | /rewrites/{rewrite_id}/accept | 7 |
 
-### Missing (29) — grouped by planned slice
+### Missing (22) — grouped by planned slice
 
 | Slice | Operations |
 |---|---|
 | 9 Learning plans/tasks | POST/GET /learning/plans; GET /learning/tasks; PATCH /learning/tasks/{id} (4) |
-| 7 Evaluations & rewrites | POST/GET evaluations; GET/DELETE /evaluations/{id}; POST rewrite; GET /rewrites/{id}; POST accept (7) |
 | 8 Outlines | POST generate; GET essay outlines; GET/PATCH /outlines/{id}; POST confirm; POST nodes; PATCH/DELETE nodes/{id} (8) |
 | 9 Workflows | POST /workflows; GET/{id}; POST resume; POST cancel; GET events (5) |
 | 10 Analytics | GET ai-usage; GET by-feature; GET trends (3) |
 | 1 Users preferences | GET/PATCH /users/me/preferences (2) |
 | Later additive (R7/R8/R9) | password reset, billing/quotas, account deletion/export — not yet in contract |
 
-(4 plans/tasks + 7 evaluations/rewrites + 8 outlines + 5 workflows + 3 analytics + 2 preferences = 29.)
+(4 plans/tasks + 8 outlines + 5 workflows + 3 analytics + 2 preferences = 22.)
 
 ## 4. ERD entity inventory (29 entities)
 
@@ -176,8 +182,8 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 | writing_issues | 0006 | **IV** (revision-anchored, codepoint offsets, lifecycle) |
 | issue_suggestions | 0006 | **IV** (server-side answers, masked until reveal) |
 | issue_teachings | 0006 | **IV** (context-hash cache, contextual only) |
-| essay_evaluations | phase B | **NI** |
-| essay_rewrites | phase B | **NI** |
+| essay_evaluations | 0013 | **IV** (immutable-version composite FK, estimate flag, lifecycle) |
+| essay_rewrites | 0013 | **IV** (source=evaluation version FK, server-stored results, atomic accept) |
 | user_expressions | 0008 | **IV** (CRUD, dedup, soft delete, statuses) |
 | expression_sources | 0008 | **IV** (typed sources with ownership checks) |
 | expression_embeddings | 0010 | **IV** (VECTOR(1536), HNSW cosine, rebuildable model+hash) |
@@ -217,6 +223,7 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 
 | Date | Change |
 |---|---|
+| 2026-11-15 (Slice 7) | Evaluations + rewrites implemented + verified as POST-WRITING actions (ADR-016): 202 queued evaluations bound to immutable versions (composite FK same-essay), in-process background processing via app session factory (test-isolated), Task 1 / Task 2 / general LLM schemas with versioned prompts, half-band normalization + server-computed overall band, is_estimate always true, full usage logging incl. failures. Rewrites level_1–4 preserve meaning, results stored server-side; atomic accept applies only stored text with revision check, creates ai_rewrite version + accept_rewrite edit event, 409 on conflict/duplicate; Original never overwritten. Migration 0013 (essay_evaluations, essay_rewrites with source-matches-evaluation composite FK, edit-event rewrite_id + event enum extension; cascade delete keeps versions). Idempotency-Key on queue/rewrite/accept. Frontend: Evaluate dialog (snapshot→evaluate→poll, band/criteria/Chinese feedback, estimate badge, history/delete, rewrite preview + explicit accept). ADR-019. Verification: backend **302 passed** (19 new + 1 contract), Playwright **54 passed** (3 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 66/88. |
 | 2026-11-15 (Slice 6) | IELTS question bank implemented + verified: 60 original licensed-safe practice questions (18 Task 1 Academic across 6 chart types, 9 GT letters across 3 registers, 33 Task 2 across 5 question types; 18 topic tags; Chinese translations; text-based data so the bank is self-contained). Published+license gate in the repository layer; keyset pagination; task/topic/type filters; tags with counts; random; idempotent user-scoped favorites. essays.question_id FK attached with existence + task-type consistency validation and question_prompt autofill. Migration 0012 (4 tables + FK + idempotent uuid5 seed; offline --sql safe). E2E DB prep re-seeds after pytest truncation. Frontend: /ielts page (filters, favorites, random, detail with translation, start-writing → editor question section). ADR-018. Verification: backend **282 passed** (18 new + 1 contract), Playwright **51 passed** (4 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 59/88 (header total corrected: the 3UX accept operation made it 88, previously miscounted as 87). |
 | 2026-11-15 (Slice 5B) | Learning implemented + verified: deterministic SM-2 spaced repetition (unit-tested invariants), translation reviews with rule-first exact match + LLM semantic judging (any natural correct answer accepted), due prompts without answer leakage, progress/summary, weakness aggregation on issue detection, volume-adjusted weekly trends (errors per 1000 words), LLM practice generation. Migration 0011 (expression_progress with same-owner composite FK, expression_reviews, user_weaknesses). Frontend: /learning Center (review flow, summary, weaknesses). Verification: backend **262 passed** (17 new), Playwright **47 passed** (3 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 53/87. |
 | 2026-11-15 (Slice 5A) | Semantic RAG + extraction implemented + verified: embedding provider abstraction (mock + OpenAI-compatible), expression_embeddings VECTOR(1536) + HNSW cosine index (migration 0010), embeddings on create/update (rebuildable, best-effort), user-scoped semantic recall at query time, keyword/semantic/hybrid search, previously-learned recall upgraded to semantic-first, extraction from immutable versions with confirmation-before-save. Frontend: search-mode selector, History → Extract → confirmation dialog. Verification: backend **245 passed** (15 new), Playwright **44 passed** (2 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 45/87. Semantic QUALITY requires a real embedding endpoint (mock vectors are pipeline-only). |

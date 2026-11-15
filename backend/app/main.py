@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import ApiError
+from app.infrastructure.database import SessionLocal
 from app.schemas.common import new_request_id
 
 # Explicit CORS whitelists: the HTTP methods used by the OpenAPI contract and
@@ -29,6 +30,9 @@ def _error_envelope(
 def create_app() -> FastAPI:
     settings = get_settings()
     application = FastAPI(title="AI Writing Coach API", version="1.1.1")
+    # Background tasks (evaluations/rewrites) open their own sessions through
+    # this factory; tests override it with the isolated test factory.
+    application.state.session_factory = SessionLocal
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

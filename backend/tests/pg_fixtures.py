@@ -24,7 +24,8 @@ from app.main import create_app
 BACKEND_DIR = pathlib.Path(__file__).resolve().parents[1]
 
 _TRUNCATE = (
-    "TRUNCATE user_favorite_questions, ielts_question_tags, ielts_questions, question_tags, "
+    "TRUNCATE essay_rewrites, essay_evaluations, user_favorite_questions, ielts_question_tags, "
+    "ielts_questions, question_tags, "
     "expression_reviews, expression_progress, user_weaknesses, expression_embeddings, "
     "expression_suggestion_items, expression_suggestions, expression_sources, user_expressions, "
     "issue_teachings, issue_suggestions, writing_issues, ai_usage_logs, writing_sessions, "
@@ -92,6 +93,8 @@ def client(session_factory):
             yield session
 
     application.dependency_overrides[get_db] = override_get_db
+    # Background tasks (evaluations/rewrites) must use the isolated test DB.
+    application.state.session_factory = session_factory
     # https base URL so Secure cookies are stored and sent by the test client.
     with TestClient(application, base_url="https://testserver") as test_client:
         yield test_client

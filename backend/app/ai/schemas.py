@@ -112,3 +112,52 @@ class PracticeResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: list[PracticeItem] = Field(min_length=1, max_length=10)
+
+
+class CriterionScore(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    band: float = Field(ge=0.0, le=9.0)
+    feedback: str = Field(min_length=1, max_length=1000)
+
+
+class IeltsTask1EvaluationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_achievement: CriterionScore
+    coherence_cohesion: CriterionScore
+    lexical_resource: CriterionScore
+    grammatical_range_accuracy: CriterionScore
+    overall_feedback: str = Field(min_length=1, max_length=2000)
+    strengths: list[str] = Field(min_length=1, max_length=3)
+    improvements: list[str] = Field(min_length=1, max_length=3)
+
+
+class IeltsTask2EvaluationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_response: CriterionScore
+    coherence_cohesion: CriterionScore
+    lexical_resource: CriterionScore
+    grammatical_range_accuracy: CriterionScore
+    overall_feedback: str = Field(min_length=1, max_length=2000)
+    strengths: list[str] = Field(min_length=1, max_length=3)
+    improvements: list[str] = Field(min_length=1, max_length=3)
+
+
+class GeneralEvaluationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    content: CriterionScore
+    organization: CriterionScore
+    language: CriterionScore
+    overall_feedback: str = Field(min_length=1, max_length=2000)
+    strengths: list[str] = Field(min_length=1, max_length=3)
+    improvements: list[str] = Field(min_length=1, max_length=3)
+
+
+class RewriteResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rewritten_text: str = Field(min_length=1, max_length=20000)
+    change_summary: str = Field(min_length=1, max_length=2000)

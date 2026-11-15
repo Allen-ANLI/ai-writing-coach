@@ -14,6 +14,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { useQuery } from "@tanstack/react-query";
 
 import { WRITING_TYPE_LABELS } from "@/features/essays/essay-dialogs";
+import { EvaluationDialog } from "@/features/editor/evaluation-dialog";
 import { ExpressionAssist } from "@/features/editor/expression-assist";
 import { createGrammarExtension } from "@/features/editor/grammar/grammar-extension";
 import { GrammarHoverCard } from "@/features/editor/grammar/grammar-hover-card";
@@ -39,6 +40,7 @@ const SAVE_STATUS_LABELS: Record<SaveStatus, string> = {
 
 export function WritingEditor({ essayId }: { essayId: string }) {
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [evaluationOpen, setEvaluationOpen] = useState(false);
   const [mobileOutlineOpen, setMobileOutlineOpen] = useState(false);
   const [, setTick] = useState(0);
 
@@ -165,6 +167,16 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     [applyContent, autosave],
   );
 
+  const handleRewriteAccepted = useCallback(
+    (content: TipTapDocument, revision: number) => {
+      applyContent(content);
+      autosave.setServerRevision(revision);
+      setEvaluationOpen(false);
+      setTick((value) => value + 1);
+    },
+    [applyContent, autosave],
+  );
+
   // A fresh editor's selection sits at doc level (position 0), where block
   // commands are no-ops; place the caret inside the document in that case.
   const ensureFocus = useCallback(() => {
@@ -251,6 +263,14 @@ export function WritingEditor({ essayId }: { essayId: string }) {
           className={toolbarButton}
         >
           History
+        </button>
+        <button
+          type="button"
+          data-testid="open-evaluation"
+          onClick={() => setEvaluationOpen(true)}
+          className={toolbarButton}
+        >
+          Evaluate
         </button>
       </header>
 
@@ -402,6 +422,17 @@ export function WritingEditor({ essayId }: { essayId: string }) {
           saveStatus={autosave.status}
           onClose={() => setHistoryOpen(false)}
           onRestored={handleRestored}
+        />
+      )}
+
+      {evaluationOpen && essayQuery.data && (
+        <EvaluationDialog
+          essayId={essayId}
+          writingType={essayQuery.data.writing_type}
+          serverRevision={autosave.serverRevision}
+          saveStatus={autosave.status}
+          onClose={() => setEvaluationOpen(false)}
+          onRewriteAccepted={handleRewriteAccepted}
         />
       )}
 

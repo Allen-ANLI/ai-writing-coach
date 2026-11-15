@@ -511,6 +511,38 @@ Out of scope (next): evaluations/rewrites as post-writing actions (7),
 outlines/LangGraph (8), learning plans/tasks + analytics (9), billing (10),
 production readiness (11).
 
+## 3m. Slice 7 — Evaluations & rewrites (2026-11-15)
+
+**Status: DONE, verified, committed.** Backend 302 pytest passed (19 new
+evaluations + 1 contract), Playwright **54 passed** (3 new), vitest 21,
+tsc/ESLint/build/ruff clean. Migration 0013 applied. Contract operations
+66/88.
+
+Scope delivered:
+
+- Migration 0013: essay_evaluations (same-essay composite FK to
+  essay_versions, status/type CHECKs, is_estimate default true), essay_rewrites
+  (source-matches-evaluation composite FK, level/status CHECKs, cascade from
+  evaluation), essay_edit_events.rewrite_id + accept_rewrite event type.
+- Queue endpoints return 202; LLM work runs in FastAPI BackgroundTasks with
+  the app session factory (test-isolated), outside DB transactions (ADR-019).
+- IELTS Task 1 / Task 2 / general evaluation schemas + versioned prompts;
+  half-band normalization and server-computed overall band; estimate badge;
+  usage logging for success and failure; failed rows keep error_message.
+- Rewrites level_1–4 (meaning-preserving prompt contract), server-stored
+  result text + change_summary; atomic accept: revision check (409), working
+  document update, ai_rewrite version, result_version_id, accept_rewrite edit
+  event; duplicate accept 409; Original untouched; client never supplies text.
+- Idempotency-Key on queue/rewrite/accept (replay without re-execution).
+- Frontend: Evaluate toolbar button → dialog (checkpoint → evaluate → poll;
+  band/criteria/Chinese feedback; history + delete; rewrite level picker,
+  preview, explicit accept applying content + revision to the editor).
+- Tests: 19 integration (lifecycle, schemas, normalization, failure path,
+  ownership, idempotency, atomic accept, conflicts, cascade) + 3 E2E.
+
+Out of scope (next): outlines/LangGraph (8), learning plans/tasks + analytics
+(9), billing (10), production readiness (11).
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     auth,
     essays,
+    evaluations,
     expressions,
     grammar,
     health,
@@ -22,3 +23,4 @@ api_router.include_router(grammar.router, tags=["Grammar"])
 api_router.include_router(expressions.router, tags=["Expressions"])
 api_router.include_router(learning.router, tags=["Learning"])
 api_router.include_router(ielts.router, tags=["IELTS"])
+api_router.include_router(evaluations.router, tags=["Evaluations"])

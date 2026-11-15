@@ -154,3 +154,17 @@ def test_ielts_operations_implemented():
         ("/api/v1/ielts/questions/{question_id}/favorite", "delete"),
     ]:
         assert method in generated[path], f"{method.upper()} {path} missing"
+
+
+def test_evaluation_operations_implemented():
+    generated = create_app().openapi()["paths"]
+    for path, method in [
+        ("/api/v1/essays/{essay_id}/evaluations", "post"),
+        ("/api/v1/essays/{essay_id}/evaluations", "get"),
+        ("/api/v1/evaluations/{evaluation_id}", "get"),
+        ("/api/v1/evaluations/{evaluation_id}", "delete"),
+        ("/api/v1/evaluations/{evaluation_id}/rewrite", "post"),
+        ("/api/v1/rewrites/{rewrite_id}", "get"),
+        ("/api/v1/rewrites/{rewrite_id}/accept", "post"),
+    ]:
+        assert method in generated[path], f"{method.upper()} {path} missing"
