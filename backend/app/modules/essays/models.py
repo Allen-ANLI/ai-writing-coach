@@ -161,6 +161,9 @@ class EssayEditEvent(Base):
     to_server_revision: Mapped[int | None] = mapped_column(BigInteger)
     issue_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     suggestion_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    expression_suggestion_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("expression_suggestion_items.id")
+    )
     actor_type: Mapped[str] = mapped_column(String(20), nullable=False)
     event_type: Mapped[str] = mapped_column(String(30), nullable=False)
     before_text: Mapped[str | None] = mapped_column(Text)

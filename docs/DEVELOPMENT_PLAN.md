@@ -367,6 +367,42 @@ Scope delivered:
 `.env` (`LLM_API_KEY=`). The credential exposed in the chat attachment was
 NOT used. Real AI quality evaluation runs once the key is present.
 
+## 3i. Stage 2 — Slice 4: Expression assistance + knowledge base
+
+**Status:** IMPLEMENTED 2026-11-15, verified: backend **230 passed** (15 new),
+Playwright **42 passed** (4 new), vitest 21, tsc/ESLint/build/ruff clean.
+Migrations 0008/0009 applied. Contract operations 44/87.
+
+Scope delivered:
+
+- Migrations 0008/0009: user_expressions, expression_sources (ERD §9.1–9.2),
+  expression_suggestions + items (ERD §9.6 extension — the contract's accept
+  endpoint needs persisted candidates), essay_edit_events.expression_suggestion_id
+  (separate from grammar suggestion_id; FK integrity preserved for both).
+- Knowledge base: owner-scoped CRUD, case-insensitive dedup on create, soft
+  delete, archive, keyword search (English/Chinese), status/topic filters,
+  cursor pagination, typed sources with essay-ownership validation.
+- Polish + Chinese→English: backend mode enforcement (403 in independent),
+  revision guards, LLM outside transactions, persisted candidates, usage
+  logging; previously-learned candidates recalled from the user's OWN knowledge
+  base (keyword now; pgvector semantic in Slice 5) and labeled only when the
+  LLM output matches a stored expression.
+- Atomic acceptance: client submits the replacement document; server validates
+  ownership/revision/range and that the chosen expression is present, then
+  updates document + suggestion state + Edit Event in one transaction.
+- Frontend: selection-driven floating assistance (Improve expression /
+  Translate to English), candidate cards with previously-learned badges,
+  server-authoritative apply (no autosave race), save-to-knowledge-base action,
+  /knowledge page (add/search/filter/archive/delete), nav link.
+- Defect fixed during implementation: expression acceptance initially reused
+  essay_edit_events.suggestion_id (FK to grammar issue_suggestions) → FK
+  violation; added the dedicated expression_suggestion_id column.
+- Tests: 6 CRUD + 9 assistance integration tests; 4 E2E (KB CRUD, polish
+  accept + save-to-KB, translation apply, independent-mode enforcement).
+
+Out of scope (next slices): semantic RAG + extraction + learning (5), IELTS (6),
+evaluations/rewrites as post-writing actions (7), outlines/LangGraph (8).
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

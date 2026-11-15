@@ -16,6 +16,24 @@
 4. `essay_edit_events` 按 §6.5 落地（迁移 0004）；`issue_id` / `suggestion_id`
    的外键待 Grammar 切片建表后附加（与 `essays.question_id` 同一延迟模式）。
 
+## 0b. V1.2.2 增量修订（2026-11-15，Slice 3UX/4）
+
+1. `essays.question_prompt TEXT NULL`（迁移 0007）：题目文本快照，编辑器中
+   独立于正文展示（ADR-016）；`question_id` 仍为 IELTS 题库未来外键。
+2. `user_expressions.status` 枚举采用 PRD FR-04.3：collected / learning /
+   reviewing / mastered / archived（迁移 0008）。
+3. **§9.6 表达建议扩展**（迁移 0008）：契约 §8 的 accept 端点引用建议 ID，
+   故候选必须服务端持久化：
+   - `expression_suggestions`：id, essay_id FK, user_id FK, kind
+     (polish/translation), selected_text, sentence_context, paragraph_context,
+     server_revision, status (pending/accepted/rejected/dismissed), created_at。
+   - `expression_suggestion_items`：id, suggestion_id FK, english_text,
+     chinese_meaning, usage_note, register, source (llm/previously_learned),
+     expression_id FK NULL（指向用户知识库）, sort_order, status, created_at。
+4. `essay_edit_events.expression_suggestion_id UUID NULL FK →
+   expression_suggestion_items.id`（迁移 0009）：表达建议接受事件专用引用；
+   `suggestion_id` 保持指向 grammar `issue_suggestions`（两类建议不混用）。
+
 ## 1. V1.2 变更摘要
 
 V1.2 共 **29 个核心实体**。相较 V1.1 新增 `auth_refresh_tokens`，并完成以下修订：

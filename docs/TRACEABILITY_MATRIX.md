@@ -55,13 +55,13 @@ authoritative starting references; resolutions below are the adopted engineering
 | FR-02.4 reveal / ignore | Grammar | issue_suggestions | POST reveal, PATCH issues/{id} | **IV** 2026-11-15 (reveal returns full suggestions only on explicit request) | **IV** 2026-11-15 (blurred •••• until Reveal; Alt+R/T/I shortcuts) | reveal/ignore tests; E2E blurred-answer assertions |
 | FR-02.4 contextual teaching (R1) | Teaching | issue_teachings | POST issues/{id}/teaching | **IV** 2026-11-15 pipeline (context-hash cache, usage logging, personalized_note null without verified history); **IU** linguistic quality — mock provider until LLM keys configured | **IV** 2026-11-15 (floating teaching card near the error) | 5 teaching integration tests; E2E card flow |
 | SD §7 LLM provider abstraction | AI layer | ai_usage_logs | (internal) | **IV** 2026-11-15 (mock + OpenAI-compatible adapter, Pydantic-validated outputs, versioned prompts, full usage/cost logging); real-provider activation awaits user keys | n/a | 7 AI unit tests; usage-log assertions |
-| FR-02.8 expression polish | Expressions | (suggestion records) | POST expression-suggestions, POST accept | **NI** | **NI** | — |
-| FR-03 Chinese→English | Expressions | — | POST translations | **NI** | **NI** | — |
-| FR-04 knowledge base CRUD | Expressions | user_expressions, expression_sources | POST/GET /expressions, GET/PATCH/DELETE /expressions/{id}, POST archive | **NI** | **NI** | — |
-| FR-04.5 extraction w/ confirmation | Workflows | user_expressions | POST /essays/{id}/expressions/extract | **NI** | **NI** | — |
-| FR-04.6 search (keyword/semantic) | Knowledge | expression_embeddings | POST /expressions/search | **NI** | **NI** | — |
+| FR-02.8 expression polish | Expressions | expression_suggestions (+items, ERD §9.6) | POST expression-suggestions, POST accept | **IV** 2026-11-15 (Slice 4: mode-enforced, persisted candidates, atomic server-authoritative acceptance) | **IV** 2026-11-15 (selection → floating candidates → accept → save-to-KB) | 9 assist integration tests; 4 expression E2E |
+| FR-03 Chinese→English | Expressions | expression_suggestions | POST translations | **IV** 2026-11-15 (2–4 context-aware candidates, mode-enforced) | **IV** 2026-11-15 (CJK selection → translate → apply) | integration + E2E translation flow |
+| FR-04 knowledge base CRUD | Expressions | user_expressions, expression_sources | POST/GET /expressions, GET/PATCH/DELETE /expressions/{id}, POST archive | **IV** 2026-11-15 (owner-scoped, dedup, soft delete, sources) | **IV** 2026-11-15 (/knowledge page) | 6 CRUD integration tests; KB E2E |
+| FR-04.5 extraction w/ confirmation | Workflows | user_expressions | POST /essays/{id}/expressions/extract | **NI** (Slice 5/8 workflow) | **NI** | — |
+| FR-04.6 search (keyword/semantic) | Knowledge | expression_embeddings | POST /expressions/search | **IV** keyword 2026-11-15; semantic **NI** (Slice 5 pgvector) | **IV** keyword search UI | search/filter integration tests |
 | FR-05 translation exercises + SM-2 | Learning | expression_progress, expression_reviews | GET /learning/reviews/due, POST /learning/reviews, GET progress | **NI** | **NI** | — |
-| FR-06 previously-learned recommendations | Knowledge | user_expressions, expression_embeddings | (within expression-suggestions) | **NI** | **NI** | — |
+| FR-06 previously-learned recommendations | Knowledge | user_expressions | (within polish/translation) | **IU** 2026-11-15: keyword recall from own KB + LLM suitability judgment + labeling; semantic retrieval in Slice 5 | **IV** badge in candidate card | assist tests |
 | FR-07 weakness profile + trends | Learning | user_weaknesses | GET weaknesses, /{category}, /trends, POST practice | **NI** | **NI** | — |
 | FR-08 IELTS question bank | IELTS | ielts_questions, question_tags, ielts_question_tags, user_favorite_questions | GET questions/{id}/random/tags, POST/DELETE favorite | **NI** | **NI** | — |
 | FR-09 IELTS evaluation (4 criteria, estimates) | Evaluations | essay_evaluations | POST/GET /essays/{id}/evaluations, GET/DELETE /evaluations/{id} | **NI** | **NI** | — |
@@ -78,11 +78,11 @@ authoritative starting references; resolutions below are the adopted engineering
 ## 3. Contract operation inventory (87 operations)
 
 Verified 2026-11-15 by script comparing `contracts/openapi.yaml` paths against the
-FastAPI-generated OpenAPI: **34 implemented, 53 missing, 0 out-of-contract routes**
-(15 at baseline; +6 Slice 2B; +5 Slice 2D; +7 Slice 3; +1 accept, contract 1.2.0).
+FastAPI-generated OpenAPI: **44 implemented, 43 missing, 0 out-of-contract routes**
+(15 baseline; +6 2B; +5 2D; +7 3; +1 accept 3UX; +10 Slice 4 expressions).
 Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`.
 
-### Implemented (34) — all IV
+### Implemented (44) — all IV
 
 | Method | Path | Slice |
 |---|---|---|
@@ -120,13 +120,22 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 | POST | /essays/{essay_id}/issues/{issue_id}/reveal | 3 |
 | POST | /essays/{essay_id}/issues/{issue_id}/accept | 3UX (contract 1.2.0) |
 | POST | /essays/{essay_id}/issues/{issue_id}/teaching | 3 |
+| POST | /expressions | 4 |
+| GET | /expressions | 4 |
+| GET | /expressions/{expression_id} | 4 |
+| PATCH | /expressions/{expression_id} | 4 |
+| DELETE | /expressions/{expression_id} | 4 |
+| POST | /expressions/{expression_id}/archive | 4 |
+| POST | /expressions/search | 4 |
+| POST | /essays/{essay_id}/expression-suggestions | 4 |
+| POST | /essays/{essay_id}/expression-suggestions/{suggestion_id}/accept | 4 |
+| POST | /essays/{essay_id}/translations | 4 |
 
-### Missing (53) — grouped by planned slice
+### Missing (43) — grouped by planned slice
 
 | Slice | Operations |
 |---|---|
-| 4 Expressions & translation | POST expression-suggestions; POST accept; POST translations; POST/GET /expressions; GET/PATCH/DELETE /expressions/{id}; POST archive; POST search; POST extract (10) |
-| 5 Learning & weakness | GET reviews/due; POST reviews; GET progress; GET summary; POST/GET plans; GET tasks; PATCH tasks/{id}; GET weaknesses; GET weaknesses/{category}; GET trends; POST practice (12) |
+| 5 Learning & weakness | POST /essays/{id}/expressions/extract; GET reviews/due; POST reviews; GET progress; GET summary; POST/GET plans; GET tasks; PATCH tasks/{id}; GET weaknesses; GET weaknesses/{category}; GET trends; POST practice (13) |
 | 6 IELTS | GET questions; GET questions/{id}; GET tags; GET random; POST/DELETE favorite (6) |
 | 7 Evaluations & rewrites | POST/GET evaluations; GET/DELETE /evaluations/{id}; POST rewrite; GET /rewrites/{id}; POST accept (7) |
 | 8 Outlines | POST generate; GET outlines; GET/PATCH /outlines/{id}; POST confirm; POST nodes; PATCH/DELETE nodes/{id} (7) |
@@ -155,8 +164,8 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 | issue_teachings | 0006 | **IV** (context-hash cache, contextual only) |
 | essay_evaluations | phase B | **NI** |
 | essay_rewrites | phase B | **NI** |
-| user_expressions | phase B | **NI** |
-| expression_sources | phase B | **NI** |
+| user_expressions | 0008 | **IV** (CRUD, dedup, soft delete, statuses) |
+| expression_sources | 0008 | **IV** (typed sources with ownership checks) |
 | expression_embeddings | phase B | **NI** |
 | expression_progress | phase B | **NI** |
 | expression_reviews | phase B | **NI** |
@@ -194,6 +203,7 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 
 | Date | Change |
 |---|---|
+| 2026-11-15 (Slice 4) | Expression assistance + knowledge base implemented + verified: polish/translation with backend mode enforcement, persisted candidates, previously-learned keyword recall + LLM suitability labeling, atomic server-authoritative acceptance (essay_edit_events.expression_suggestion_id, migration 0009), knowledge base CRUD/search/archive with dedup + soft delete (migration 0008), /knowledge page, selection-driven inline assistance UI. Verification: backend **230 passed** (15 new), Playwright **42 passed** (4 new), vitest 21, tsc/ESLint/build/ruff clean. Contract operations 44/87. |
 | 2026-11-15 (DeepSeek + finalized UX) | User decisions implemented (ADR-016/017): DeepSeek provider (OpenAI- + Anthropic-compatible, env-only credentials, mock strictly separated for tests, verify_llm.py + eval_ai.py harness with grammar/teaching datasets); finalized editor UX — separate question section (essays.question_prompt, migration 0007), hierarchical text outline (sections→paragraphs→sentences), automatic sentence-completion checking (abbreviations/decimals/quotes/IME/pause-safe, no manual button), hover floating feedback, click-blurred-to-reveal, Tab-to-accept via new atomic accept endpoint (contract 1.2.0), teaching icon, no Submit button during writing. Verification: backend 215+ passed, Playwright **38 passed**, vitest 21, tsc/ESLint/build/ruff clean. **Open item: rotated DeepSeek key must be placed in .env by the user (exposed chat credential NOT used); real AI quality evaluation pending that.** |
 | 2026-11-15 (Slice 3) | Grammar core implemented + verified: LanguageTool 6.6 self-hosted (Docker; broken :latest/6.6 erikvl87 builds rejected, meyay image used), custom deterministic rules (Chinese punctuation, missing space), classification + Chinese short explanations, LLM deep-check only for uncertain fragments (capped), issue lifecycle (check/list/detail/validate/reveal/ignore/teaching), atomic self-correction with re-anchoring, contextual teaching with context-hash caching, LLM provider abstraction (mock + OpenAI-compatible) with versioned prompts and full usage logging. Migration 0006. Frontend: category-colored inline underlines, hint widgets with blurred answers, reveal/teach/ignore + Alt+R/T/I shortcuts, floating teaching card, independent-mode enforcement. Verification: backend **204 passed** (46 new), Playwright **37 passed** (7 new), vitest 12, tsc/ESLint/build/ruff clean. Environment: Docker data moved to D: (user-authorized; C: was full), LanguageTool container added. |
 | 2026-11-15 (Slice 2D) | Writing sessions implemented + verified: two modes with server-derived enabled_features (backend enforcement), exam config + deadline, one-active-session rule, cancel, atomic submit (Final Snapshot, shared-original optimization, Edit Event, Idempotency-Key). Migration 0005 adds writing_sessions + essays UNIQUE(id,user_id) + composite same-owner FK. Frontend session controls: mode picker, exam countdown, submit/cancel. Verification: backend **158 passed** (14 new), Playwright **30 passed** (5 new), vitest 12, tsc/ESLint/build clean, ruff clean. Contract operations 26/87. |

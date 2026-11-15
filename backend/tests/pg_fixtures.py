@@ -24,7 +24,8 @@ from app.main import create_app
 BACKEND_DIR = pathlib.Path(__file__).resolve().parents[1]
 
 _TRUNCATE = (
-    "TRUNCATE issue_teachings, issue_suggestions, writing_issues, ai_usage_logs, "
+    "TRUNCATE expression_suggestion_items, expression_suggestions, expression_sources, "
+    "user_expressions, issue_teachings, issue_suggestions, writing_issues, ai_usage_logs, "
     "writing_sessions, essay_edit_events, idempotency_keys, essay_versions, "
     "essay_working_documents, essays, auth_refresh_tokens, auth_sessions, user_profiles, "
     "users CASCADE"

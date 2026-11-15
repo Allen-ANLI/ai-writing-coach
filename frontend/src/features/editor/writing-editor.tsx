@@ -14,6 +14,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { useQuery } from "@tanstack/react-query";
 
 import { WRITING_TYPE_LABELS } from "@/features/essays/essay-dialogs";
+import { ExpressionAssist } from "@/features/editor/expression-assist";
 import { createGrammarExtension } from "@/features/editor/grammar/grammar-extension";
 import { GrammarHoverCard } from "@/features/editor/grammar/grammar-hover-card";
 import { TeachingCard } from "@/features/editor/grammar/teaching-card";
@@ -413,6 +414,14 @@ export function WritingEditor({ essayId }: { essayId: string }) {
           onMouseLeave={grammar.onCardMouseLeave}
         />
       )}
+
+      <ExpressionAssist
+        essayId={essayId}
+        editor={editor}
+        session={activeSession}
+        autosave={autosave}
+        applyContent={applyContent}
+      />
 
       {grammar.teaching && (
         <TeachingCard teaching={grammar.teaching} onClose={grammar.closeTeaching} />

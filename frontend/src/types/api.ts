@@ -484,3 +484,118 @@ export interface AcceptIssueResponse {
   data: AcceptIssueData;
   meta?: RequestMeta;
 }
+
+// --- Expressions (Stage 2 Slice 4) ---
+// Mirrors backend app/modules/expressions/schemas.py (API Spec §8–9).
+
+export interface ExpressionData {
+  id: string;
+  english_text: string;
+  chinese_meaning: string | null;
+  original_text: string | null;
+  learning_value_reason: string | null;
+  usage_context: string | null;
+  topic: string | null;
+  register: string | null;
+  grammar_pattern: string | null;
+  tags: string[];
+  status: "collected" | "learning" | "reviewing" | "mastered" | "archived";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExpressionResponse {
+  data: ExpressionData;
+  meta?: RequestMeta;
+}
+
+export interface ExpressionListResponse {
+  data: { items: ExpressionData[]; next_cursor: string | null; limit: number };
+  meta?: RequestMeta;
+}
+
+export interface CreateExpressionRequest {
+  english_text: string;
+  chinese_meaning?: string | null;
+  original_text?: string | null;
+  learning_value_reason?: string | null;
+  usage_context?: string | null;
+  topic?: string | null;
+  register?: string | null;
+  grammar_pattern?: string | null;
+  tags?: string[];
+  source_type?: "translation" | "correction" | "suggestion" | "essay" | "manual";
+  essay_id?: string | null;
+  source_context?: string | null;
+}
+
+export interface PolishRequest {
+  session_id: string;
+  server_revision: number;
+  client_revision: number;
+  selected_text: string;
+  sentence: string;
+  paragraph_context?: string | null;
+  max_suggestions?: number;
+}
+
+export interface TranslationRequest {
+  session_id: string;
+  server_revision: number;
+  client_revision: number;
+  chinese_text: string;
+  sentence_context: string;
+  paragraph_context?: string | null;
+}
+
+export interface SuggestionItemData {
+  id: string;
+  english_text: string;
+  chinese_meaning: string | null;
+  usage_note: string | null;
+  register: string | null;
+  source: "llm" | "previously_learned";
+  expression_id: string | null;
+  previously_learned: boolean;
+  status: string;
+}
+
+export interface SuggestionData {
+  id: string;
+  essay_id: string;
+  kind: "polish" | "translation";
+  selected_text: string;
+  server_revision: number;
+  status: string;
+  created_at: string;
+  items: SuggestionItemData[];
+}
+
+export interface SuggestionResponse {
+  data: SuggestionData;
+  meta?: RequestMeta;
+}
+
+export interface AcceptExpressionSuggestionRequest {
+  item_id: string;
+  base_revision: number;
+  client_revision: number;
+  content_json: TipTapDocument;
+  plain_text?: string;
+  word_count?: number;
+  modified_range: { start: number; end: number; offset_unit: "unicode_codepoint" };
+}
+
+export interface AcceptExpressionSuggestionData {
+  suggestion_id: string;
+  item_id: string;
+  server_revision: number;
+  content_json: TipTapDocument;
+  plain_text: string;
+  word_count: number;
+}
+
+export interface AcceptExpressionSuggestionResponse {
+  data: AcceptExpressionSuggestionData;
+  meta?: RequestMeta;
+}
