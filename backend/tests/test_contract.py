@@ -188,3 +188,19 @@ def test_outline_and_workflow_operations_implemented():
         ("/api/v1/workflows/{workflow_id}/events", "get"),
     ]:
         assert method in generated[path], f"{method.upper()} {path} missing"
+
+
+def test_slice9_operations_implemented():
+    generated = create_app().openapi()["paths"]
+    for path, method in [
+        ("/api/v1/users/me/preferences", "get"),
+        ("/api/v1/users/me/preferences", "patch"),
+        ("/api/v1/learning/plans", "post"),
+        ("/api/v1/learning/plans", "get"),
+        ("/api/v1/learning/tasks", "get"),
+        ("/api/v1/learning/tasks/{task_id}", "patch"),
+        ("/api/v1/analytics/ai-usage", "get"),
+        ("/api/v1/analytics/ai-usage/by-feature", "get"),
+        ("/api/v1/analytics/ai-usage/trends", "get"),
+    ]:
+        assert method in generated[path], f"{method.upper()} {path} missing"

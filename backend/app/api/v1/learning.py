@@ -9,13 +9,19 @@ from app.api.deps import get_current_user
 from app.infrastructure.database import get_db
 from app.modules.learning import service
 from app.modules.learning.schemas import (
+    CreatePlanRequest,
     DueReviewsResponse,
     LearningSummaryResponse,
+    PatchTaskRequest,
+    PlanListResponse,
+    PlanResponse,
     PracticeRequest,
     PracticeResponse,
     ProgressResponse,
     ReviewResultResponse,
     SubmitReviewRequest,
+    TaskListResponse,
+    TaskResponse,
     WeaknessDetailResponse,
     WeaknessListResponse,
     WeaknessTrendsResponse,
@@ -120,3 +126,46 @@ def weakness_practice(
 ) -> PracticeResponse:
     data = service.generate_practice(db, user, payload.category, payload.count)
     return PracticeResponse.model_validate({"data": data, "meta": {"request_id": new_request_id()}})
+
+
+@router.post("/learning/plans", status_code=201, response_model=PlanResponse)
+def create_plan(
+    payload: CreatePlanRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PlanResponse:
+    plan = service.create_plan(db, user, payload)
+    return PlanResponse.model_validate({"data": plan, "meta": {"request_id": new_request_id()}})
+
+
+@router.get("/learning/plans", response_model=PlanListResponse)
+def list_plans(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PlanListResponse:
+    items = service.list_plans(db, user)
+    return PlanListResponse.model_validate(
+        {"data": {"items": items}, "meta": {"request_id": new_request_id()}}
+    )
+
+
+@router.get("/learning/tasks", response_model=TaskListResponse)
+def list_tasks(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TaskListResponse:
+    items = service.list_tasks(db, user)
+    return TaskListResponse.model_validate(
+        {"data": {"items": items}, "meta": {"request_id": new_request_id()}}
+    )
+
+
+@router.patch("/learning/tasks/{task_id}", response_model=TaskResponse)
+def patch_task(
+    task_id: uuid.UUID,
+    payload: PatchTaskRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TaskResponse:
+    task = service.patch_task(db, user, task_id, payload)
+    return TaskResponse.model_validate({"data": task, "meta": {"request_id": new_request_id()}})

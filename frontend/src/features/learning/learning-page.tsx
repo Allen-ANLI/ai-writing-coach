@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { dueReviews, learningSummary, submitReview, weaknesses } from "@/services/learning";
 import { createWorkflow, getWorkflow, resumeWorkflow } from "@/services/workflows";
 import type { ReviewPrompt, ReviewResultData, StudyPlanResult } from "@/types/api";
+import { PlansCard } from "@/features/learning/plans-card";
 
 export function LearningPage() {
   const queryClient = useQueryClient();
@@ -61,6 +62,8 @@ export function LearningPage() {
     onSuccess: () => {
       setPlannerError(null);
       void queryClient.invalidateQueries({ queryKey: ["study-planner-workflow", plannerWorkflowId] });
+      void queryClient.invalidateQueries({ queryKey: ["learning-plans"] });
+      void queryClient.invalidateQueries({ queryKey: ["learning-tasks"] });
     },
     onError: (err) => setPlannerError(err instanceof Error ? err.message : "Action failed."),
   });
@@ -241,6 +244,8 @@ export function LearningPage() {
           ))}
         </ul>
       </section>
+
+      <PlansCard />
 
       <section className="mt-8" aria-label="Study planner" data-testid="study-planner">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">

@@ -73,6 +73,15 @@
    不暴露图内部状态）与 `workflow_events`（追加式事件，CASCADE）；
    图级 checkpoint 为进程内 MemorySaver，暂停/恢复以 PostgreSQL 业务状态
    为准（ADR-020）。
+7. 学习计划域（迁移 0015，§13 落地）：`learning_plans.status ∈ {active,
+   paused, completed, archived}`，daily_target_minutes > 0 CHECK；
+   `learning_tasks.task_type ∈ {review, practice, writing}`、`status ∈
+   {pending, in_progress, completed, cancelled}`；
+   `related_expression_id` 采用复合外键 (related_expression_id, user_id) →
+   user_expressions(id, user_id) 强制同归属；`related_question_id` 指向
+   系统公开题库（无归属约束）；plan_id 删除时 SET NULL。偏好设置存于
+   `user_profiles.preferences` JSONB（auto_grammar_check /
+   auto_expression_assist / daily_review_goal / ui_language，服务端校验）。
 
 ## 1. V1.2 变更摘要
 

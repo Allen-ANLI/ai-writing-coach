@@ -943,3 +943,106 @@ export interface StudyPlanResult {
   focus_areas: string[];
   suggestions: StudySuggestion[];
 }
+
+// Preferences (Slice 9)
+
+export interface PreferencesData {
+  auto_grammar_check: boolean;
+  auto_expression_assist: boolean;
+  daily_review_goal: number | null;
+  ui_language: "zh" | "en";
+}
+
+export interface PreferencesResponse {
+  data: PreferencesData;
+  meta?: RequestMeta;
+}
+
+// Learning plans & tasks (Slice 9, ERD §13)
+
+export interface LearningPlanData {
+  id: string;
+  title: string;
+  goal: string | null;
+  daily_target_minutes: number | null;
+  status: string;
+  start_date: string | null;
+  end_date: string | null;
+  created_at: string;
+}
+
+export interface LearningPlanListResponse {
+  data: { items: LearningPlanData[] };
+  meta?: RequestMeta;
+}
+
+export interface LearningPlanResponse {
+  data: LearningPlanData;
+  meta?: RequestMeta;
+}
+
+export type LearningTaskStatus = "pending" | "in_progress" | "completed" | "cancelled";
+
+export interface LearningTaskData {
+  id: string;
+  plan_id: string | null;
+  task_type: "review" | "practice" | "writing";
+  title: string;
+  description: string | null;
+  related_expression_id: string | null;
+  related_question_id: string | null;
+  scheduled_at: string | null;
+  completed_at: string | null;
+  status: LearningTaskStatus;
+  created_at: string;
+}
+
+export interface LearningTaskListResponse {
+  data: { items: LearningTaskData[] };
+  meta?: RequestMeta;
+}
+
+export interface LearningTaskResponse {
+  data: LearningTaskData;
+  meta?: RequestMeta;
+}
+
+// AI usage analytics (Slice 9, API Spec §16)
+
+export interface AiUsageTotals {
+  total_calls: number;
+  success_calls: number;
+  error_calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost: number;
+}
+
+export interface AiUsageTotalsResponse {
+  data: AiUsageTotals;
+  meta?: RequestMeta;
+}
+
+export interface AiFeatureUsage {
+  feature: string;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost: number;
+}
+
+export interface AiFeatureUsageListResponse {
+  data: { items: AiFeatureUsage[] };
+  meta?: RequestMeta;
+}
+
+export interface AiUsageTrendPoint {
+  date: string;
+  calls: number;
+  estimated_cost: number;
+}
+
+export interface AiUsageTrendsResponse {
+  data: { items: AiUsageTrendPoint[] };
+  meta?: RequestMeta;
+}

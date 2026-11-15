@@ -24,7 +24,14 @@ from app.core.time import utcnow
 from app.modules.expressions.models import UserExpression
 from app.modules.grammar.models import WritingIssue
 from app.modules.learning import sm2
-from app.modules.learning.models import ExpressionProgress, ExpressionReview, UserWeakness
+from app.modules.learning.models import (
+    ExpressionProgress,
+    ExpressionReview,
+    LearningPlan,
+    LearningTask,
+    UserWeakness,
+)
+from app.modules.learning.schemas import CreatePlanRequest, PatchTaskRequest
 from app.modules.users.models import User
 
 
@@ -379,3 +386,100 @@ def generate_practice(db: Session, user: User, category: str, count: int) -> dic
         "category": category,
         "items": [item.model_dump() for item in result.items[:count]],
     }
+
+
+def create_plan(db: Session, user: User, payload: CreatePlanRequest) -> LearningPlan:
+    if payload.start_date and payload.end_date and payload.end_date < payload.start_date:
+        raise ApiError(422, "VALIDATION_ERROR", "end_date must not be before start_date.")
+    plan = LearningPlan(
+        user_id=user.id,
+        title=payload.title,
+        goal=payload.goal,
+        daily_target_minutes=payload.daily_target_minutes,
+        status="active",
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        created_at=utcnow(),
+        updated_at=utcnow(),
+    )
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return plan
+
+
+def list_plans(db: Session, user: User) -> list[LearningPlan]:
+    rows = db.execute(
+        select(LearningPlan)
+        .where(LearningPlan.user_id == user.id)
+        .order_by(LearningPlan.created_at.desc(), LearningPlan.id.desc())
+    ).scalars()
+    return list(rows)
+
+
+def list_tasks(db: Session, user: User) -> list[LearningTask]:
+    rows = db.execute(
+        select(LearningTask)
+        .where(LearningTask.user_id == user.id)
+        .order_by(LearningTask.scheduled_at.asc().nulls_last(), LearningTask.created_at.desc())
+    ).scalars()
+    return list(rows)
+
+
+def patch_task(
+    db: Session, user: User, task_id: uuid.UUID, payload: PatchTaskRequest
+) -> LearningTask:
+    task = db.execute(
+        select(LearningTask).where(LearningTask.id == task_id, LearningTask.user_id == user.id)
+    ).scalar_one_or_none()
+    if task is None:
+        raise ApiError(404, "RESOURCE_NOT_FOUND", "Task not found.")
+    updates = payload.model_dump(exclude_unset=True)
+    if "status" in updates:
+        task.status = updates["status"]
+        task.completed_at = utcnow() if updates["status"] == "completed" else None
+    if "title" in updates:
+        task.title = updates["title"]
+    if "description" in updates:
+        task.description = updates["description"]
+    if "scheduled_at" in updates:
+        task.scheduled_at = updates["scheduled_at"]
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def create_plan_from_suggestions(
+    db: Session, user: User, goal: str | None, suggestions: list[dict], workflow_id: uuid.UUID
+) -> LearningPlan:
+    """Study-planner confirmation: deterministic plan + one task per suggestion.
+
+    Scheduling/counts stay rule-based (SD §9.3): tasks are unscheduled
+    pending items; SM-2 continues to own review timing.
+    """
+    plan = LearningPlan(
+        user_id=user.id,
+        title="Personalized study plan",
+        goal=goal,
+        status="active",
+        created_at=utcnow(),
+        updated_at=utcnow(),
+    )
+    db.add(plan)
+    db.flush()
+    for suggestion in suggestions:
+        db.add(
+            LearningTask(
+                plan_id=plan.id,
+                user_id=user.id,
+                task_type=suggestion["task_type"],
+                title=suggestion["title"][:255],
+                description=suggestion.get("description"),
+                status="pending",
+                event_metadata={"workflow_id": str(workflow_id)},
+                created_at=utcnow(),
+            )
+        )
+    db.commit()
+    db.refresh(plan)
+    return plan

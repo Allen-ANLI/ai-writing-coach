@@ -1,8 +1,9 @@
-"""Learning API schemas (API Spec §10–11)."""
+"""Learning API schemas (API Spec §10–11, §16 plans/tasks)."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -165,4 +166,80 @@ class PracticeData(BaseModel):
 
 class PracticeResponse(BaseModel):
     data: PracticeData
+    meta: RequestMeta | None = None
+
+
+class CreatePlanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=255)
+    goal: str | None = Field(default=None, max_length=2000)
+    daily_target_minutes: int | None = Field(default=None, ge=1, le=1440)
+    start_date: date | None = None
+    end_date: date | None = None
+
+
+class PlanData(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    goal: str | None
+    daily_target_minutes: int | None
+    status: str
+    start_date: date | None
+    end_date: date | None
+    created_at: datetime
+
+
+class PlanListData(BaseModel):
+    items: list[PlanData]
+
+
+class PlanListResponse(BaseModel):
+    data: PlanListData
+    meta: RequestMeta | None = None
+
+
+class PlanResponse(BaseModel):
+    data: PlanData
+    meta: RequestMeta | None = None
+
+
+class TaskData(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    plan_id: uuid.UUID | None
+    task_type: str
+    title: str
+    description: str | None
+    related_expression_id: uuid.UUID | None
+    related_question_id: uuid.UUID | None
+    scheduled_at: datetime | None
+    completed_at: datetime | None
+    status: str
+    created_at: datetime
+
+
+class TaskListData(BaseModel):
+    items: list[TaskData]
+
+
+class TaskListResponse(BaseModel):
+    data: TaskListData
+    meta: RequestMeta | None = None
+
+
+class PatchTaskRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["pending", "in_progress", "completed", "cancelled"] | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=5000)
+    scheduled_at: datetime | None = None
+
+
+class TaskResponse(BaseModel):
+    data: TaskData
     meta: RequestMeta | None = None

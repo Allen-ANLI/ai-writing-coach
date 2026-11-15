@@ -577,6 +577,38 @@ Scope delivered:
 Out of scope (next): learning plans/tasks + analytics + preferences (9),
 billing (10), production readiness (11).
 
+## 3o. Slice 9 — Preferences, plans/tasks, analytics (2026-11-15)
+
+**Status: DONE, verified, committed. FULL CONTRACT COVERAGE: 88/88.**
+Backend 336 pytest passed (4 preferences + 5 plans/tasks + 4 analytics + 1
+contract new), Playwright **60 passed** (3 new), vitest 21, tsc/ESLint/build/
+ruff clean. Migration 0015 applied.
+
+Scope delivered:
+
+- Preferences: GET/PATCH /users/me/preferences — typed merge-patch over
+  user_profiles.preferences (auto_grammar_check, auto_expression_assist,
+  daily_review_goal, ui_language); unknown keys rejected; level/band/variant
+  remain profile columns via /users/me.
+- Migration 0015: learning_plans (status + daily-target CHECKs),
+  learning_tasks (type/status CHECKs, same-owner composite FK for
+  related_expression_id, plan FK SET NULL, question FK to the public bank).
+- Plans/tasks API: POST/GET plans, GET tasks, PATCH task (completion stamps
+  completed_at; reopen clears it). Study-planner workflow confirmation now
+  creates a plan + one pending task per suggestion (deterministic; SM-2 keeps
+  review timing — SD §9.3).
+- Analytics API: user-scoped totals (calls/success/error/tokens/cost),
+  per-feature breakdown, zero-filled 14-day cost/call trends.
+- Frontend: preferences card (optimistic updates) + AI usage card (totals,
+  features, trend bars) on /profile; plans & tasks card on /learning with
+  one-click completion; planner confirm refreshes plans/tasks.
+- Tests: 13 integration + 3 E2E. Fixed a controlled-checkbox race (async
+  mutation reverted the DOM state) with optimistic cache updates + rollback.
+
+Remaining: additive contract extensions R7 (password reset), R8 (billing),
+R9 (account deletion/export); Slice 10 commercialization; Slice 11
+production readiness.
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

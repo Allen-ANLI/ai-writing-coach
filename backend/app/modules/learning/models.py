@@ -1,12 +1,13 @@
-"""Learning domain models (ERD V1.2 §9.4–9.5, §10)."""
+"""Learning domain models (ERD V1.2 §9.4–9.5, §10, §13)."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.time import utcnow
@@ -97,4 +99,69 @@ class UserWeakness(Base):
     trend: Mapped[str | None] = mapped_column(String(20))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class LearningPlan(Base):
+    __tablename__ = "learning_plans"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'paused', 'completed', 'archived')",
+            name="ck_learning_plans_status",
+        ),
+        CheckConstraint(
+            "daily_target_minutes IS NULL OR daily_target_minutes > 0",
+            name="ck_learning_plans_daily_target",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    goal: Mapped[str | None] = mapped_column(Text)
+    daily_target_minutes: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    start_date: Mapped[date | None] = mapped_column(Date)
+    end_date: Mapped[date | None] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class LearningTask(Base):
+    __tablename__ = "learning_tasks"
+    __table_args__ = (
+        CheckConstraint(
+            "task_type IN ('review', 'practice', 'writing')", name="ck_learning_tasks_type"
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'in_progress', 'completed', 'cancelled')",
+            name="ck_learning_tasks_status",
+        ),
+        ForeignKeyConstraint(
+            ["related_expression_id", "user_id"],
+            ["user_expressions.id", "user_expressions.user_id"],
+            name="fk_learning_tasks_expression_same_owner",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("learning_plans.id", ondelete="SET NULL")
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    task_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    related_expression_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    related_question_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("ielts_questions.id"))
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    event_metadata: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
     )

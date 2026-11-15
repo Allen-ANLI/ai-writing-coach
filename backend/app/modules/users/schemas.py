@@ -8,6 +8,7 @@ dedicated endpoint in a later slice). Unknown fields are rejected.
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -51,3 +52,24 @@ class PatchMeRequest(BaseModel):
         default=None, ge=0, le=9, max_digits=3, decimal_places=1
     )
     preferred_english_variant: str | None = Field(default=None, max_length=20)
+
+
+class PreferencesData(BaseModel):
+    auto_grammar_check: bool = True
+    auto_expression_assist: bool = True
+    daily_review_goal: int | None = Field(default=None, ge=1, le=100)
+    ui_language: Literal["zh", "en"] = "zh"
+
+
+class PatchPreferencesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    auto_grammar_check: bool | None = None
+    auto_expression_assist: bool | None = None
+    daily_review_goal: int | None = Field(default=None, ge=1, le=100)
+    ui_language: Literal["zh", "en"] | None = None
+
+
+class PreferencesResponse(BaseModel):
+    data: PreferencesData
+    meta: RequestMeta | None = None

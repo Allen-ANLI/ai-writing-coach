@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    analytics,
     auth,
     essays,
     evaluations,
@@ -28,3 +29,4 @@ api_router.include_router(ielts.router, tags=["IELTS"])
 api_router.include_router(evaluations.router, tags=["Evaluations"])
 api_router.include_router(outlines.router, tags=["Outlines"])
 api_router.include_router(workflows.router, tags=["Workflows"])
+api_router.include_router(analytics.router, tags=["Analytics"])

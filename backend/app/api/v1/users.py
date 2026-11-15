@@ -7,7 +7,12 @@ from app.api.deps import get_current_user
 from app.infrastructure.database import get_db
 from app.modules.users import service
 from app.modules.users.models import User
-from app.modules.users.schemas import MeResponse, PatchMeRequest
+from app.modules.users.schemas import (
+    MeResponse,
+    PatchMeRequest,
+    PatchPreferencesRequest,
+    PreferencesResponse,
+)
 from app.schemas.common import new_request_id
 
 router = APIRouter()
@@ -41,3 +46,27 @@ def patch_me(
     db: Session = Depends(get_db),
 ) -> MeResponse:
     return _me_response(service.patch_me(db, user, payload))
+
+
+@router.get("/users/me/preferences", response_model=PreferencesResponse)
+def get_preferences(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PreferencesResponse:
+    return PreferencesResponse.model_validate(
+        {"data": service.get_preferences(db, user), "meta": {"request_id": new_request_id()}}
+    )
+
+
+@router.patch("/users/me/preferences", response_model=PreferencesResponse)
+def patch_preferences(
+    payload: PatchPreferencesRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PreferencesResponse:
+    return PreferencesResponse.model_validate(
+        {
+            "data": service.patch_preferences(db, user, payload),
+            "meta": {"request_id": new_request_id()},
+        }
+    )

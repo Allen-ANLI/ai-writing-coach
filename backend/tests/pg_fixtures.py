@@ -24,7 +24,8 @@ from app.main import create_app
 BACKEND_DIR = pathlib.Path(__file__).resolve().parents[1]
 
 _TRUNCATE = (
-    "TRUNCATE workflow_events, workflows, outline_nodes, writing_outlines, "
+    "TRUNCATE learning_tasks, learning_plans, workflow_events, workflows, outline_nodes, "
+    "writing_outlines, "
     "essay_rewrites, essay_evaluations, user_favorite_questions, ielts_question_tags, "
     "ielts_questions, question_tags, "
     "expression_reviews, expression_progress, user_weaknesses, expression_embeddings, "

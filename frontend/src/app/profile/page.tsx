@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/features/auth/auth-provider";
 import { RequireAuth } from "@/features/auth/require-auth";
+import { AiUsageCard } from "@/features/profile/ai-usage-card";
+import { PreferencesCard } from "@/features/profile/preferences-card";
 import { fetchMe, fetchSessions } from "@/services/auth";
 
 function ProfileContent() {
@@ -116,6 +118,10 @@ function ProfileContent() {
           </dl>
         )}
       </section>
+
+      <PreferencesCard />
+
+      <AiUsageCard />
 
       <section
         aria-label="Device sessions"

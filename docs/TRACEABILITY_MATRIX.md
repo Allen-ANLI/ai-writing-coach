@@ -41,7 +41,7 @@ authoritative starting references; resolutions below are the adopted engineering
 | FR-01 JWT + refresh lifecycle, device sessions | Auth | auth_sessions, auth_refresh_tokens | refresh/logout/logout-all/sessions GET/DELETE | **IV** 2026-11-15 | **IV** single-flight refresh, silent restore | reuse-revocation, concurrency, cookie-attribute tests |
 | FR-01 password reset | Auth | (reset tokens — to add) | (R7 gap) | **NI** | **NI** | — |
 | FR-01 profile management | Users | user_profiles | GET/PATCH /users/me | **IV** 2026-11-15 | **IV** /profile | auth tests + E2E |
-| FR-01 preferences (level, target band, variant, toggles) | Users | user_profiles.preferences | GET/PATCH /users/me/preferences | **NI** | **NI** | — |
+| FR-01 preferences (level, target band, variant, toggles) | Users | user_profiles.preferences | GET/PATCH /users/me/preferences | **IV** 2026-11-15 (Slice 9: typed merge-patch over JSONB; level/band/variant via /users/me profile columns) | **IV** 2026-11-15 (preferences card on /profile, optimistic updates) | 4 preferences integration tests; preferences E2E |
 | FR-01 data isolation | all | all private tables | all private APIs | **IV** (auth+essays scope; extends per slice) | n/a | ownership tests per module |
 | FR-02.1 create/edit essay | Essays | essays | POST/GET /essays, GET/PATCH/DELETE /essays/{id} | **IV** 2026-11-15 | **IV** /dashboard, /essays/[id] | 16 essay tests; E2E essays 7 |
 | FR-02.1 autosave + manual save | Essays | essay_working_documents | GET/PUT /essays/{id}/working-document | **IV** 2026-11-15 (Slice 2B) | **IV** 2026-11-15 (Slice 2C: debounced autosave, Ctrl+S, save status, conflict recovery) | 13 working-document integration tests; E2E autosave/reload/conflict |
@@ -68,9 +68,9 @@ authoritative starting references; resolutions below are the adopted engineering
 | FR-09.3 rewrite levels 1–4 + accept | Evaluations | essay_rewrites | POST rewrite, GET /rewrites/{id}, POST accept | **IV** 2026-11-15 (Slice 7: levels 1–4, server-stored results, atomic accept with revision check + ai_rewrite version + edit event, duplicate/conflict 409, Original preserved) | **IV** 2026-11-15 (level picker, preview, explicit accept) | acceptance/conflict/duplicate/ownership integration tests; rewrite E2E |
 | FR-10 writing planner / outline | Workflows | writing_outlines, outline_nodes | POST outlines/generate, GET/PATCH outlines, confirm, nodes CRUD | **IV** 2026-11-15 (Slice 8: background generation with semantic recall of learned expressions, section→paragraph→idea hierarchy, draft-only editing, confirmation lock, same-owner FK; migration 0014) | **IV** 2026-11-15 (Plan dialog, confirmed plan in left panel) | 9 outline integration tests; outline E2E |
 | FR-10.4 Ghost Text | Editor | — | (outline-driven) | n/a | **IV** 2026-11-15 (plan-idea hint bar; inserts only on explicit user click, never auto-writes — ADR-020) | ghost-insert E2E |
-| FR-12 personalized learning plans | Learning | learning_plans, learning_tasks | POST/GET plans, GET tasks, PATCH tasks/{id}, GET /learning/summary | **NI** | **NI** | — |
+| FR-12 personalized learning plans | Learning | learning_plans, learning_tasks | POST/GET plans, GET tasks, PATCH tasks/{id}, GET /learning/summary | **IV** 2026-11-15 (Slice 9: manual plans + study-planner confirmation creates plan/tasks deterministically; task lifecycle; same-owner expression FK; migration 0015) | **IV** 2026-11-15 (plans & tasks card on /learning) | 5 plans/tasks integration tests; planner→tasks E2E |
 | SD §9 LangGraph workflows (planner/extractor/study planner) | Workflows | workflows, workflow_events | POST /workflows, GET/{id}, resume, cancel, events | **IV** 2026-11-15 (Slice 8: langgraph StateGraphs with conditional quality-check loop, business-state pause/resume in PG, confirm applies via business services, append-only events; ADR-020) | **IV** 2026-11-15 (study planner card on /learning; planner dialog uses outlines API) | 10 workflow integration tests; 2 planner E2E |
-| SD §12.4 AI cost logging | Analytics | ai_usage_logs | GET /analytics/ai-usage, by-feature, trends | **NI** | **NI** | — |
+| SD §12.4 AI cost logging | Analytics | ai_usage_logs | GET /analytics/ai-usage, by-feature, trends | **IV** 2026-11-15 (Slice 9: user-scoped totals, per-feature breakdown, zero-filled 14-day trend) | **IV** 2026-11-15 (AI usage card on /profile) | 4 analytics integration tests; usage-card E2E |
 | G5 / Directive H subscriptions, quotas, billing | (new module) | (R8 gap — to add) | (R8 gap — to add) | **NI** | **NI** | — |
 | Directive I production readiness (deploy, backup, monitoring, CI/CD, privacy) | Infrastructure | — | (R9 gap partially) | **NI** (Docker Compose dev stack exists) | **NI** | — |
 | Infrastructure health | Health | — | GET /health | **IV** 2026-11-15 | **IV** landing health chip | 3 smoke + 2 integration + E2E |
@@ -78,11 +78,12 @@ authoritative starting references; resolutions below are the adopted engineering
 ## 3. Contract operation inventory (88 operations)
 
 Verified 2026-11-15 by script comparing `contracts/openapi.yaml` paths against the
-FastAPI-generated OpenAPI: **79 implemented, 9 missing, 0 out-of-contract routes**
-(15 baseline; +6 2B; +5 2D; +7 3; +1 accept 3UX; +10 Slice 4; +1 extract 5A; +8 Slice 5B learning; +6 Slice 6 IELTS; +7 Slice 7 evaluations/rewrites; +8 outlines +5 workflows Slice 8).
+FastAPI-generated OpenAPI: **88 implemented, 0 missing, 0 out-of-contract routes — FULL CONTRACT COVERAGE**
+(15 baseline; +6 2B; +5 2D; +7 3; +1 accept 3UX; +10 Slice 4; +1 extract 5A; +8 Slice 5B learning; +6 Slice 6 IELTS; +7 Slice 7 evaluations/rewrites; +8 outlines +5 workflows Slice 8; +2 preferences +4 plans/tasks +3 analytics Slice 9).
+Additive contract gaps R7/R8/R9 (password reset, billing, account deletion/export) remain planned extensions beyond the current 88-operation baseline.
 Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`.
 
-### Implemented (79) — all IV
+### Implemented (88) — all IV
 
 | Method | Path | Slice |
 |---|---|---|
@@ -165,17 +166,21 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 | POST | /workflows/{workflow_id}/resume | 8 |
 | POST | /workflows/{workflow_id}/cancel | 8 |
 | GET | /workflows/{workflow_id}/events | 8 |
+| GET | /users/me/preferences | 9 |
+| PATCH | /users/me/preferences | 9 |
+| POST | /learning/plans | 9 |
+| GET | /learning/plans | 9 |
+| GET | /learning/tasks | 9 |
+| PATCH | /learning/tasks/{task_id} | 9 |
+| GET | /analytics/ai-usage | 9 |
+| GET | /analytics/ai-usage/by-feature | 9 |
+| GET | /analytics/ai-usage/trends | 9 |
 
-### Missing (9) — grouped by planned slice
+### Missing (0)
 
-| Slice | Operations |
-|---|---|
-| 9 Learning plans/tasks | POST/GET /learning/plans; GET /learning/tasks; PATCH /learning/tasks/{id} (4) |
-| 10 Analytics | GET ai-usage; GET by-feature; GET trends (3) |
-| 1 Users preferences | GET/PATCH /users/me/preferences (2) |
-| Later additive (R7/R8/R9) | password reset, billing/quotas, account deletion/export — not yet in contract |
-
-(4 plans/tasks + 3 analytics + 2 preferences = 9.)
+All 88 contracted operations are implemented. Additive extensions still planned
+(R7 password reset, R8 billing/quotas, R9 account deletion/export) will extend
+the contract in their slices.
 
 ## 4. ERD entity inventory (29 entities)
 
@@ -207,8 +212,8 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 | user_favorite_questions | 0012 | **IV** |
 | writing_outlines | 0014 | **IV** (generation lifecycle, confirmation lock, same-owner FK) |
 | outline_nodes | 0014 | **IV** (section→paragraph→idea hierarchy, cascade) |
-| learning_plans | phase C | **NI** |
-| learning_tasks | phase C | **NI** |
+| learning_plans | 0015 | **IV** (manual + planner-created, status lifecycle) |
+| learning_tasks | 0015 | **IV** (task lifecycle, same-owner expression FK) |
 | ai_usage_logs | 0006 | **IV** (every LLM call logged: provider/model/prompt/tokens/latency/cost/status) |
 
 ## 5. Verification deliverables (Directive §8/§11) — status
@@ -234,6 +239,7 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 
 | Date | Change |
 |---|---|
+| 2026-11-15 (Slice 9) | Preferences + learning plans/tasks + AI usage analytics implemented + verified — **full contract coverage 88/88**: typed preferences merge-patch (assistance toggles, review goal, UI language) with optimistic UI; learning plans (manual + study-planner confirmation creates plan + one task per suggestion, deterministic, SM-2 keeps review timing), task completion lifecycle, same-owner composite FK for related expressions; user-scoped analytics (totals, by-feature, zero-filled 14-day trends). Migration 0015 (learning_plans, learning_tasks). Frontend: preferences + AI usage cards on /profile, plans & tasks card on /learning. Verification: backend **336 passed** (13 new + 1 contract), Playwright **60 passed** (3 new), vitest 21, tsc/ESLint/build/ruff clean. Fixed controlled-checkbox race with optimistic mutation updates. |
 | 2026-11-15 (Slice 8) | Outlines + LangGraph workflows implemented + verified: outline generation (202 background, semantic recall of learned expressions, section→paragraph→sentence_idea hierarchy), draft-only editing + node CRUD, confirmation lock, ghost-text hint bar with explicit Insert (never auto-writes). LangGraph 1.x StateGraphs for writing_planner (retrieve→generate→quality-check conditional loop), learning_extractor (extract→dedupe), personalized_study_planner (gather context→plan); business-state pause/resume persisted in PostgreSQL (workflows + append-only workflow_events), confirm applies results through business services (confirmed outline / KB save), revise re-runs, cancel supported; graph internals never exposed. Migration 0014 (4 tables, same-owner composite FK). Frontend: Plan dialog, confirmed plan in left outline panel, ghost-text insertion, study-planner card on /learning. ADR-020. Verification: backend **322 passed** (19 new + 1 contract), Playwright **57 passed** (3 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 79/88. |
 | 2026-11-15 (Slice 7) | Evaluations + rewrites implemented + verified as POST-WRITING actions (ADR-016): 202 queued evaluations bound to immutable versions (composite FK same-essay), in-process background processing via app session factory (test-isolated), Task 1 / Task 2 / general LLM schemas with versioned prompts, half-band normalization + server-computed overall band, is_estimate always true, full usage logging incl. failures. Rewrites level_1–4 preserve meaning, results stored server-side; atomic accept applies only stored text with revision check, creates ai_rewrite version + accept_rewrite edit event, 409 on conflict/duplicate; Original never overwritten. Migration 0013 (essay_evaluations, essay_rewrites with source-matches-evaluation composite FK, edit-event rewrite_id + event enum extension; cascade delete keeps versions). Idempotency-Key on queue/rewrite/accept. Frontend: Evaluate dialog (snapshot→evaluate→poll, band/criteria/Chinese feedback, estimate badge, history/delete, rewrite preview + explicit accept). ADR-019. Verification: backend **302 passed** (19 new + 1 contract), Playwright **54 passed** (3 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 66/88. |
 | 2026-11-15 (Slice 6) | IELTS question bank implemented + verified: 60 original licensed-safe practice questions (18 Task 1 Academic across 6 chart types, 9 GT letters across 3 registers, 33 Task 2 across 5 question types; 18 topic tags; Chinese translations; text-based data so the bank is self-contained). Published+license gate in the repository layer; keyset pagination; task/topic/type filters; tags with counts; random; idempotent user-scoped favorites. essays.question_id FK attached with existence + task-type consistency validation and question_prompt autofill. Migration 0012 (4 tables + FK + idempotent uuid5 seed; offline --sql safe). E2E DB prep re-seeds after pytest truncation. Frontend: /ielts page (filters, favorites, random, detail with translation, start-writing → editor question section). ADR-018. Verification: backend **282 passed** (18 new + 1 contract), Playwright **51 passed** (4 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 59/88 (header total corrected: the 3UX accept operation made it 88, previously miscounted as 87). |

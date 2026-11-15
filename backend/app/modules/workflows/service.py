@@ -19,6 +19,7 @@ from app.modules.essays.models import Essay
 from app.modules.essays.service import get_essay
 from app.modules.expressions import service as expressions_service
 from app.modules.expressions.schemas import CreateExpressionRequest
+from app.modules.learning import service as learning_service
 from app.modules.outlines import service as outlines_service
 from app.modules.outlines.models import WritingOutline
 from app.modules.users.models import User
@@ -221,6 +222,16 @@ def _confirm_extractor(db: Session, user: User, workflow: Workflow, action_input
     return {"saved_expression_ids": saved, "skipped_duplicates": skipped}
 
 
+def _confirm_study_planner(db: Session, user: User, workflow: Workflow) -> dict:
+    plan_data = (workflow.result_json or {}).get("plan") or {}
+    suggestions = plan_data.get("suggestions", [])
+    if not suggestions:
+        raise ApiError(409, "VALIDATION_ERROR", "No study suggestions to confirm.")
+    goal = workflow.input_json.get("goal")
+    plan = learning_service.create_plan_from_suggestions(db, user, goal, suggestions, workflow.id)
+    return {"accepted": True, "plan_id": str(plan.id), "task_count": len(suggestions)}
+
+
 def resume_workflow(
     db: Session, user: User, workflow_id: uuid.UUID, payload: ResumeWorkflowRequest
 ) -> tuple[Workflow, bool]:
@@ -235,7 +246,7 @@ def resume_workflow(
         elif workflow.workflow_type == "learning_extractor":
             outcome = _confirm_extractor(db, user, workflow, payload.input)
         else:
-            outcome = {"accepted": True}
+            outcome = _confirm_study_planner(db, user, workflow)
         workflow.status = "completed"
         workflow.result_json = {**(workflow.result_json or {}), "outcome": outcome}
         workflow.updated_at = utcnow()
