@@ -19,6 +19,10 @@ from app.modules.auth.schemas import (
     AuthResponse,
     LoginRequest,
     LogoutAllResponse,
+    PasswordResetConfirmedResponse,
+    PasswordResetConfirmRequest,
+    PasswordResetRequest,
+    PasswordResetRequestedResponse,
     RegisterRequest,
     SessionItem,
     SessionsResponse,
@@ -184,3 +188,31 @@ def revoke_session(
 ) -> Response:
     service.revoke_session(db, user_id=context.user.id, session_id=session_id)
     return Response(status_code=204)
+
+
+@router.post(
+    "/auth/password-reset/request", status_code=202, response_model=PasswordResetRequestedResponse
+)
+def request_password_reset(
+    payload: PasswordResetRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> PasswordResetRequestedResponse:
+    enforce_auth_rate_limit(request, "password_reset")
+    service.request_password_reset(db, email=str(payload.email))
+    return PasswordResetRequestedResponse(
+        data={"accepted": True}, meta={"request_id": new_request_id()}
+    )
+
+
+@router.post("/auth/password-reset/confirm", response_model=PasswordResetConfirmedResponse)
+def confirm_password_reset(
+    payload: PasswordResetConfirmRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> PasswordResetConfirmedResponse:
+    enforce_auth_rate_limit(request, "password_reset_confirm")
+    service.confirm_password_reset(db, token=payload.token, new_password=payload.new_password)
+    return PasswordResetConfirmedResponse(
+        data={"password_updated": True}, meta={"request_id": new_request_id()}
+    )

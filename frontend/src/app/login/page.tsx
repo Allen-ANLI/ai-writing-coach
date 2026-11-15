@@ -15,6 +15,11 @@ export default function LoginPage() {
       </div>
       <LoginForm />
       <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <Link href="/forgot-password" className="font-medium text-zinc-900 underline dark:text-zinc-100">
+          Forgot your password?
+        </Link>
+      </p>
+      <p className="text-sm text-zinc-500 dark:text-zinc-400">
         No account yet?{" "}
         <Link href="/register" className="font-medium text-zinc-900 underline dark:text-zinc-100">
           Create one

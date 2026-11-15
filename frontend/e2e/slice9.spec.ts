@@ -25,8 +25,8 @@ test("preferences persist across reload", async ({ page }) => {
 
   await page.getByTestId("pref-language").selectOption("en");
   await expect(page.getByTestId("pref-saved")).toBeVisible({ timeout: 10_000 });
-  await page.getByTestId("pref-grammar").uncheck();
-  await expect(page.getByTestId("pref-saved")).toBeVisible();
+  await page.getByTestId("pref-grammar").click();
+  await expect(page.getByTestId("pref-grammar")).not.toBeChecked({ timeout: 10_000 });
 
   await page.reload();
   await expect(page.getByTestId("pref-language")).toHaveValue("en", { timeout: 10_000 });

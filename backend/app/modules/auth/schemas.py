@@ -69,3 +69,30 @@ class LogoutAllData(BaseModel):
 class LogoutAllResponse(BaseModel):
     data: LogoutAllData
     meta: RequestMeta | None = None
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetRequestedData(BaseModel):
+    accepted: bool = True
+
+
+class PasswordResetRequestedResponse(BaseModel):
+    data: PasswordResetRequestedData
+    meta: RequestMeta | None = None
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    token: str = Field(min_length=16, max_length=200)
+    new_password: str = Field(min_length=10, json_schema_extra={"writeOnly": True})
+
+
+class PasswordResetConfirmedData(BaseModel):
+    password_updated: bool = True
+
+
+class PasswordResetConfirmedResponse(BaseModel):
+    data: PasswordResetConfirmedData
+    meta: RequestMeta | None = None

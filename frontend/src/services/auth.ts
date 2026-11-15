@@ -30,3 +30,28 @@ export function fetchMe(): Promise<MeResponse> {
 export function fetchSessions(): Promise<SessionsResponse> {
   return apiFetch<SessionsResponse>("/auth/sessions");
 }
+
+export function requestPasswordReset(email: string): Promise<{ data: { accepted: boolean } }> {
+  return apiFetch<{ data: { accepted: boolean } }>("/auth/password-reset/request", {
+    method: "POST",
+    body: { email },
+  });
+}
+
+export function confirmPasswordReset(
+  token: string,
+  newPassword: string,
+): Promise<{ data: { password_updated: boolean } }> {
+  return apiFetch<{ data: { password_updated: boolean } }>("/auth/password-reset/confirm", {
+    method: "POST",
+    body: { token, new_password: newPassword },
+  });
+}
+
+export function exportAccountData(): Promise<Record<string, unknown>> {
+  return apiFetch<Record<string, unknown>>("/users/me/export");
+}
+
+export function deleteAccount(): Promise<void> {
+  return apiFetch<void>("/users/me", { method: "DELETE" });
+}

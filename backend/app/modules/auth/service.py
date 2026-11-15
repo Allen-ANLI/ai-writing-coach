@@ -12,6 +12,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import timedelta
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -24,8 +25,9 @@ from app.core.security import (
     verify_password,
 )
 from app.core.time import utcnow
+from app.infrastructure.email import EmailMessage, send_email
 from app.modules.auth import repository
-from app.modules.auth.models import AuthSession
+from app.modules.auth.models import AuthSession, PasswordResetToken
 from app.modules.users import repository as users_repository
 from app.modules.users.models import User
 
@@ -190,4 +192,56 @@ def revoke_session(db: Session, *, user_id: uuid.UUID, session_id: uuid.UUID) ->
         raise ApiError(404, "RESOURCE_NOT_FOUND", "Session not found.")
     locked.revoked_at = now
     repository.revoke_session_tokens(db, locked.id, now)
+    db.commit()
+
+
+def request_password_reset(db: Session, *, email: str) -> None:
+    """Always succeeds silently for unknown emails (no enumeration, R7)."""
+    settings = get_settings()
+    user = users_repository.get_by_email(db, _normalize_email(email))
+    if user is None or user.status != "active":
+        db.commit()
+        return
+    token = generate_refresh_token()
+    now = utcnow()
+    db.add(
+        PasswordResetToken(
+            user_id=user.id,
+            token_hash=hash_refresh_token(token),
+            expires_at=now + timedelta(minutes=settings.password_reset_ttl_minutes),
+            created_at=now,
+        )
+    )
+    db.commit()
+    link = f"{settings.frontend_base_url}/reset-password?token={token}"
+    send_email(
+        EmailMessage(
+            to=user.email,
+            subject="Reset your AI Writing Coach password",
+            body=(
+                f"Use the link below to reset your password. It expires in "
+                f"{settings.password_reset_ttl_minutes} minutes and can be used once.\n\n"
+                f"{link}\n\nIf you did not request this, ignore this email."
+            ),
+        )
+    )
+
+
+def confirm_password_reset(db: Session, *, token: str, new_password: str) -> None:
+    token_hash = hash_refresh_token(token)
+    record = db.execute(
+        select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
+    ).scalar_one_or_none()
+    now = utcnow()
+    if record is None or record.used_at is not None or record.expires_at < now:
+        raise ApiError(400, "INVALID_RESET_TOKEN", "This reset link is invalid or has expired.")
+    user = db.get(User, record.user_id)
+    if user is None or user.status != "active":
+        raise ApiError(400, "INVALID_RESET_TOKEN", "This reset link is invalid or has expired.")
+
+    record.used_at = now
+    user.password_hash = hash_password(new_password)
+    user.updated_at = now
+    # A password change revokes every existing session and refresh token.
+    logout_all(db, user_id=user.id)
     db.commit()

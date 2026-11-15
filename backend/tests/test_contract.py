@@ -218,3 +218,14 @@ def test_billing_operations_implemented():
         ("/api/v1/billing/usage", "get"),
     ]:
         assert method in generated[path], f"{method.upper()} {path} missing"
+
+
+def test_privacy_operations_implemented():
+    generated = create_app().openapi()["paths"]
+    for path, method in [
+        ("/api/v1/auth/password-reset/request", "post"),
+        ("/api/v1/auth/password-reset/confirm", "post"),
+        ("/api/v1/users/me", "delete"),
+        ("/api/v1/users/me/export", "get"),
+    ]:
+        assert method in generated[path], f"{method.upper()} {path} missing"

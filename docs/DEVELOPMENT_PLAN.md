@@ -641,6 +641,35 @@ Remaining: R7 password reset + R9 account deletion/export and Slice 11
 production readiness (deployment, backup/recovery, monitoring, CI/CD,
 security review, performance + AI quality reports).
 
+## 3q. Slice 11a — Privacy: reset, deletion, export (2026-11-15)
+
+**Status: DONE, verified, committed. Contract 1.4.0: 99/99 operations.
+R7/R8/R9 all resolved.** Backend 361 pytest passed (6 reset + 4 privacy + 1
+contract new), Playwright **65 passed** (3 new), vitest 21, tsc/ESLint/build/
+ruff clean. Migration 0017 applied.
+
+Scope delivered:
+
+- Password reset (R7): request always 202 (no enumeration); hashed single-use
+  tokens, 60-min TTL; confirm updates password + revokes all sessions;
+  rate-limited; email via provider abstraction (console dev-only; real
+  provider activation user-gated, launch-blocking). Migration 0017.
+- Account deletion (R9): DELETE /users/me — full FK-safe cascade in one
+  transaction (essay version pointers cleared first), system reference data
+  preserved; authenticated self-service.
+- Data export (R9): GET /users/me/export — complete JSON of owned data,
+  never password hashes or refresh tokens.
+- Frontend: /forgot-password, /reset-password (token from query), login
+  "Forgot password?" link, profile Data & privacy card (JSON download +
+  two-step confirmed deletion).
+- Tests: 10 integration + 3 E2E. ADR-022. Fixed duplicate YAML /users/me key
+  (contract) and test identity-map caching.
+
+Remaining (Slice 11b): production readiness — deployment config,
+backup/recovery, structured logging/monitoring, rate-limit hardening, CI/CD,
+security review, performance + AI quality evaluation reports, launch
+checklist (real email + LLM keys + payment activation are user-gated).
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

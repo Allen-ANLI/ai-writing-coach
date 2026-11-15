@@ -66,6 +66,13 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1536
     embedding_timeout_seconds: float = 30.0
 
+    # --- Email / password reset (Slice 11, R7) ---
+    # console: development-only log delivery. Real providers need approval.
+    email_provider: str = "console"
+    password_reset_ttl_minutes: int = 60
+    # Base URL used to build the reset link in the email body.
+    frontend_base_url: str = "http://localhost:3500"
+
 
 @lru_cache
 def get_settings() -> Settings:

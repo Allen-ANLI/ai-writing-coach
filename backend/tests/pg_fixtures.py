@@ -35,7 +35,7 @@ _TRUNCATE = (
     "expression_suggestion_items, expression_suggestions, expression_sources, user_expressions, "
     "issue_teachings, issue_suggestions, writing_issues, ai_usage_logs, writing_sessions, "
     "essay_edit_events, idempotency_keys, essay_versions, essay_working_documents, essays, "
-    "auth_refresh_tokens, auth_sessions, user_profiles, users CASCADE"
+    "password_reset_tokens, auth_refresh_tokens, auth_sessions, user_profiles, users CASCADE"
 )
 
 

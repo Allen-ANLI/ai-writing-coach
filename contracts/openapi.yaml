@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Writing Coach API
-  version: 1.3.0
+  version: 1.4.0
   description: Final API contract aligned with Database ERD V1.2. Working documents use server_revision; immutable
     snapshots use version_no. Refresh tokens are HttpOnly cookies. 1.1.1 adds the additive
     infrastructure endpoint GET /health (200 database reachable, 503 database unavailable);
@@ -11,7 +11,9 @@ info:
     additive only, no existing semantics changed. 1.3.0 (Slice 10, reconciliation R8)
     adds the commercialization surface (plans, subscription, sandbox checkout/confirm,
     cancel, billing history, quota usage); payment provider runs in sandbox mode only
-    until real activation is explicitly approved; additive only.
+    until real activation is explicitly approved; additive only. 1.4.0 (Slice 11,
+    reconciliations R7/R9) adds password reset (request/confirm) and account
+    deletion/export; additive only.
 servers:
 - url: https://api.example.com/api/v1
   description: Production placeholder
@@ -288,6 +290,23 @@ paths:
               type: object
               properties: {}
               additionalProperties: true
+    delete:
+      tags:
+      - Users
+      summary: Delete own account and all owned data (irreversible)
+      responses:
+        '204':
+          description: Account deleted
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
   /users/me/preferences:
     get:
       tags:
@@ -2528,6 +2547,87 @@ paths:
       responses:
         '200':
           description: Success
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+  /auth/password-reset/request:
+    post:
+      tags:
+      - Auth
+      summary: Request a password reset (always 202; no account enumeration)
+      responses:
+        '202':
+          description: Reset requested
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+              required:
+              - email
+  /auth/password-reset/confirm:
+    post:
+      tags:
+      - Auth
+      summary: Confirm password reset with single-use token
+      responses:
+        '200':
+          description: Password updated; all sessions revoked
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                new_password:
+                  type: string
+                  minLength: 10
+              required:
+              - token
+              - new_password
+  /users/me/export:
+    get:
+      tags:
+      - Users
+      summary: Export own data as JSON
+      responses:
+        '200':
+          description: Data export
         '401':
           description: Authentication required or token invalid
         '403':

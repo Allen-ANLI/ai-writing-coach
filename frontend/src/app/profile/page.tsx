@@ -8,6 +8,7 @@ import { useAuth } from "@/features/auth/auth-provider";
 import { RequireAuth } from "@/features/auth/require-auth";
 import { AiUsageCard } from "@/features/profile/ai-usage-card";
 import { PreferencesCard } from "@/features/profile/preferences-card";
+import { PrivacyCard } from "@/features/profile/privacy-card";
 import { fetchMe, fetchSessions } from "@/services/auth";
 
 function ProfileContent() {
@@ -122,6 +123,8 @@ function ProfileContent() {
       <PreferencesCard />
 
       <AiUsageCard />
+
+      <PrivacyCard />
 
       <section
         aria-label="Device sessions"

@@ -2,7 +2,7 @@
 
 **Created:** 2026-11-15 (Master Development Directive V2.0, §1)
 **Maintained by:** every implementation slice must update this file.
-**Baselines:** PRD V1.1 (DOCX) · System Design V1.1 · Database ERD V1.2 · API Specification V1.1.1 · `contracts/openapi.yaml` (OpenAPI 3.1, info.version 1.3.0)
+**Baselines:** PRD V1.1 (DOCX) · System Design V1.1 · Database ERD V1.2 · API Specification V1.1.1 · `contracts/openapi.yaml` (OpenAPI 3.1, info.version 1.4.0)
 
 Status legend:
 
@@ -26,9 +26,9 @@ authoritative starting references; resolutions below are the adopted engineering
 | R4 | `essays.status` / `users.status` CHECK values were provisional bootstrap decisions; ERD does not enumerate them | **Adopt** `essays.status ∈ {active, archived}`, `users.status ∈ {active, disabled}`; recorded in ERD as the approved enumeration | ERD §5.1/§6.1 |
 | R5 | PRD §10 conceptual entity list (EssayQuestion, EssayFeedback, WritingError, ErrorRule, Expression, Subscription…) differs from ERD V1.2's 29 entities | ERD V1.2 is the refined schema baseline (PRD §10 explicitly defers fields to ERD stage). Mapping: WritingError→`writing_issues`, EssayFeedback→`essay_evaluations`, UserExpression→`user_expressions`. `ErrorRule` stays as code-level rule metadata (no table needed initially). **Subscription/billing entities are absent from ERD** — added in the commercialization phase (see G3) | This matrix; ERD when billing lands |
 | R6 | `docs/README.md` and `DEVELOPMENT_PLAN.md` recorded System Design V1.1 as MISSING | **Stale.** User supplied `docs/AI_Writing_Coach_System_Design_V1.1.md` (959 lines); committed in `7baeb36`. Both docs updated | docs/README.md, DEVELOPMENT_PLAN.md |
-| R7 | PRD FR-01 requires password reset; contract has no reset endpoints | **Gap.** Additive contract addition planned (auth hardening slice): request-reset + confirm-reset with hashed single-use tokens; email delivery behind a provider abstraction (real SMTP/provider activation needs approval per Directive §6) | Contract + API Spec when implemented |
+| R7 | PRD FR-01 requires password reset; contract has no reset endpoints | **Resolved in Slice 11**: contract 1.4.0 adds request/confirm; hashed single-use 60-min tokens; console email abstraction (real provider activation user-gated, launch-blocking); confirm revokes all sessions | Contract 1.4.0, ADR-022, migration 0017 |
 | R8 | Directive §H + PRD G5/V1.4 require subscriptions/quotas/billing; contract and ERD have none | **Resolved in Slice 10**: additive contract 1.3.0 (7 billing ops), ERD §16 (4 tables, migration 0016), sandbox-only payments (DB CHECK), quota metering at the LLM boundary. Real activation still gated on user approval | Contract 1.3.0, ERD §16, ADR-021 |
-| R9 | Directive §I requires account deletion + data export; PRD §9.3 privacy controls; contract only has per-resource deletes | **Gap.** Additive endpoints planned (privacy slice): full account deletion cascade + JSON export of user data | Contract + API Spec when implemented |
+| R9 | Directive §I requires account deletion + data export; PRD §9.3 privacy controls; contract only has per-resource deletes | **Resolved in Slice 11**: DELETE /users/me (FK-safe full cascade, reference data preserved) + GET /users/me/export (full JSON, no secrets); confirmed deletion UI | Contract 1.4.0, ADR-022 |
 | R10 | `Idempotency-Key` accepted by contract but dedup storage not implemented | **Resolved in Slice 2B**: `idempotency_keys` table (migration 0004) + `app/core/idempotency.py`; applied to POST snapshots; reused by submit/evaluations/rewrites in later slices. Concurrent in-flight repeats get 429; stale placeholders reclaimed after 60s | DEVELOPMENT_PLAN.md, ERD §0 |
 | R11 | Frontend API types are hand-mirrored (`src/types/api.ts`), not generated; contract uses YAML anchors | **Resolved in Slice 2C**: `npm run generate:api` (scripts/generate-api-types.mjs) resolves anchors via the yaml package and emits `src/types/generated.ts` (15 contract schemas); api.ts re-exports them. Open response bodies stay hand-mirrored | frontend README, scripts |
 | R12 | PRD FR-08.5 wants 200–300 verified, licensed IELTS questions; copyright constraints | Seed with **original practice questions** (PRD explicitly permits) covering all Task 1/2 types and topics; `license_status` gates any third-party content; no unlicensed Cambridge replication | IELTS seed data + ADR-018 (Slice 6) |
@@ -39,7 +39,7 @@ authoritative starting references; resolutions below are the adopted engineering
 |---|---|---|---|---|---|---|
 | FR-01 register/login | Auth | users, auth_sessions, auth_refresh_tokens | POST /auth/register, /auth/login | **IV** 2026-11-15 | **IV** login/register pages | 55 auth tests; E2E auth 11 |
 | FR-01 JWT + refresh lifecycle, device sessions | Auth | auth_sessions, auth_refresh_tokens | refresh/logout/logout-all/sessions GET/DELETE | **IV** 2026-11-15 | **IV** single-flight refresh, silent restore | reuse-revocation, concurrency, cookie-attribute tests |
-| FR-01 password reset | Auth | (reset tokens — to add) | (R7 gap) | **NI** | **NI** | — |
+| FR-01 password reset | Auth | password_reset_tokens | POST /auth/password-reset/request, /confirm | **IV** 2026-11-15 (Slice 11: no enumeration, hashed single-use 60-min tokens, session revocation, rate-limited, console email abstraction; migration 0017) | **IV** 2026-11-15 (/forgot-password, /reset-password) | 6 reset integration tests; reset E2E |
 | FR-01 profile management | Users | user_profiles | GET/PATCH /users/me | **IV** 2026-11-15 | **IV** /profile | auth tests + E2E |
 | FR-01 preferences (level, target band, variant, toggles) | Users | user_profiles.preferences | GET/PATCH /users/me/preferences | **IV** 2026-11-15 (Slice 9: typed merge-patch over JSONB; level/band/variant via /users/me profile columns) | **IV** 2026-11-15 (preferences card on /profile, optimistic updates) | 4 preferences integration tests; preferences E2E |
 | FR-01 data isolation | all | all private tables | all private APIs | **IV** (auth+essays scope; extends per slice) | n/a | ownership tests per module |
@@ -72,18 +72,18 @@ authoritative starting references; resolutions below are the adopted engineering
 | SD §9 LangGraph workflows (planner/extractor/study planner) | Workflows | workflows, workflow_events | POST /workflows, GET/{id}, resume, cancel, events | **IV** 2026-11-15 (Slice 8: langgraph StateGraphs with conditional quality-check loop, business-state pause/resume in PG, confirm applies via business services, append-only events; ADR-020) | **IV** 2026-11-15 (study planner card on /learning; planner dialog uses outlines API) | 10 workflow integration tests; 2 planner E2E |
 | SD §12.4 AI cost logging | Analytics | ai_usage_logs | GET /analytics/ai-usage, by-feature, trends | **IV** 2026-11-15 (Slice 9: user-scoped totals, per-feature breakdown, zero-filled 14-day trend) | **IV** 2026-11-15 (AI usage card on /profile) | 4 analytics integration tests; usage-card E2E |
 | G5 / Directive H subscriptions, quotas, billing | Billing | subscription_plans, user_subscriptions, usage_meters, payment_transactions | GET plans/subscription/history/usage, POST checkout/confirm/cancel | **IV** 2026-11-15 (Slice 10: sandbox-only payments, lazy free tier, calendar-month quotas metered at record_usage, atomic counters, 429 QUOTA_EXCEEDED; migration 0016; ADR-021) | **IV** 2026-11-15 (/billing page: plans, sandbox upgrade, cancel, usage, history) | 13 billing integration tests; 2 billing E2E |
-| Directive I production readiness (deploy, backup, monitoring, CI/CD, privacy) | Infrastructure | — | (R9 gap partially) | **NI** (Docker Compose dev stack exists) | **NI** | — |
+| Directive I production readiness (deploy, backup, monitoring, CI/CD, privacy) | Infrastructure | — | DELETE /users/me, GET /users/me/export (privacy done) | **IU** privacy IV 2026-11-15 (Slice 11: full cascade deletion + JSON export, ADR-022); deploy/backup/monitoring/CI pending | **IV** privacy UI (profile Data & privacy card) | 4 privacy integration tests; 3 privacy E2E |
 | Infrastructure health | Health | — | GET /health | **IV** 2026-11-15 | **IV** landing health chip | 3 smoke + 2 integration + E2E |
 
 ## 3. Contract operation inventory (88 operations)
 
 Verified 2026-11-15 by script comparing `contracts/openapi.yaml` paths against the
-FastAPI-generated OpenAPI: **95 implemented, 0 missing, 0 out-of-contract routes — FULL CONTRACT COVERAGE (1.3.0)**
-(15 baseline; +6 2B; +5 2D; +7 3; +1 accept 3UX; +10 Slice 4; +1 extract 5A; +8 Slice 5B learning; +6 Slice 6 IELTS; +7 Slice 7 evaluations/rewrites; +8 outlines +5 workflows Slice 8; +2 preferences +4 plans/tasks +3 analytics Slice 9; +7 billing Slice 10).
-Additive contract gaps R7 (password reset) and R9 (account deletion/export) remain planned extensions; R8 (billing) resolved in Slice 10.
+FastAPI-generated OpenAPI: **99 implemented, 0 missing, 0 out-of-contract routes — FULL CONTRACT COVERAGE (1.4.0)**
+(15 baseline; +6 2B; +5 2D; +7 3; +1 accept 3UX; +10 Slice 4; +1 extract 5A; +8 Slice 5B learning; +6 Slice 6 IELTS; +7 Slice 7 evaluations/rewrites; +8 outlines +5 workflows Slice 8; +2 preferences +4 plans/tasks +3 analytics Slice 9; +7 billing Slice 10; +2 password reset +2 privacy Slice 11).
+All reconciled gaps R7/R8/R9 resolved. Remaining work is production readiness (Slice 11), not contract coverage.
 Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`.
 
-### Implemented (95) — all IV
+### Implemented (99) — all IV
 
 | Method | Path | Slice |
 |---|---|---|
@@ -182,11 +182,14 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 | POST | /billing/cancel | 10 |
 | GET | /billing/history | 10 |
 | GET | /billing/usage | 10 |
+| POST | /auth/password-reset/request | 11 |
+| POST | /auth/password-reset/confirm | 11 |
+| DELETE | /users/me | 11 |
+| GET | /users/me/export | 11 |
 
 ### Missing (0)
 
-All 95 contracted operations (1.3.0) are implemented. Additive extensions still
-planned: R7 password reset, R9 account deletion/export (Slice 11).
+All 99 contracted operations (1.4.0) are implemented. R7/R8/R9 all resolved.
 
 ## 4. ERD entity inventory (29 entities)
 
@@ -245,6 +248,7 @@ planned: R7 password reset, R9 account deletion/export (Slice 11).
 
 | Date | Change |
 |---|---|
+| 2026-11-15 (Slice 11, R7/R9) | Privacy implemented + verified: password reset (request always 202, hashed single-use 60-min tokens, confirm revokes all sessions, rate-limited, console email abstraction — real provider activation user-gated and launch-blocking); account deletion (FK-safe full cascade in one transaction, essays↔versions cycle broken by clearing pointers, system reference data preserved); full JSON data export (no secrets). Contract 1.4.0 (99 ops). Migration 0017 (password_reset_tokens). Frontend: /forgot-password, /reset-password, profile Data & privacy card (export download + two-step confirmed deletion). ADR-022. Verification: backend **361 passed** (10 new + 1 contract), Playwright **65 passed** (3 new), vitest 21, tsc/ESLint/build/ruff clean. Fixed a duplicate YAML /users/me key and test-session identity caching. |
 | 2026-11-15 (Slice 10) | Commercialization implemented + verified (sandbox only, ADR-021): contract 1.3.0 adds 7 billing ops (plans/subscription/checkout/confirm/cancel/history/usage); migration 0016 (subscription_plans seeded free/pro/ultimate, user_subscriptions UNIQUE per user, usage_meters per calendar month, payment_transactions provider CHECK 'sandbox'); quota guards before every LLM call site + queue-time guards for background flows; metering centralized in llm.record_usage so rule-only checks consume nothing; atomic upserts + increments fixed a concurrent-creation race found by E2E; cancel keeps access to period end; Idempotency-Key on checkout/confirm. Frontend: /billing page (plan cards, sandbox upgrade flow, quota usage, cancel, history) + nav. Verification: backend **350 passed** (13 new + 1 contract), Playwright **62 passed** (2 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 95/95. Real payment activation remains gated on user approval. |
 | 2026-11-15 (Slice 9) | Preferences + learning plans/tasks + AI usage analytics implemented + verified — **full contract coverage 88/88**: typed preferences merge-patch (assistance toggles, review goal, UI language) with optimistic UI; learning plans (manual + study-planner confirmation creates plan + one task per suggestion, deterministic, SM-2 keeps review timing), task completion lifecycle, same-owner composite FK for related expressions; user-scoped analytics (totals, by-feature, zero-filled 14-day trends). Migration 0015 (learning_plans, learning_tasks). Frontend: preferences + AI usage cards on /profile, plans & tasks card on /learning. Verification: backend **336 passed** (13 new + 1 contract), Playwright **60 passed** (3 new), vitest 21, tsc/ESLint/build/ruff clean. Fixed controlled-checkbox race with optimistic mutation updates. |
 | 2026-11-15 (Slice 8) | Outlines + LangGraph workflows implemented + verified: outline generation (202 background, semantic recall of learned expressions, section→paragraph→sentence_idea hierarchy), draft-only editing + node CRUD, confirmation lock, ghost-text hint bar with explicit Insert (never auto-writes). LangGraph 1.x StateGraphs for writing_planner (retrieve→generate→quality-check conditional loop), learning_extractor (extract→dedupe), personalized_study_planner (gather context→plan); business-state pause/resume persisted in PostgreSQL (workflows + append-only workflow_events), confirm applies results through business services (confirmed outline / KB save), revise re-runs, cancel supported; graph internals never exposed. Migration 0014 (4 tables, same-owner composite FK). Frontend: Plan dialog, confirmed plan in left outline panel, ghost-text insertion, study-planner card on /learning. ADR-020. Verification: backend **322 passed** (19 new + 1 contract), Playwright **57 passed** (3 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 79/88. |

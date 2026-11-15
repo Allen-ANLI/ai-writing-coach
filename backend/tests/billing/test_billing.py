@@ -219,9 +219,7 @@ def test_billing_requires_auth(client):
     assert client.get("/api/v1/billing/plans").status_code == 401
     assert client.get("/api/v1/billing/subscription").status_code == 401
     assert client.post("/api/v1/billing/checkout", json={"plan_code": "pro"}).status_code == 401
-    response = client.post(
-        "/api/v1/billing/confirm", json={"transaction_id": str(uuid.uuid4())}
-    )
+    response = client.post("/api/v1/billing/confirm", json={"transaction_id": str(uuid.uuid4())})
     assert response.status_code == 401
     assert client.post("/api/v1/billing/cancel").status_code == 401
     assert client.get("/api/v1/billing/history").status_code == 401

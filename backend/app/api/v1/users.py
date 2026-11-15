@@ -1,6 +1,7 @@
 """User routes (thin): identity comes from the auth context, never the body."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -70,3 +71,20 @@ def patch_preferences(
             "meta": {"request_id": new_request_id()},
         }
     )
+
+
+@router.get("/users/me/export")
+def export_data(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    return JSONResponse(content=service.export_data(db, user))
+
+
+@router.delete("/users/me", status_code=204)
+def delete_account(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    service.delete_account(db, user)
+    return Response(status_code=204)

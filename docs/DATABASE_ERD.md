@@ -553,6 +553,17 @@ UNIQUE(`essay_id`, `version_no`)；建议 UNIQUE(`essay_id`, `id`) 供复合外�
   `currency`、`status ∈ {pending, succeeded, failed, refunded}`、
   `kind ∈ {subscription, refund}`、`created_at`、`completed_at NULL`。
 
+## 15c. 隐私增量（V1.2.5，迁移 0017，Slice 11 / ADR-022）
+
+- `password_reset_tokens`：`id UUID PK`、`user_id UUID FK`、
+  `token_hash VARCHAR(64) UNIQUE`（仅存 SHA-256 哈希）、`expires_at`
+  （默认 60 分钟）、`used_at NULL`（单次使用）、`created_at`。
+- 账户删除（DELETE /users/me）：单事务内按外键依赖逆序删除全部用户数据；
+  先清空 essays.original_version_id/final_version_id 打破 essays↔versions
+  循环引用；系统级参考数据（ielts_questions、subscription_plans）不受影响。
+- 数据导出（GET /users/me/export）：导出全部用户自有数据 JSON；
+  绝不导出 password_hash 与 refresh token。
+
 ## 16. 建表优先级
 
 - **Phase A：** users、user_profiles、auth_sessions、auth_refresh_tokens、essays、essay_working_documents、writing_sessions、essay_versions、essay_edit_events、writing_issues、issue_suggestions。
