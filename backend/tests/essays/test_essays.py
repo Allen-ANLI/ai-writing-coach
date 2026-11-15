@@ -90,8 +90,9 @@ def test_create_essay_rejects_invalid_question_id(client):
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_create_essay_accepts_uuid_question_id(client):
-    # question_id existence checks arrive with the IELTS slice; format is validated.
+def test_create_essay_rejects_unknown_question_id(client):
+    # Slice 6 attached the IELTS FK: question_id must reference a published,
+    # permitted bank question (happy path covered in tests/ielts).
     headers = auth_headers(client)
     question_id = str(uuid.uuid4())
     response = client.post(
@@ -100,8 +101,8 @@ def test_create_essay_accepts_uuid_question_id(client):
         headers=headers,
     )
 
-    assert response.status_code == 201
-    assert response.json()["data"]["question_id"] == question_id
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
 
 
 def test_creation_rolls_back_when_snapshot_insert_fails(client, db, monkeypatch):

@@ -13,6 +13,7 @@ export function createEssay(payload: {
   title: string | null;
   writing_type: WritingType;
   question_prompt?: string | null;
+  question_id?: string | null;
 }): Promise<EssayResponse> {
   return apiFetch<EssayResponse>("/essays", { method: "POST", body: payload });
 }

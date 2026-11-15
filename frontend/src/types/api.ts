@@ -702,3 +702,53 @@ export interface WeaknessListResponse {
   data: { items: WeaknessData[] };
   meta?: RequestMeta;
 }
+
+// IELTS question bank (Slice 6, API Spec §12)
+
+export interface IeltsTagRef {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface IeltsQuestionSummary {
+  id: string;
+  task_type: "task1" | "task2";
+  question_type: string | null;
+  prompt_text: string;
+  prompt_translation: string | null;
+  difficulty: string | null;
+  tags: IeltsTagRef[];
+  is_favorited: boolean;
+  created_at: string;
+}
+
+export interface IeltsQuestionDetail extends IeltsQuestionSummary {
+  source_type: string;
+  source_title: string | null;
+  license_status: string;
+}
+
+export interface IeltsQuestionListResponse {
+  data: { items: IeltsQuestionSummary[]; next_cursor: string | null; limit: number };
+  meta?: RequestMeta;
+}
+
+export interface IeltsQuestionDetailResponse {
+  data: IeltsQuestionDetail;
+  meta?: RequestMeta;
+}
+
+export interface IeltsTagCount extends IeltsTagRef {
+  question_count: number;
+}
+
+export interface IeltsTagListResponse {
+  data: { items: IeltsTagCount[] };
+  meta?: RequestMeta;
+}
+
+export interface IeltsFavoriteResponse {
+  data: { question_id: string; favorited: boolean };
+  meta?: RequestMeta;
+}

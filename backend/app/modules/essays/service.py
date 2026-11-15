@@ -26,6 +26,7 @@ from app.modules.essays.schemas import (
     RestoreRequest,
     SaveWorkingDocumentRequest,
 )
+from app.modules.ielts import repository as ielts_repository
 from app.modules.users.models import User
 
 EMPTY_DOCUMENT_JSON = {"type": "doc", "content": []}
@@ -41,12 +42,25 @@ def create_essay(db: Session, user: User, payload: CreateEssayRequest) -> Essay:
     now = utcnow()
     empty_hash = _content_hash("")
 
+    question_prompt = payload.question_prompt
+    if payload.question_id is not None:
+        question = ielts_repository.get_question(db, payload.question_id)
+        if question is None:
+            raise ApiError(404, "RESOURCE_NOT_FOUND", "Question not found.")
+        expected_type = "ielts_task1" if question.task_type == "task1" else "ielts_task2"
+        if payload.writing_type != expected_type:
+            raise ApiError(
+                422, "VALIDATION_ERROR", f"writing_type must be {expected_type} for this question."
+            )
+        if question_prompt is None:
+            question_prompt = question.prompt_text
+
     essay = Essay(
         user_id=user.id,
         title=payload.title,
         writing_type=payload.writing_type,
         question_id=payload.question_id,
-        question_prompt=payload.question_prompt,
+        question_prompt=question_prompt,
         status="active",
     )
     db.add(essay)

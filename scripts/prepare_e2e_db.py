@@ -1,7 +1,10 @@
 """Prepare the isolated E2E database for Playwright runs.
 
-Creates <dev db>_test if missing and applies all Alembic migrations. Used by
-frontend/e2e/global-setup.ts so E2E tests never touch development data.
+Creates <dev db>_test if missing, applies all Alembic migrations and re-seeds
+the IELTS bank. Used by frontend/e2e/global-setup.ts so E2E tests never touch
+development data. The backend pytest suite shares this database and truncates
+tables per test, so the seed is re-applied here (idempotent) even when no
+migration is pending.
 """
 
 import os
@@ -10,12 +13,15 @@ import subprocess
 import sys
 
 import psycopg
+from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
+from sqlalchemy.orm import Session
 
 BACKEND_DIR = pathlib.Path(__file__).resolve().parents[1] / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
 from app.core.config import get_settings  # noqa: E402
+from app.modules.ielts.seed import seed_ielts  # noqa: E402
 
 
 def main() -> int:
@@ -45,6 +51,12 @@ def main() -> int:
     if result.returncode != 0:
         print(result.stderr)
         return result.returncode
+
+    engine = create_engine(test_url.render_as_string(hide_password=False))
+    with Session(bind=engine) as session:
+        seed_ielts(session)
+        session.commit()
+    engine.dispose()
     print(f"e2e database ready: {test_url.database}")
     return 0
 

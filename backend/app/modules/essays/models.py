@@ -5,7 +5,7 @@ Invariants:
   server_revision and never creates versions.
 - Versions are immutable snapshots; the original snapshot is never overwritten.
 - essays has NO current_version_id (the working document is the live content).
-- question_id FK to ielts_questions is deferred until that table exists.
+- question_id links to the IELTS bank (migration 0012); NULL for free writing.
 """
 
 import uuid
@@ -51,7 +51,9 @@ class Essay(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    question_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    question_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("ielts_questions.id"), nullable=True
+    )
     question_prompt: Mapped[str | None] = mapped_column(Text)
     title: Mapped[str | None] = mapped_column(String(255))
     writing_type: Mapped[str] = mapped_column(String(30), nullable=False)

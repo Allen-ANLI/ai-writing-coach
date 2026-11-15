@@ -2,7 +2,7 @@
 
 **Created:** 2026-11-15 (Master Development Directive V2.0, §1)
 **Maintained by:** every implementation slice must update this file.
-**Baselines:** PRD V1.1 (DOCX) · System Design V1.1 · Database ERD V1.2 · API Specification V1.1.1 · `contracts/openapi.yaml` (OpenAPI 3.1, info.version 1.1.1)
+**Baselines:** PRD V1.1 (DOCX) · System Design V1.1 · Database ERD V1.2 · API Specification V1.1.1 · `contracts/openapi.yaml` (OpenAPI 3.1, info.version 1.2.0)
 
 Status legend:
 
@@ -31,7 +31,7 @@ authoritative starting references; resolutions below are the adopted engineering
 | R9 | Directive §I requires account deletion + data export; PRD §9.3 privacy controls; contract only has per-resource deletes | **Gap.** Additive endpoints planned (privacy slice): full account deletion cascade + JSON export of user data | Contract + API Spec when implemented |
 | R10 | `Idempotency-Key` accepted by contract but dedup storage not implemented | **Resolved in Slice 2B**: `idempotency_keys` table (migration 0004) + `app/core/idempotency.py`; applied to POST snapshots; reused by submit/evaluations/rewrites in later slices. Concurrent in-flight repeats get 429; stale placeholders reclaimed after 60s | DEVELOPMENT_PLAN.md, ERD §0 |
 | R11 | Frontend API types are hand-mirrored (`src/types/api.ts`), not generated; contract uses YAML anchors | **Resolved in Slice 2C**: `npm run generate:api` (scripts/generate-api-types.mjs) resolves anchors via the yaml package and emits `src/types/generated.ts` (15 contract schemas); api.ts re-exports them. Open response bodies stay hand-mirrored | frontend README, scripts |
-| R12 | PRD FR-08.5 wants 200–300 verified, licensed IELTS questions; copyright constraints | Seed with **original practice questions** (PRD explicitly permits) covering all Task 1/2 types and topics; `license_status` gates any third-party content; no unlicensed Cambridge replication | IELTS seed data + ADR |
+| R12 | PRD FR-08.5 wants 200–300 verified, licensed IELTS questions; copyright constraints | Seed with **original practice questions** (PRD explicitly permits) covering all Task 1/2 types and topics; `license_status` gates any third-party content; no unlicensed Cambridge replication | IELTS seed data + ADR-018 (Slice 6) |
 
 ## 2. Feature traceability (PRD → design → schema → API → code → tests)
 
@@ -63,7 +63,7 @@ authoritative starting references; resolutions below are the adopted engineering
 | FR-05 translation exercises + SM-2 | Learning | expression_progress, expression_reviews | GET /learning/reviews/due, POST /learning/reviews, GET progress | **IV** 2026-11-15 (Slice 5B: rule-first exact match, LLM semantic judging, deterministic SM-2, no answer leakage in prompts) | **IV** 2026-11-15 (/learning review flow) | 8 SM-2 unit + 9 learning integration tests; 3 learning E2E |
 | FR-06 previously-learned recommendations | Knowledge | user_expressions, expression_embeddings | (within polish/translation) | **IV** 2026-11-15 pipeline: semantic recall (pgvector) with keyword fallback + LLM suitability judgment + labeling; quality awaits real embeddings | **IV** badge in candidate card | assist + RAG tests |
 | FR-07 weakness profile + trends | Learning | user_weaknesses | GET weaknesses, /{category}, /trends, POST practice | **IV** 2026-11-15 (aggregation on detection, volume-adjusted weekly trends, LLM practice generation) | **IV** 2026-11-15 (weakness list on /learning) | weakness integration tests |
-| FR-08 IELTS question bank | IELTS | ielts_questions, question_tags, ielts_question_tags, user_favorite_questions | GET questions/{id}/random/tags, POST/DELETE favorite | **NI** | **NI** | — |
+| FR-08 IELTS question bank | IELTS | ielts_questions, question_tags, ielts_question_tags, user_favorite_questions | GET questions/{id}/random/tags, POST/DELETE favorite | **IV** 2026-11-15 (Slice 6: 60 original licensed-safe questions covering all Task 1/2 types + 18 topics; published+license gate; essays.question_id FK attached; migration 0012) | **IV** 2026-11-15 (/ielts browse/filter/favorite/random → start writing) | 18 IELTS integration tests + contract test; 4 IELTS E2E |
 | FR-09 IELTS evaluation (4 criteria, estimates) | Evaluations | essay_evaluations | POST/GET /essays/{id}/evaluations, GET/DELETE /evaluations/{id} | **NI** | **NI** | — |
 | FR-09.3 rewrite levels 1–4 + accept | Evaluations | essay_rewrites | POST rewrite, GET /rewrites/{id}, POST accept | **NI** | **NI** | — |
 | FR-10 writing planner / outline | Workflows | writing_outlines, outline_nodes | POST outlines/generate, GET/PATCH outlines, confirm, nodes CRUD | **NI** | **NI** | — |
@@ -75,14 +75,14 @@ authoritative starting references; resolutions below are the adopted engineering
 | Directive I production readiness (deploy, backup, monitoring, CI/CD, privacy) | Infrastructure | — | (R9 gap partially) | **NI** (Docker Compose dev stack exists) | **NI** | — |
 | Infrastructure health | Health | — | GET /health | **IV** 2026-11-15 | **IV** landing health chip | 3 smoke + 2 integration + E2E |
 
-## 3. Contract operation inventory (87 operations)
+## 3. Contract operation inventory (88 operations)
 
 Verified 2026-11-15 by script comparing `contracts/openapi.yaml` paths against the
-FastAPI-generated OpenAPI: **53 implemented, 34 missing, 0 out-of-contract routes**
-(15 baseline; +6 2B; +5 2D; +7 3; +1 accept 3UX; +10 Slice 4; +1 extract 5A; +8 Slice 5B learning).
+FastAPI-generated OpenAPI: **59 implemented, 29 missing, 0 out-of-contract routes**
+(15 baseline; +6 2B; +5 2D; +7 3; +1 accept 3UX; +10 Slice 4; +1 extract 5A; +8 Slice 5B learning; +6 Slice 6 IELTS).
 Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`.
 
-### Implemented (53) — all IV
+### Implemented (59) — all IV
 
 | Method | Path | Slice |
 |---|---|---|
@@ -139,21 +139,26 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 | GET | /users/me/weaknesses/{category} | 5B |
 | GET | /users/me/weaknesses/trends | 5B |
 | POST | /users/me/weaknesses/practice | 5B |
+| GET | /ielts/questions | 6 |
+| GET | /ielts/questions/{question_id} | 6 |
+| GET | /ielts/questions/random | 6 |
+| GET | /ielts/tags | 6 |
+| POST | /ielts/questions/{question_id}/favorite | 6 |
+| DELETE | /ielts/questions/{question_id}/favorite | 6 |
 
-### Missing (34) — grouped by planned slice
+### Missing (29) — grouped by planned slice
 
 | Slice | Operations |
 |---|---|
-| 9 Learning plans/tasks | POST/GET /learning/plans; GET /learning/tasks; PATCH /learning/tasks/{id} (3) |
-| 6 IELTS | GET questions; GET questions/{id}; GET tags; GET random; POST/DELETE favorite (6) |
+| 9 Learning plans/tasks | POST/GET /learning/plans; GET /learning/tasks; PATCH /learning/tasks/{id} (4) |
 | 7 Evaluations & rewrites | POST/GET evaluations; GET/DELETE /evaluations/{id}; POST rewrite; GET /rewrites/{id}; POST accept (7) |
-| 8 Outlines | POST generate; GET outlines; GET/PATCH /outlines/{id}; POST confirm; POST nodes; PATCH/DELETE nodes/{id} (7) |
+| 8 Outlines | POST generate; GET essay outlines; GET/PATCH /outlines/{id}; POST confirm; POST nodes; PATCH/DELETE nodes/{id} (8) |
 | 9 Workflows | POST /workflows; GET/{id}; POST resume; POST cancel; GET events (5) |
 | 10 Analytics | GET ai-usage; GET by-feature; GET trends (3) |
 | 1 Users preferences | GET/PATCH /users/me/preferences (2) |
 | Later additive (R7/R8/R9) | password reset, billing/quotas, account deletion/export — not yet in contract |
 
-(10+12+6+7+7+5+3 = 50; plus 2 preferences + 2 later-additive counted above = 54 total.)
+(4 plans/tasks + 7 evaluations/rewrites + 8 outlines + 5 workflows + 3 analytics + 2 preferences = 29.)
 
 ## 4. ERD entity inventory (29 entities)
 
@@ -179,10 +184,10 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 | expression_progress | 0011 | **IV** (SM-2 scheduling, same-owner composite FK) |
 | expression_reviews | 0011 | **IV** (answer/reference snapshot, score, feedback) |
 | user_weaknesses | 0011 | **IV** (aggregated on issue detection; volume-adjusted trends) |
-| ielts_questions | phase C | **NI** |
-| question_tags | phase C | **NI** |
-| ielts_question_tags | phase C | **NI** |
-| user_favorite_questions | phase C | **NI** |
+| ielts_questions | 0012 | **IV** |
+| question_tags | 0012 | **IV** |
+| ielts_question_tags | 0012 | **IV** |
+| user_favorite_questions | 0012 | **IV** |
 | writing_outlines | phase C | **NI** |
 | outline_nodes | phase C | **NI** |
 | learning_plans | phase C | **NI** |
@@ -212,6 +217,7 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 
 | Date | Change |
 |---|---|
+| 2026-11-15 (Slice 6) | IELTS question bank implemented + verified: 60 original licensed-safe practice questions (18 Task 1 Academic across 6 chart types, 9 GT letters across 3 registers, 33 Task 2 across 5 question types; 18 topic tags; Chinese translations; text-based data so the bank is self-contained). Published+license gate in the repository layer; keyset pagination; task/topic/type filters; tags with counts; random; idempotent user-scoped favorites. essays.question_id FK attached with existence + task-type consistency validation and question_prompt autofill. Migration 0012 (4 tables + FK + idempotent uuid5 seed; offline --sql safe). E2E DB prep re-seeds after pytest truncation. Frontend: /ielts page (filters, favorites, random, detail with translation, start-writing → editor question section). ADR-018. Verification: backend **282 passed** (18 new + 1 contract), Playwright **51 passed** (4 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 59/88 (header total corrected: the 3UX accept operation made it 88, previously miscounted as 87). |
 | 2026-11-15 (Slice 5B) | Learning implemented + verified: deterministic SM-2 spaced repetition (unit-tested invariants), translation reviews with rule-first exact match + LLM semantic judging (any natural correct answer accepted), due prompts without answer leakage, progress/summary, weakness aggregation on issue detection, volume-adjusted weekly trends (errors per 1000 words), LLM practice generation. Migration 0011 (expression_progress with same-owner composite FK, expression_reviews, user_weaknesses). Frontend: /learning Center (review flow, summary, weaknesses). Verification: backend **262 passed** (17 new), Playwright **47 passed** (3 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 53/87. |
 | 2026-11-15 (Slice 5A) | Semantic RAG + extraction implemented + verified: embedding provider abstraction (mock + OpenAI-compatible), expression_embeddings VECTOR(1536) + HNSW cosine index (migration 0010), embeddings on create/update (rebuildable, best-effort), user-scoped semantic recall at query time, keyword/semantic/hybrid search, previously-learned recall upgraded to semantic-first, extraction from immutable versions with confirmation-before-save. Frontend: search-mode selector, History → Extract → confirmation dialog. Verification: backend **245 passed** (15 new), Playwright **44 passed** (2 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 45/87. Semantic QUALITY requires a real embedding endpoint (mock vectors are pipeline-only). |
 | 2026-11-15 (Slice 4) | Expression assistance + knowledge base implemented + verified: polish/translation with backend mode enforcement, persisted candidates, previously-learned keyword recall + LLM suitability labeling, atomic server-authoritative acceptance (essay_edit_events.expression_suggestion_id, migration 0009), knowledge base CRUD/search/archive with dedup + soft delete (migration 0008), /knowledge page, selection-driven inline assistance UI. Verification: backend **230 passed** (15 new), Playwright **42 passed** (4 new), vitest 21, tsc/ESLint/build/ruff clean. Contract operations 44/87. |

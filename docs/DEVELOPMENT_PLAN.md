@@ -473,6 +473,44 @@ Out of scope (next): IELTS (6), evaluations/rewrites as post-writing actions
 (7), outlines/LangGraph (8), learning plans/tasks + analytics (9), billing
 (10), production readiness (11).
 
+## 3l. Slice 6 — IELTS question bank (2026-11-15)
+
+**Status: DONE, verified, committed.** Backend 282 pytest passed (18 new IELTS
++ 1 contract), Playwright **51 passed** (4 new), vitest 21, tsc/ESLint/build/
+ruff clean. Migration 0012 applied. Contract operations 59/88 (total corrected
+from 87: the 3UX accept operation had never been counted).
+
+Scope delivered:
+
+- Migration 0012: ielts_questions (task_type/license_status/source_type CHECKs,
+  publication flag), question_tags (unique name/slug), ielts_question_tags
+  (composite PK), user_favorite_questions (composite PK user+question);
+  deferred essays.question_id FK attached. Idempotent uuid5 seed applied
+  online; offline --sql mode emits DDL only (regression-tested).
+- 60 original licensed-safe questions (ADR-018, R12): 18 Task 1 Academic
+  (6 chart types × 3, text-based data), 9 GT letters (3 registers × 3),
+  33 Task 2 (5 question types), 18 topic tags, Chinese translations.
+- API (6 ops): GET /ielts/questions (keyset pagination; task_type/topic/
+  question_type filters), GET /ielts/questions/{id}, GET /ielts/questions/
+  random, GET /ielts/tags (published counts), POST/DELETE favorite
+  (idempotent, user-scoped). Published+license gate enforced in the
+  repository for every read path.
+- Essay binding: question_id existence + permission check, writing_type/task
+  consistency (422 on mismatch), question_prompt autofill from the bank.
+- Frontend: /ielts page — filters, question cards, favorite toggle, random,
+  detail view with translation + source/license line, Start writing → essay
+  bound to the question (editor question section, ADR-016). Nav link.
+- E2E DB prep (scripts/prepare_e2e_db.py) re-seeds the bank: the pytest suite
+  shares ai_writing_coach_test and truncates per test, which previously left
+  the E2E bank empty.
+- Tests: 18 IELTS integration (gate, filters, pagination, favorites,
+  ownership, essay binding, seed idempotency) + contract coverage test;
+  4 E2E (browse/filter, favorite persistence, random detail, start-writing).
+
+Out of scope (next): evaluations/rewrites as post-writing actions (7),
+outlines/LangGraph (8), learning plans/tasks + analytics (9), billing (10),
+production readiness (11).
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

@@ -141,3 +141,16 @@ def test_document_lifecycle_operations_implemented():
         ("/api/v1/essays/{essay_id}/restore", "post"),
     ]:
         assert method in generated[path], f"{method.upper()} {path} missing"
+
+
+def test_ielts_operations_implemented():
+    generated = create_app().openapi()["paths"]
+    for path, method in [
+        ("/api/v1/ielts/questions", "get"),
+        ("/api/v1/ielts/questions/{question_id}", "get"),
+        ("/api/v1/ielts/tags", "get"),
+        ("/api/v1/ielts/questions/random", "get"),
+        ("/api/v1/ielts/questions/{question_id}/favorite", "post"),
+        ("/api/v1/ielts/questions/{question_id}/favorite", "delete"),
+    ]:
+        assert method in generated[path], f"{method.upper()} {path} missing"

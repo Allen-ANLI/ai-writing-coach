@@ -34,6 +34,26 @@
    expression_suggestion_items.id`（迁移 0009）：表达建议接受事件专用引用；
    `suggestion_id` 保持指向 grammar `issue_suggestions`（两类建议不混用）。
 
+## 0c. V1.2.3 增量修订（2026-11-15，Slice 5A/5B/6）
+
+1. `expression_embeddings`（迁移 0010，§9.3 落地）：expression_id FK、
+   `embedding VECTOR(1536)`、model_name、content_hash；HNSW cosine 索引；
+   查询时按 user_id 过滤（RAG 不跨用户）。
+2. 学习域（迁移 0011，§9.4–9.5/§10 落地）：`expression_progress`
+   （UNIQUE(user_id, expression_id)，复合外键保证同归属；SM-2 字段
+   interval_days/ease_factor/streak/next_review_at）、`expression_reviews`
+   （参考答案快照）、`user_weaknesses`（UNIQUE(user_id, category,
+   sub_category)，sub_category NOT NULL DEFAULT ''）。
+3. IELTS 题库域（迁移 0012，§11 落地）：四表按 §11 建立；
+   `license_status ∈ {original, licensed, pending, restricted}`、
+   `source_type ∈ {original, third_party}`、`task_type ∈ {task1, task2}`
+   CHECK 约束；API 仅暴露 `is_published AND license_status IN
+   ('original','licensed')`。内置 60 道原创题目种子（uuid5 确定性 ID，
+   幂等；ADR-018）。
+4. `essays.question_id` 外键正式附加 → `ielts_questions.id`（迁移 0012，
+   解除 §0b.1 的延迟状态）；创建作文时校验题目存在/已授权、writing_type
+   与 task_type 一致，缺省 question_prompt 自动取自题库。
+
 ## 1. V1.2 变更摘要
 
 V1.2 共 **29 个核心实体**。相较 V1.1 新增 `auth_refresh_tokens`，并完成以下修订：
