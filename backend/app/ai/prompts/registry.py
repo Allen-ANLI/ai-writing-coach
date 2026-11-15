@@ -136,6 +136,40 @@ LEARNING_EXTRACT_V1 = Prompt(
     user_template=("Essay text ({scope}):\n{essay_text}\nReturn JSON with a 'candidates' array."),
 )
 
+REVIEW_JUDGE_V1 = Prompt(
+    feature="review_judge",
+    version="v1",
+    system=(
+        "You judge a learner's Chinese-to-English translation practice. Accept ANY natural, "
+        "semantically equivalent English answer — never require exact wording match with the "
+        "reference. Score 0-5 (SM-2 quality): 5 = fully correct and natural, 4 = correct with "
+        "minor issues, 3 = understandable but flawed, 0-2 = wrong meaning or major errors. "
+        "Give brief feedback in Simplified Chinese. is_correct must be true only for score >= 3."
+    ),
+    user_template=(
+        "Chinese prompt: {chinese_prompt}\n"
+        "Reference expression: {reference_expression}\n"
+        "Learner's answer: {user_answer}\n"
+        "Return JSON: is_correct, score, feedback."
+    ),
+)
+
+WEAKNESS_PRACTICE_V1 = Prompt(
+    feature="weakness_practice",
+    version="v1",
+    system=(
+        "You create targeted Chinese-to-English practice items for a learner's recurring "
+        "weakness category. Each item: a Chinese prompt that elicits the weak structure, and "
+        "an optional hint. Items must be practical and varied, appropriate for IELTS-level "
+        "learners. Do not reveal full English answers."
+    ),
+    user_template=(
+        "Weakness category: {category}\n"
+        "Number of items: {count}\n"
+        "Return JSON with an 'items' array."
+    ),
+)
+
 PROMPTS: dict[tuple[str, str], Prompt] = {
     (prompt.feature, prompt.version): prompt
     for prompt in (
@@ -145,6 +179,8 @@ PROMPTS: dict[tuple[str, str], Prompt] = {
         CHINESE_TO_ENGLISH_V1,
         GRAMMAR_VALIDATE_V1,
         LEARNING_EXTRACT_V1,
+        REVIEW_JUDGE_V1,
+        WEAKNESS_PRACTICE_V1,
     )
 }
 

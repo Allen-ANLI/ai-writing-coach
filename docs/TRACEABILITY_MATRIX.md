@@ -60,9 +60,9 @@ authoritative starting references; resolutions below are the adopted engineering
 | FR-04 knowledge base CRUD | Expressions | user_expressions, expression_sources | POST/GET /expressions, GET/PATCH/DELETE /expressions/{id}, POST archive | **IV** 2026-11-15 (owner-scoped, dedup, soft delete, sources) | **IV** 2026-11-15 (/knowledge page) | 6 CRUD integration tests; KB E2E |
 | FR-04.5 extraction w/ confirmation | Expressions | user_expressions | POST /essays/{id}/expressions/extract | **IV** 2026-11-15 (Slice 5A: immutable-version extraction, candidates returned for confirmation, nothing saved until confirmed) | **IV** 2026-11-15 (History → Extract → confirm dialog) | 3 extraction integration tests; extraction E2E |
 | FR-04.6 search (keyword/semantic) | Knowledge | expression_embeddings | POST /expressions/search | **IV** 2026-11-15 keyword + semantic + hybrid (pgvector HNSW, user-scoped at query time); semantic QUALITY awaits real embedding provider | **IV** mode selector on /knowledge | 5 RAG integration tests; semantic E2E |
-| FR-05 translation exercises + SM-2 | Learning | expression_progress, expression_reviews | GET /learning/reviews/due, POST /learning/reviews, GET progress | **NI** | **NI** | — |
+| FR-05 translation exercises + SM-2 | Learning | expression_progress, expression_reviews | GET /learning/reviews/due, POST /learning/reviews, GET progress | **IV** 2026-11-15 (Slice 5B: rule-first exact match, LLM semantic judging, deterministic SM-2, no answer leakage in prompts) | **IV** 2026-11-15 (/learning review flow) | 8 SM-2 unit + 9 learning integration tests; 3 learning E2E |
 | FR-06 previously-learned recommendations | Knowledge | user_expressions, expression_embeddings | (within polish/translation) | **IV** 2026-11-15 pipeline: semantic recall (pgvector) with keyword fallback + LLM suitability judgment + labeling; quality awaits real embeddings | **IV** badge in candidate card | assist + RAG tests |
-| FR-07 weakness profile + trends | Learning | user_weaknesses | GET weaknesses, /{category}, /trends, POST practice | **NI** | **NI** | — |
+| FR-07 weakness profile + trends | Learning | user_weaknesses | GET weaknesses, /{category}, /trends, POST practice | **IV** 2026-11-15 (aggregation on detection, volume-adjusted weekly trends, LLM practice generation) | **IV** 2026-11-15 (weakness list on /learning) | weakness integration tests |
 | FR-08 IELTS question bank | IELTS | ielts_questions, question_tags, ielts_question_tags, user_favorite_questions | GET questions/{id}/random/tags, POST/DELETE favorite | **NI** | **NI** | — |
 | FR-09 IELTS evaluation (4 criteria, estimates) | Evaluations | essay_evaluations | POST/GET /essays/{id}/evaluations, GET/DELETE /evaluations/{id} | **NI** | **NI** | — |
 | FR-09.3 rewrite levels 1–4 + accept | Evaluations | essay_rewrites | POST rewrite, GET /rewrites/{id}, POST accept | **NI** | **NI** | — |
@@ -78,11 +78,11 @@ authoritative starting references; resolutions below are the adopted engineering
 ## 3. Contract operation inventory (87 operations)
 
 Verified 2026-11-15 by script comparing `contracts/openapi.yaml` paths against the
-FastAPI-generated OpenAPI: **45 implemented, 42 missing, 0 out-of-contract routes**
-(15 baseline; +6 2B; +5 2D; +7 3; +1 accept 3UX; +10 Slice 4; +1 extract 5A).
+FastAPI-generated OpenAPI: **53 implemented, 34 missing, 0 out-of-contract routes**
+(15 baseline; +6 2B; +5 2D; +7 3; +1 accept 3UX; +10 Slice 4; +1 extract 5A; +8 Slice 5B learning).
 Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`.
 
-### Implemented (45) — all IV
+### Implemented (53) — all IV
 
 | Method | Path | Slice |
 |---|---|---|
@@ -131,12 +131,20 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 | POST | /essays/{essay_id}/expression-suggestions/{suggestion_id}/accept | 4 |
 | POST | /essays/{essay_id}/translations | 4 |
 | POST | /essays/{essay_id}/expressions/extract | 5A |
+| GET | /learning/reviews/due | 5B |
+| POST | /learning/reviews | 5B |
+| GET | /expressions/{expression_id}/progress | 5B |
+| GET | /learning/summary | 5B |
+| GET | /users/me/weaknesses | 5B |
+| GET | /users/me/weaknesses/{category} | 5B |
+| GET | /users/me/weaknesses/trends | 5B |
+| POST | /users/me/weaknesses/practice | 5B |
 
-### Missing (42) — grouped by planned slice
+### Missing (34) — grouped by planned slice
 
 | Slice | Operations |
 |---|---|
-| 5B Learning & weakness | GET reviews/due; POST reviews; GET progress; GET summary; POST/GET plans; GET tasks; PATCH tasks/{id}; GET weaknesses; GET weaknesses/{category}; GET trends; POST practice (12) |
+| 9 Learning plans/tasks | POST/GET /learning/plans; GET /learning/tasks; PATCH /learning/tasks/{id} (3) |
 | 6 IELTS | GET questions; GET questions/{id}; GET tags; GET random; POST/DELETE favorite (6) |
 | 7 Evaluations & rewrites | POST/GET evaluations; GET/DELETE /evaluations/{id}; POST rewrite; GET /rewrites/{id}; POST accept (7) |
 | 8 Outlines | POST generate; GET outlines; GET/PATCH /outlines/{id}; POST confirm; POST nodes; PATCH/DELETE nodes/{id} (7) |
@@ -168,9 +176,9 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 | user_expressions | 0008 | **IV** (CRUD, dedup, soft delete, statuses) |
 | expression_sources | 0008 | **IV** (typed sources with ownership checks) |
 | expression_embeddings | 0010 | **IV** (VECTOR(1536), HNSW cosine, rebuildable model+hash) |
-| expression_progress | phase B | **NI** |
-| expression_reviews | phase B | **NI** |
-| user_weaknesses | phase B | **NI** |
+| expression_progress | 0011 | **IV** (SM-2 scheduling, same-owner composite FK) |
+| expression_reviews | 0011 | **IV** (answer/reference snapshot, score, feedback) |
+| user_weaknesses | 0011 | **IV** (aggregated on issue detection; volume-adjusted trends) |
 | ielts_questions | phase C | **NI** |
 | question_tags | phase C | **NI** |
 | ielts_question_tags | phase C | **NI** |
@@ -204,6 +212,7 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 
 | Date | Change |
 |---|---|
+| 2026-11-15 (Slice 5B) | Learning implemented + verified: deterministic SM-2 spaced repetition (unit-tested invariants), translation reviews with rule-first exact match + LLM semantic judging (any natural correct answer accepted), due prompts without answer leakage, progress/summary, weakness aggregation on issue detection, volume-adjusted weekly trends (errors per 1000 words), LLM practice generation. Migration 0011 (expression_progress with same-owner composite FK, expression_reviews, user_weaknesses). Frontend: /learning Center (review flow, summary, weaknesses). Verification: backend **262 passed** (17 new), Playwright **47 passed** (3 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 53/87. |
 | 2026-11-15 (Slice 5A) | Semantic RAG + extraction implemented + verified: embedding provider abstraction (mock + OpenAI-compatible), expression_embeddings VECTOR(1536) + HNSW cosine index (migration 0010), embeddings on create/update (rebuildable, best-effort), user-scoped semantic recall at query time, keyword/semantic/hybrid search, previously-learned recall upgraded to semantic-first, extraction from immutable versions with confirmation-before-save. Frontend: search-mode selector, History → Extract → confirmation dialog. Verification: backend **245 passed** (15 new), Playwright **44 passed** (2 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 45/87. Semantic QUALITY requires a real embedding endpoint (mock vectors are pipeline-only). |
 | 2026-11-15 (Slice 4) | Expression assistance + knowledge base implemented + verified: polish/translation with backend mode enforcement, persisted candidates, previously-learned keyword recall + LLM suitability labeling, atomic server-authoritative acceptance (essay_edit_events.expression_suggestion_id, migration 0009), knowledge base CRUD/search/archive with dedup + soft delete (migration 0008), /knowledge page, selection-driven inline assistance UI. Verification: backend **230 passed** (15 new), Playwright **42 passed** (4 new), vitest 21, tsc/ESLint/build/ruff clean. Contract operations 44/87. |
 | 2026-11-15 (DeepSeek + finalized UX) | User decisions implemented (ADR-016/017): DeepSeek provider (OpenAI- + Anthropic-compatible, env-only credentials, mock strictly separated for tests, verify_llm.py + eval_ai.py harness with grammar/teaching datasets); finalized editor UX — separate question section (essays.question_prompt, migration 0007), hierarchical text outline (sections→paragraphs→sentences), automatic sentence-completion checking (abbreviations/decimals/quotes/IME/pause-safe, no manual button), hover floating feedback, click-blurred-to-reveal, Tab-to-accept via new atomic accept endpoint (contract 1.2.0), teaching icon, no Submit button during writing. Verification: backend 215+ passed, Playwright **38 passed**, vitest 21, tsc/ESLint/build/ruff clean. **Open item: rotated DeepSeek key must be placed in .env by the user (exposed chat credential NOT used); real AI quality evaluation pending that.** |

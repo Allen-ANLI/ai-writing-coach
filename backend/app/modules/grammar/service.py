@@ -36,6 +36,7 @@ from app.modules.grammar.schemas import (
     IssueValidationRequest,
     TeachingRequest,
 )
+from app.modules.learning import service as learning_service
 from app.modules.users.models import User
 from app.modules.writing_sessions import repository as session_repository
 from app.modules.writing_sessions.service import enabled_features
@@ -225,6 +226,7 @@ def grammar_check(
             )
             db.add(issue)
             db.flush()
+            learning_service.record_weakness_occurrence(db, user.id, d.category, d.sub_category)
             for order, suggestion_text in enumerate(d.suggestions):
                 db.add(
                     IssueSuggestion(

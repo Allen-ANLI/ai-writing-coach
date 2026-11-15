@@ -91,3 +91,24 @@ class ExtractionResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     candidates: list[ExtractedExpression] = Field(default_factory=list, max_length=10)
+
+
+class ReviewJudgement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_correct: bool
+    score: float = Field(ge=0.0, le=5.0)
+    feedback: str | None = Field(default=None, max_length=1000)
+
+
+class PracticeItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    chinese_prompt: str = Field(min_length=1, max_length=500)
+    hint: str | None = Field(default=None, max_length=500)
+
+
+class PracticeResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[PracticeItem] = Field(min_length=1, max_length=10)

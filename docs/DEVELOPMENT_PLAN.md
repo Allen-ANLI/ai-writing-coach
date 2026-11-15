@@ -440,6 +440,39 @@ Out of scope (next): Slice 5B reviews/SM-2/progress/weaknesses/summary, then
 IELTS (6), evaluations/rewrites (7), outlines/LangGraph (8), analytics (9),
 billing (10), production readiness (11).
 
+## 3k. Stage 2 — Slice 5B: Learning (reviews, SM-2, weaknesses)
+
+**Status:** IMPLEMENTED 2026-11-15, verified: backend **262 passed** (17 new),
+Playwright **47 passed** (3 new), vitest 21, tsc/ESLint/build/ruff clean.
+Migration 0011 applied. Contract operations 53/87.
+
+Scope delivered:
+
+- Deterministic SM-2 spaced repetition (`learning/sm2.py`, unit-tested):
+  1d/6d/ease-multiplied intervals, ease floor 1.3, failure reset, mastery rule
+  (streak ≥ 5 and interval ≥ 21d). Scheduling/mastery NEVER LLM-decided.
+- Migration 0011: expression_progress (UNIQUE(user, expression), same-owner
+  composite FK via user_expressions UNIQUE(id, user_id), non-negative counts),
+  expression_reviews (reference snapshot, score, feedback), user_weaknesses
+  (UNIQUE(user, category, sub_category), sub_category NOT NULL DEFAULT '').
+- Reviews: due prompts show Chinese only (no answer leakage); rule-first
+  normalized exact match passes without LLM; otherwise LLM semantic judging
+  accepts any natural correct translation (ReviewJudgement schema); review
+  records + progress counters + next_review_at; usage logged.
+- Progress + learning summary endpoints (counts by status, due now, reviewed
+  today, mastered, total reviews).
+- Weaknesses: aggregated on issue detection (record_weakness_occurrence hook
+  in grammar check), category detail with recent examples, volume-adjusted
+  weekly trends (errors per 1000 words; null density when no writing volume),
+  LLM practice generation (202).
+- Frontend: /learning Center — review cards (Chinese → English → feedback →
+  next), summary stats, weakness list; nav link.
+- Tests: 8 SM-2 unit + 9 learning integration + 3 E2E.
+
+Out of scope (next): IELTS (6), evaluations/rewrites as post-writing actions
+(7), outlines/LangGraph (8), learning plans/tasks + analytics (9), billing
+(10), production readiness (11).
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

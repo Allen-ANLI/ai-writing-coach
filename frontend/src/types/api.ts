@@ -621,3 +621,84 @@ export interface ExtractionResponse {
   data: ExtractionData;
   meta?: RequestMeta;
 }
+
+// --- Learning (Stage 2 Slice 5B) ---
+// Mirrors backend app/modules/learning/schemas.py (API Spec §10–11).
+
+export interface ReviewPrompt {
+  expression_id: string;
+  chinese_meaning: string | null;
+  topic: string | null;
+  usage_context: string | null;
+  status: string;
+  next_review_at: string | null;
+  review_count: number;
+}
+
+export interface DueReviewsResponse {
+  data: { items: ReviewPrompt[]; due_count: number };
+  meta?: RequestMeta;
+}
+
+export interface ReviewResultData {
+  expression_id: string;
+  is_correct: boolean;
+  score: string;
+  feedback: string | null;
+  reference_expression: string;
+  status: string;
+  interval_days: string;
+  next_review_at: string | null;
+  streak_count: number;
+}
+
+export interface ReviewResultResponse {
+  data: ReviewResultData;
+  meta?: RequestMeta;
+}
+
+export interface ProgressData {
+  expression_id: string;
+  status: string;
+  correct_count: number;
+  incorrect_count: number;
+  review_count: number;
+  streak_count: number;
+  interval_days: string;
+  ease_factor: string | null;
+  last_reviewed_at: string | null;
+  next_review_at: string | null;
+}
+
+export interface ProgressResponse {
+  data: ProgressData;
+  meta?: RequestMeta;
+}
+
+export interface LearningSummaryData {
+  total_expressions: number;
+  by_status: Record<string, number>;
+  due_now: number;
+  reviewed_today: number;
+  mastered: number;
+  total_reviews: number;
+}
+
+export interface LearningSummaryResponse {
+  data: LearningSummaryData;
+  meta?: RequestMeta;
+}
+
+export interface WeaknessData {
+  category: string;
+  sub_category: string;
+  total_occurrences: number;
+  recent_occurrences: number;
+  last_occurred_at: string | null;
+  trend: string | null;
+}
+
+export interface WeaknessListResponse {
+  data: { items: WeaknessData[] };
+  meta?: RequestMeta;
+}
