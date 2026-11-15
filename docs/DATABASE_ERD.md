@@ -532,11 +532,33 @@ UNIQUE(`essay_id`, `version_no`)；建议 UNIQUE(`essay_id`, `id`) 供复合外�
 
 作文软删除；永久删除按依赖关系清理工作文档、快照、Issue、建议、教学、评分、改写、大纲和来源关系。独立收藏表达可保留但移除/匿名化作文来源。Refresh Token 历史按安全检测窗口保留。
 
+## 15b. 计费域（V1.2.4 增量，迁移 0016，Slice 10 / ADR-021）
+
+- `subscription_plans`：`id UUID PK`、`code VARCHAR(30) UNIQUE`、
+  `name VARCHAR(80)`、`price_monthly NUMERIC(10,2) ≥ 0`、`currency VARCHAR(3)`、
+  `features JSONB`、`quota_ai_calls_monthly INTEGER NULL`（NULL = 不限）、
+  `quota_evaluations_monthly INTEGER NULL`、`is_published` 无（用 `is_active
+  BOOLEAN`）、`created_at`。种子：free / pro / ultimate（确定性 uuid5）。
+- `user_subscriptions`：`id UUID PK`、`user_id UUID FK UNIQUE`（每用户一条）、
+  `plan_id UUID FK`、`status ∈ {active, cancelled, expired, past_due}`、
+  `started_at`、`current_period_start/end`、`cancelled_at NULL`、
+  `created_at/updated_at`。取消后保留付费权益至期末，下次访问回落 free。
+- `usage_meters`：`id UUID PK`、`user_id UUID FK`、`period_start DATE`、
+  `ai_calls INTEGER ≥ 0`、`evaluations INTEGER ≥ 0`、`updated_at`；
+  UNIQUE(`user_id`, `period_start`)。计量发生在 `llm.record_usage`
+  （纯规则检查不计量）；并发安全：upsert + 原子自增。
+- `payment_transactions`：`id UUID PK`、`user_id UUID FK`、`plan_id UUID FK`、
+  `provider VARCHAR(30) CHECK IN ('sandbox')`（真实支付接入需用户批准后
+  另行迁移放宽）、`provider_ref VARCHAR(100)`、`amount NUMERIC(10,2)`、
+  `currency`、`status ∈ {pending, succeeded, failed, refunded}`、
+  `kind ∈ {subscription, refund}`、`created_at`、`completed_at NULL`。
+
 ## 16. 建表优先级
 
 - **Phase A：** users、user_profiles、auth_sessions、auth_refresh_tokens、essays、essay_working_documents、writing_sessions、essay_versions、essay_edit_events、writing_issues、issue_suggestions。
 - **Phase B：** issue_teachings、essay_evaluations、essay_rewrites、user_expressions、expression_sources、expression_embeddings、expression_progress、expression_reviews、user_weaknesses。
 - **Phase C：** ielts_questions、question_tags、ielts_question_tags、user_favorite_questions、writing_outlines、outline_nodes、learning_plans、learning_tasks、ai_usage_logs。
+- **Phase D（Slice 10）：** subscription_plans、user_subscriptions、usage_meters、payment_transactions。
 
 ## 17. 验收标准
 

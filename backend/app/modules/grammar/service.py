@@ -25,6 +25,7 @@ from app.ai.schemas import DeepCheckResult, TeachingContent, ValidationJudgement
 from app.core.exceptions import ApiError
 from app.core.time import utcnow
 from app.infrastructure.language_tool import client as language_tool
+from app.modules.billing import service as billing_service
 from app.modules.essays import repository as essay_repository
 from app.modules.essays import tiptap
 from app.modules.essays.models import EssayEditEvent
@@ -176,6 +177,8 @@ def grammar_check(
     detected, lt_ok = _run_rule_engine(payload.text)
     deterministic = [d for d in detected if not d.needs_llm]
     uncertain = [d for d in detected if d.needs_llm]
+    if uncertain:
+        billing_service.guard_ai_call(db, user.id)
     llm_confirmed, llm_ok = _deep_check_uncertain(
         uncertain, payload.text, paragraph, user.id, usages
     )
@@ -477,6 +480,7 @@ def validate_issue(
         status = "incorrect" if still_present else "correct"
         judgement_usage = None
     else:
+        billing_service.guard_ai_call(db, user.id)
         prompt = get_prompt("grammar_validate", "v1")
         user_prompt = prompt.user_template.format(
             original_sentence=original_sentence,
@@ -610,6 +614,7 @@ def request_teaching(
         user_current_text=payload.user_current_text or "",
         weakness_history="none",
     )
+    billing_service.guard_ai_call(db, user.id)
     content, usage = llm.call_llm(
         system=prompt.system, user=user_prompt, response_model=TeachingContent
     )

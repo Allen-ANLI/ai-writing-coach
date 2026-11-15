@@ -609,6 +609,38 @@ Remaining: additive contract extensions R7 (password reset), R8 (billing),
 R9 (account deletion/export); Slice 10 commercialization; Slice 11
 production readiness.
 
+## 3p. Slice 10 — Commercialization (sandbox) (2026-11-15)
+
+**Status: DONE, verified, committed. Contract 1.3.0: 95/95 operations.**
+Backend 350 pytest passed (13 billing + 1 contract new), Playwright
+**62 passed** (2 new), vitest 21, tsc/ESLint/build/ruff clean. Migration 0016
+applied.
+
+Scope delivered:
+
+- Contract 1.3.0 (additive, R8 resolved): GET /billing/plans, /subscription,
+  /history, /usage; POST /billing/checkout, /confirm, /cancel.
+- Migration 0016: subscription_plans (seeded free/pro/ultimate, deterministic
+  ids), user_subscriptions (UNIQUE user, lifecycle statuses), usage_meters
+  (UNIQUE user+month, non-negative counters), payment_transactions (provider
+  CHECK 'sandbox' — real activation gated on user approval).
+- Quotas: guards immediately before every synchronous LLM call site and at
+  queue time for background flows; 429 QUOTA_EXCEEDED. Metering centralized
+  in llm.record_usage (rule-only checks consume nothing, SD §12.4); atomic
+  upserts + increments (fixed a concurrent-creation race found by E2E).
+- Lifecycle: lazy free tier; sandbox checkout → confirm activates; cancel
+  keeps access until period end then rolls to free; calendar-month periods;
+  Idempotency-Key on checkout/confirm.
+- Frontend: /billing page (plan cards, sandbox upgrade, quota usage, cancel,
+  history) + nav link.
+- Tests: 13 integration (plans, upgrade, validation, ownership, cancel,
+  metering, both quotas, upgrade-lifts-quota, scoping, idempotency, auth) +
+  2 E2E. ADR-021.
+
+Remaining: R7 password reset + R9 account deletion/export and Slice 11
+production readiness (deployment, backup/recovery, monitoring, CI/CD,
+security review, performance + AI quality reports).
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

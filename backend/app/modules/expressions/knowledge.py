@@ -19,6 +19,7 @@ from app.ai.prompts.registry import get_prompt
 from app.ai.schemas import ExtractionResult
 from app.core.exceptions import ApiError
 from app.core.time import utcnow
+from app.modules.billing import service as billing_service
 from app.modules.essays import repository as essay_repository
 from app.modules.essays.service import get_essay
 from app.modules.expressions.models import ExpressionEmbedding, UserExpression
@@ -108,6 +109,7 @@ def extract_expressions(
 
     prompt = get_prompt("learning_extract", "v1")
     user_prompt = prompt.user_template.format(scope=scope, essay_text=version.plain_text)
+    billing_service.guard_ai_call(db, user.id)
     result, usage = llm.call_llm(
         system=prompt.system, user=user_prompt, response_model=ExtractionResult
     )

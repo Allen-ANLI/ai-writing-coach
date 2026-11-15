@@ -21,6 +21,7 @@ from app.ai.prompts.registry import get_prompt
 from app.ai.schemas import PracticeResult, ReviewJudgement
 from app.core.exceptions import ApiError
 from app.core.time import utcnow
+from app.modules.billing import service as billing_service
 from app.modules.expressions.models import UserExpression
 from app.modules.grammar.models import WritingIssue
 from app.modules.learning import sm2
@@ -122,6 +123,7 @@ def submit_review(db: Session, user: User, expression_id: uuid.UUID, user_answer
     if _normalize(user_answer) == _normalize(reference):
         is_correct, score, feedback, usage = True, Decimal("5"), None, None
     else:
+        billing_service.guard_ai_call(db, user.id)
         prompt = get_prompt("review_judge", "v1")
         user_prompt = prompt.user_template.format(
             chinese_prompt=expression.chinese_meaning or expression.usage_context or "",
@@ -368,6 +370,7 @@ def weakness_trends(db: Session, user: User, category: str | None, *, weeks: int
 
 def generate_practice(db: Session, user: User, category: str, count: int) -> dict:
     db.commit()  # no transaction held during the LLM call
+    billing_service.guard_ai_call(db, user.id)
     prompt = get_prompt("weakness_practice", "v1")
     user_prompt = prompt.user_template.format(category=category, count=count)
     result, usage = llm.call_llm(

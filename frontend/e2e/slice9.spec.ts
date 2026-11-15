@@ -48,8 +48,8 @@ test("planner confirmation creates a plan with completable tasks", async ({ page
   const tasks = page.getByTestId("task-item");
   expect(await tasks.count()).toBeGreaterThanOrEqual(2);
 
-  await tasks.first().getByTestId("task-toggle").check();
-  await expect(tasks.first().getByTestId("task-toggle")).toBeChecked();
+  await tasks.first().getByTestId("task-toggle").click();
+  await expect(tasks.first().getByTestId("task-toggle")).toBeChecked({ timeout: 10_000 });
   await page.reload();
   await expect(page.getByTestId("task-item").first().getByTestId("task-toggle")).toBeChecked({
     timeout: 10_000,

@@ -24,7 +24,10 @@ from app.main import create_app
 BACKEND_DIR = pathlib.Path(__file__).resolve().parents[1]
 
 _TRUNCATE = (
-    "TRUNCATE learning_tasks, learning_plans, workflow_events, workflows, outline_nodes, "
+    # subscription_plans is migration-seeded reference data (never mutated by
+    # tests), so it survives truncation; per-user billing rows are cleared.
+    "TRUNCATE payment_transactions, usage_meters, user_subscriptions, "
+    "learning_tasks, learning_plans, workflow_events, workflows, outline_nodes, "
     "writing_outlines, "
     "essay_rewrites, essay_evaluations, user_favorite_questions, ielts_question_tags, "
     "ielts_questions, question_tags, "

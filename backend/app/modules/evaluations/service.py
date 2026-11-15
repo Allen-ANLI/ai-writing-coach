@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import ApiError
 from app.core.time import utcnow
+from app.modules.billing import service as billing_service
 from app.modules.essays import repository as essay_repository
 from app.modules.essays import tiptap
 from app.modules.essays.models import EssayEditEvent, EssayVersion
@@ -48,6 +49,9 @@ def queue_evaluation(
     elif payload.task_type is not None:
         raise ApiError(422, "VALIDATION_ERROR", "task_type only applies to IELTS evaluation.")
 
+    billing_service.guard_evaluation(db, user.id)
+    billing_service.guard_ai_call(db, user.id)
+    billing_service.meter_evaluation(db, user.id)
     evaluation = EssayEvaluation(
         essay_id=essay.id,
         version_id=version.id,
@@ -96,6 +100,7 @@ def queue_rewrite(
     evaluation = get_evaluation(db, user, evaluation_id)
     if evaluation.status != "completed":
         raise ApiError(409, "VALIDATION_ERROR", "Only completed evaluations can be rewritten.")
+    billing_service.guard_ai_call(db, user.id)
     rewrite = EssayRewrite(
         evaluation_id=evaluation.id,
         source_version_id=evaluation.version_id,

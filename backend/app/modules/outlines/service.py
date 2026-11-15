@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import ApiError
 from app.core.time import utcnow
+from app.modules.billing import service as billing_service
 from app.modules.essays.service import get_essay
 from app.modules.outlines.models import OutlineNode, WritingOutline
 from app.modules.outlines.schemas import (
@@ -26,6 +27,7 @@ def queue_generation(
     db: Session, user: User, essay_id: uuid.UUID, payload: GenerateOutlineRequest
 ) -> WritingOutline:
     essay = get_essay(db, user, essay_id)
+    billing_service.guard_ai_call(db, user.id)
     next_no = (
         db.execute(
             select(func.coalesce(func.max(WritingOutline.version_no), 0)).where(

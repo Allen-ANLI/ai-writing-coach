@@ -25,6 +25,7 @@ from app.ai.prompts.registry import get_prompt
 from app.ai.schemas import PolishResult, TranslationResult
 from app.core.exceptions import ApiError
 from app.core.time import utcnow
+from app.modules.billing import service as billing_service
 from app.modules.essays import repository as essay_repository
 from app.modules.essays import tiptap
 from app.modules.essays.models import EssayEditEvent
@@ -212,6 +213,7 @@ def polish_expression(
         previously_learned=learned,
         max_suggestions=payload.max_suggestions,
     )
+    billing_service.guard_ai_call(db, user.id)
     result, usage = llm.call_llm(
         system=prompt.system, user=user_prompt, response_model=PolishResult
     )
@@ -292,6 +294,7 @@ def translate_chinese(
         paragraph_context=payload.paragraph_context or payload.sentence_context,
         previously_learned=learned,
     )
+    billing_service.guard_ai_call(db, user.id)
     result, usage = llm.call_llm(
         system=prompt.system, user=user_prompt, response_model=TranslationResult
     )

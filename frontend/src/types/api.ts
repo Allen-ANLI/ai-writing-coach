@@ -1046,3 +1046,82 @@ export interface AiUsageTrendsResponse {
   data: { items: AiUsageTrendPoint[] };
   meta?: RequestMeta;
 }
+
+// Billing (Slice 10, contract 1.3.0, sandbox payments only)
+
+export interface SubscriptionPlanData {
+  id: string;
+  code: string;
+  name: string;
+  price_monthly: number;
+  currency: string;
+  features: Record<string, boolean>;
+  quota_ai_calls_monthly: number | null;
+  quota_evaluations_monthly: number | null;
+}
+
+export interface BillingPlanListResponse {
+  data: { items: SubscriptionPlanData[] };
+  meta?: RequestMeta;
+}
+
+export interface SubscriptionData {
+  plan_code: string;
+  plan_name: string;
+  status: string;
+  started_at: string;
+  current_period_start: string;
+  current_period_end: string;
+  cancelled_at: string | null;
+}
+
+export interface SubscriptionResponse {
+  data: SubscriptionData;
+  meta?: RequestMeta;
+}
+
+export interface CheckoutData {
+  transaction_id: string;
+  plan_code: string;
+  amount: number;
+  currency: string;
+  provider: string;
+  status: string;
+}
+
+export interface CheckoutResponse {
+  data: CheckoutData;
+  meta?: RequestMeta;
+}
+
+export interface BillingTransactionData {
+  id: string;
+  plan_id: string;
+  provider: string;
+  provider_ref: string;
+  amount: number;
+  currency: string;
+  status: string;
+  kind: string;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface BillingHistoryResponse {
+  data: { items: BillingTransactionData[] };
+  meta?: RequestMeta;
+}
+
+export interface BillingUsageData {
+  plan_code: string;
+  period_start: string;
+  ai_calls: number;
+  evaluations: number;
+  quota_ai_calls_monthly: number | null;
+  quota_evaluations_monthly: number | null;
+}
+
+export interface BillingUsageResponse {
+  data: BillingUsageData;
+  meta?: RequestMeta;
+}

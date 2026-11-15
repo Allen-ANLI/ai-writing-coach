@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.exceptions import ApiError
 from app.core.time import utcnow
+from app.modules.billing import service as billing_service
 from app.modules.essays import repository as essay_repository
 from app.modules.essays.models import Essay
 from app.modules.essays.service import get_essay
@@ -50,6 +51,7 @@ def create_workflow(db: Session, user: User, payload: CreateWorkflowRequest) -> 
         if payload.essay_id is None:
             raise ApiError(422, "VALIDATION_ERROR", "essay_id is required for this workflow.")
         get_essay(db, user, payload.essay_id)
+    billing_service.guard_ai_call(db, user.id)
     workflow = Workflow(
         user_id=user.id,
         workflow_type=payload.workflow_type,

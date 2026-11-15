@@ -204,3 +204,17 @@ def test_slice9_operations_implemented():
         ("/api/v1/analytics/ai-usage/trends", "get"),
     ]:
         assert method in generated[path], f"{method.upper()} {path} missing"
+
+
+def test_billing_operations_implemented():
+    generated = create_app().openapi()["paths"]
+    for path, method in [
+        ("/api/v1/billing/plans", "get"),
+        ("/api/v1/billing/subscription", "get"),
+        ("/api/v1/billing/checkout", "post"),
+        ("/api/v1/billing/confirm", "post"),
+        ("/api/v1/billing/cancel", "post"),
+        ("/api/v1/billing/history", "get"),
+        ("/api/v1/billing/usage", "get"),
+    ]:
+        assert method in generated[path], f"{method.upper()} {path} missing"

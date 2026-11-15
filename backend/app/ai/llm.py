@@ -61,7 +61,14 @@ def record_usage(
     status: str,
     trace_id: str | None = None,
 ) -> AiUsageLog:
-    """Add a usage log row; the caller commits with its own short transaction."""
+    """Add a usage log row; the caller commits with its own short transaction.
+
+    Every actual LLM call also consumes one quota unit (billing metering);
+    pure rule checks never reach this function (SD §12.4, ADR-021).
+    """
+    from app.modules.billing import service as billing_service
+
+    billing_service.meter_ai_call(db, user_id)
     log = AiUsageLog(
         user_id=user_id,
         feature=feature,
