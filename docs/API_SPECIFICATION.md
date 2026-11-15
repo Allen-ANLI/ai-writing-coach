@@ -4,6 +4,7 @@
 **依据：** PRD V1.1、System Design V1.1、Database ERD V1.2  
 **后端：** FastAPI + Python | **API：** RESTful | **Prefix：** `/api/v1` | **契约：** OpenAPI 3.1  
 **修订：** V1.1.1 — 新增基础设施健康检查 `GET /api/v1/health`（见 §23）与错误代码 `DATABASE_UNAVAILABLE`。已批准业务接口语义未改动。对应契约 `contracts/openapi.yaml` `info.version: 1.1.1`。
+**修订：** V1.2.0（2026-11-15，用户决策，ADR-016/017）— 新增 `POST /essays/{essay_id}/issues/{issue_id}/accept`（§6.6，原子接受服务端存储的修改建议）与 `essays.question_prompt`（题目与正文分离展示）。均为增量变更，未改动既有语义。对应契约 `info.version: 1.2.0`。
 
 ## 1. 核心原则
 
@@ -179,6 +180,7 @@ Refresh Token 仅通过 Set-Cookie 返回。密码使用 Argon2id 等安全哈�
 | POST | `/essays/{essay_id}/issues/validate` | 保存修改并验证 |
 | PATCH | `/essays/{essay_id}/issues/{issue_id}` | 忽略 Issue |
 | POST | `/essays/{essay_id}/issues/{issue_id}/reveal` | 显示答案 |
+| POST | `/essays/{essay_id}/issues/{issue_id}/accept` | 原子接受已存储的修改建议（V1.2.0 新增） |
 | POST | `/essays/{essay_id}/issues/{issue_id}/teaching` | 详细教学 |
 
 ### 6.2 Grammar Check
@@ -265,6 +267,26 @@ Refresh Token 仅通过 Set-Cookie 返回。密码使用 Argon2id 等安全哈�
 Reveal：`POST /essays/{essay_id}/issues/{issue_id}/reveal`。仅用户主动请求后返回完整建议；查看答案不等于接受。
 
 Ignore：`PATCH /essays/{essay_id}/issues/{issue_id}`，Request `{"status":"ignored"}`。忽略不删除历史记录。
+
+### 6.6 接受修改建议（V1.2.0 新增，ADR-016）
+
+`POST /essays/{essay_id}/issues/{issue_id}/accept`
+
+```json
+{"base_revision":20,"client_revision":31,"suggestion_id":null}
+```
+
+- `suggestion_id` 省略时接受推荐建议（is_recommended）。
+- 替换文本**只来自服务端存储的建议**，绝不接受客户端任意文本。
+- 单一事务：更新 Working Document、递增 revision、Issue 置为 resolved、
+  建议置为 accepted（其余 pending 建议 dismissed）、创建
+  `accept_suggestion` Edit Event（actor_type=ai_accept）。
+- `base_revision` 不匹配 → 409 `WORKING_DOCUMENT_CONFLICT`；Issue 属于旧
+  revision → 409 `STALE_AI_RESULT`；建议已处理 → 409。
+- 响应返回更新后的完整文档（content_json/plain_text/word_count/server_revision），
+  前端据此刷新编辑器。
+- 前端交互：模糊答案被点击后揭示并固定；仅在此交互激活时 Tab 触发接受，
+  否则 Tab 保持正常编辑器行为。
 
 ## 7. 详细教学 API
 

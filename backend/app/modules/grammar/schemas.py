@@ -132,6 +132,29 @@ class IgnoreIssueRequest(BaseModel):
     status: Literal["ignored"]
 
 
+class AcceptIssueRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    base_revision: int = Field(ge=1)
+    client_revision: int = Field(ge=0)
+    suggestion_id: uuid.UUID | None = None
+
+
+class AcceptIssueData(BaseModel):
+    issue_id: uuid.UUID
+    suggestion_id: uuid.UUID
+    server_revision: int
+    applied_text: str
+    content_json: dict
+    plain_text: str
+    word_count: int
+
+
+class AcceptIssueResponse(BaseModel):
+    data: AcceptIssueData
+    meta: RequestMeta | None = None
+
+
 class TeachingRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

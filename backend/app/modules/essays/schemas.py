@@ -23,12 +23,14 @@ class CreateEssayRequest(BaseModel):
     title: str | None = Field(default=None, max_length=255)
     writing_type: WritingType
     question_id: uuid.UUID | None = None
+    question_prompt: str | None = Field(default=None, max_length=5000)
 
 
 class PatchEssayRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str | None = Field(default=None, max_length=255)
+    question_prompt: str | None = Field(default=None, max_length=5000)
 
 
 class WorkingDocumentSummary(BaseModel):
@@ -47,6 +49,7 @@ class EssayData(BaseModel):
     writing_type: str
     status: str
     question_id: uuid.UUID | None
+    question_prompt: str | None
     original_version_id: uuid.UUID | None
     final_version_id: uuid.UUID | None
     created_at: datetime

@@ -141,6 +141,25 @@ document is missing, do not invent its contents; report the missing dependency.
    Document, create an `ai_rewrite` snapshot, set `result_version_id`, and create an
    Edit Event.
 
+### Editor UX (finalized 2026-11-15, ADR-016 — overrides earlier assumptions)
+1. The essay question is shown in a separate non-editable section
+   (`essays.question_prompt`); never mixed into the editable document.
+2. The left outline is a collapsible hierarchical text list (sections →
+   paragraphs → sentence ideas), not a chart/diagram.
+3. Grammar checking is automatic on sentence completion (debounce +
+   cancellation); no manual check button, no numbered errors. Incomplete
+   input is never checked prematurely. Rule-first still applies.
+4. Feedback floats on hover over the underlined error (slightly transparent
+   surface); it must not obstruct editing.
+5. The correction is blurred initially; clicking the blurred text itself
+   reveals it (no reveal button). Tab replaces the original ONLY while the
+   revealed correction interaction is active; otherwise Tab is normal.
+   Acceptance applies the server-stored suggestion atomically.
+6. A small teaching icon opens the contextual floating teaching card; no
+   permanent grammar panel.
+7. No Submit Essay button during writing; evaluation/assessment/rewrites are
+   post-writing actions. The session submit API remains for that flow.
+
 ### Authentication
 1. `auth_sessions` represents a stable device login session.
 2. `auth_refresh_tokens` represents individual Refresh Token rotation records.

@@ -10,6 +10,8 @@ from app.api.deps import get_current_user
 from app.infrastructure.database import get_db
 from app.modules.grammar import service
 from app.modules.grammar.schemas import (
+    AcceptIssueRequest,
+    AcceptIssueResponse,
     GrammarCheckRequest,
     GrammarCheckResponse,
     IgnoreIssueRequest,
@@ -99,6 +101,20 @@ def reveal_issue(
 ) -> RevealResponse:
     data = service.reveal_issue(db, user, essay_id, issue_id)
     return RevealResponse.model_validate({"data": data, "meta": {"request_id": new_request_id()}})
+
+
+@router.post("/essays/{essay_id}/issues/{issue_id}/accept", response_model=AcceptIssueResponse)
+def accept_issue(
+    essay_id: uuid.UUID,
+    issue_id: uuid.UUID,
+    payload: AcceptIssueRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AcceptIssueResponse:
+    data = service.accept_issue_suggestion(db, user, essay_id, issue_id, payload)
+    return AcceptIssueResponse.model_validate(
+        {"data": data, "meta": {"request_id": new_request_id()}}
+    )
 
 
 @router.post("/essays/{essay_id}/issues/{issue_id}/teaching", response_model=TeachingResponse)

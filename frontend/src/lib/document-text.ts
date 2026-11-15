@@ -33,3 +33,100 @@ export function sentenceAround(text: string, offset: number): [string, number] {
   }
   return [text.slice(start, end), start];
 }
+
+export interface SentenceSpan {
+  start: number; // code-point offset, inclusive
+  end: number; // code-point offset, exclusive
+  text: string;
+  complete: boolean;
+}
+
+const ABBREVIATIONS = new Set([
+  "mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st", "vs", "etc", "fig",
+  "no", "vol", "approx", "dept", "est", "min", "max", "eg", "ie", "al",
+]);
+
+const CLOSERS = new Set(["\"", "'", "\u201D", "\u2019", ")", "]", "}", "\u00BB"]);
+
+/**
+ * Split text into sentence spans (code-point offsets), handling abbreviations,
+ * decimals, initials, quoted sentences and paragraph breaks. A span is
+ * `complete` when it ends with sentence punctuation (or a paragraph break);
+ * trailing input without punctuation is incomplete and must not be checked
+ * prematurely (user decision 2026-11-15 §5).
+ */
+export function splitSentences(text: string): SentenceSpan[] {
+  const cps = Array.from(text);
+  const spans: SentenceSpan[] = [];
+  let start = 0;
+
+  const push = (end: number, complete: boolean) => {
+    const slice = cps.slice(start, end).join("");
+    if (slice.trim() !== "") {
+      spans.push({ start, end, text: slice, complete });
+    }
+    start = end;
+  };
+
+  for (let i = 0; i < cps.length; i += 1) {
+    const ch = cps[i];
+    if (ch === "\n" && cps[i + 1] === "\n") {
+      push(i, true); // paragraph break: structurally complete
+      i += 1;
+      start = i + 1;
+      continue;
+    }
+    if (ch !== "." && ch !== "!" && ch !== "?") {
+      continue;
+    }
+    if (ch === ".") {
+      const prev = cps[i - 1];
+      const next = cps[i + 1];
+      if (prev >= "0" && prev <= "9" && next >= "0" && next <= "9") {
+        continue; // decimal number
+      }
+      let wordStart = i - 1;
+      while (wordStart >= start && /[A-Za-z]/.test(cps[wordStart])) {
+        wordStart -= 1;
+      }
+      const word = cps.slice(wordStart + 1, i).join("").toLowerCase();
+      if (ABBREVIATIONS.has(word)) {
+        continue;
+      }
+      if (word.length === 1 && /[A-Z]/.test(cps[i - 1] ?? "")) {
+        continue; // initial, e.g. "J. K. Rowling"
+      }
+    }
+    let end = i + 1;
+    while (end < cps.length && (cps[end] === "." || cps[end] === "!" || cps[end] === "?")) {
+      end += 1;
+    }
+    while (end < cps.length && CLOSERS.has(cps[end])) {
+      end += 1;
+    }
+    const after = cps[end];
+    if (after === undefined || after === " " || after === "\t" || after === "\n") {
+      // Quoted mid-sentence continuation: She said "Stop!" and left.
+      const hadCloser = end > i + 1 && CLOSERS.has(cps[end - 1]);
+      if (hadCloser) {
+        let next = end;
+        while (next < cps.length && (cps[next] === " " || cps[next] === "\t")) {
+          next += 1;
+        }
+        const nextChar = cps[next];
+        if (nextChar !== undefined && /[a-z]/.test(nextChar)) {
+          continue; // lowercase continuation: the sentence is not finished
+        }
+      }
+      push(end, true);
+      while (start < cps.length && (cps[start] === " " || cps[start] === "\t")) {
+        start += 1;
+      }
+      i = end - 1;
+    }
+  }
+  if (start < cps.length) {
+    push(cps.length, false);
+  }
+  return spans;
+}

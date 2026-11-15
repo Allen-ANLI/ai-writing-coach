@@ -158,6 +158,7 @@ erDiagram
 | `id` | UUID | PK |
 | `user_id` | UUID | FK → users.id, NOT NULL |
 | `question_id` | UUID | FK → ielts_questions.id, NULL |
+| `question_prompt` | TEXT | NULL；题目文本快照，编辑器中独立于正文展示（V1.2.2，ADR-016，迁移 0007） |
 | `title` | VARCHAR(255) | NULL |
 | `writing_type` | VARCHAR(30) | NOT NULL |
 | `status` | VARCHAR(20) | NOT NULL；取值 active / archived（V1.2.1 记录已采用枚举） |

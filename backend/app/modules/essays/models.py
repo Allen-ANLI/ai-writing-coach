@@ -52,6 +52,7 @@ class Essay(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     question_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    question_prompt: Mapped[str | None] = mapped_column(Text)
     title: Mapped[str | None] = mapped_column(String(255))
     writing_type: Mapped[str] = mapped_column(String(30), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")

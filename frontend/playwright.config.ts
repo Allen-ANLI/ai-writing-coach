@@ -44,6 +44,8 @@ export default defineConfig({
         // The suite registers many users from one IP; production rate limits
         // stay untouched, the isolated E2E backend relaxes them.
         AUTH_RATE_LIMIT_MAX_REQUESTS: "1000",
+        // E2E stays deterministic and never spends real API credits.
+        LLM_PROVIDER: "mock",
       },
     },
     {

@@ -329,6 +329,44 @@ Scope delivered:
 
 Out of scope (next slices): expression polish/translation (4), knowledge base (5).
 
+## 3h. DeepSeek integration + finalized editor UX (user update 2026-11-15)
+
+**Status:** IMPLEMENTED 2026-11-15, verified: backend 215+ passed, Playwright
+**38 passed**, vitest 21, tsc/ESLint/build/ruff clean. Contract 1.2.0 (34/87).
+ADRs: ADR-016 (finalized editor UX), ADR-017 (DeepSeek provider).
+
+Scope delivered:
+
+- DeepSeek provider (`LLM_PROVIDER=deepseek`): OpenAI-compatible chat
+  completions + Anthropic-compatible messages when base URL ends /anthropic;
+  env-only credentials; defensive usage parsing; honest 4xx surfacing (no
+  silent model fallback); timeout/retry mapping. Mock strictly separated:
+  pytest + E2E force mock. `scripts/verify_llm.py` (connectivity/model/usage)
+  and `scripts/eval_ai.py` (grammar deep-check + teaching datasets, metrics,
+  per-call usage/cost, JSON reports) ready; harness validated with mock.
+- Finalized UX (ADR-016): separate non-editable question section
+  (essays.question_prompt, migration 0007, create-dialog field); hierarchical
+  collapsible text outline (sections→paragraphs→sentence ideas); automatic
+  sentence-completion checking with robust boundaries (abbreviations,
+  decimals, initials, quotes, paragraph breaks, IME, paste) + debounce +
+  AbortController cancellation + stale-revision discard; hover floating
+  feedback card (translucent, non-obstructing); click-blurred-to-reveal (no
+  reveal button); Tab-to-accept only while pinned (normal Tab otherwise);
+  teaching icon → contextual card; no manual check button; no Submit button
+  during writing (post-writing evaluation actions arrive in Slice 7).
+- New atomic acceptance: POST /essays/{id}/issues/{id}/accept applies the
+  server-stored suggestion (never client text) with revision check, issue
+  resolution, suggestion state, Edit Event; server-side TipTap range
+  replacement utility (codepoint-exact, marks preserved, cross-paragraph
+  ranges rejected).
+- Tests: 6 acceptance integration tests, 7 range-replacement unit tests,
+  9 sentence-splitter unit tests; grammar/sessions E2E rewritten to the
+  finalized interactions (38 total passing).
+
+**Open item (user action):** place the newly rotated DeepSeek API key in
+`.env` (`LLM_API_KEY=`). The credential exposed in the chat attachment was
+NOT used. Real AI quality evaluation runs once the key is present.
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

@@ -1,9 +1,10 @@
 "use client";
 
 /**
- * Writing session controls (API Spec §5, SD §10). Two modes only; the
- * enabled_features map comes from the backend and gates assistance UI.
- * Submit requires a clean save state so expected_server_revision is exact.
+ * Writing session controls (API Spec §5, SD §10; UX decision 2026-11-15 §2.7).
+ * Two modes only; enabled_features comes from the backend and gates assistance
+ * UI. No Submit button during writing: evaluation/rewrite are post-writing
+ * actions (Slice 7). The submit API remains for the evaluation flow.
  */
 
 import { useEffect, useState } from "react";
@@ -11,9 +12,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Dialog } from "@/components/dialog";
 import { ApiClientError } from "@/lib/api-client";
-import { cancelSession, createSession, listSessions, submitSession } from "@/services/sessions";
+import { cancelSession, createSession, listSessions } from "@/services/sessions";
 import type { ActivityType, SessionData, WritingMode } from "@/types/api";
-import type { SaveStatus } from "@/features/editor/use-autosave";
 
 const ACTIVITY_LABELS: Record<ActivityType, string> = {
   free_writing: "Free writing",
@@ -47,16 +47,11 @@ function useCountdown(deadline: string | null): string | null {
 
 export function SessionControls({
   essayId,
-  serverRevision,
-  saveStatus,
 }: {
   essayId: string;
-  serverRevision: number;
-  saveStatus: SaveStatus;
 }) {
   const queryClient = useQueryClient();
   const [startOpen, setStartOpen] = useState(false);
-  const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [mode, setMode] = useState<WritingMode>("assisted");
   const [activity, setActivity] = useState<ActivityType>("practice");
   const [taskType, setTaskType] = useState<"task1" | "task2">("task2");
@@ -101,32 +96,7 @@ export function SessionControls({
     onError: () => setError("Could not cancel the session."),
   });
 
-  const submitMutation = useMutation({
-    mutationFn: async (session: SessionData) =>
-      submitSession(
-        session.id,
-        { expected_server_revision: serverRevision },
-        crypto.randomUUID(),
-      ),
-    onSuccess: () => {
-      setConfirmSubmit(false);
-      setError(null);
-      invalidate();
-    },
-    onError: (err) => {
-      setConfirmSubmit(false);
-      setError(
-        err instanceof ApiClientError && err.status === 409
-          ? "The document changed. Save your edits and submit again."
-          : err instanceof ApiClientError
-            ? err.message
-            : "Could not submit the essay.",
-      );
-    },
-  });
-
   const countdown = useCountdown(active?.deadline_at ?? null);
-  const clean = saveStatus === "saved";
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-zinc-200 px-4 py-1.5 text-xs dark:border-zinc-800">
@@ -196,27 +166,10 @@ export function SessionControls({
             >
               Cancel
             </button>
-            <button
-              type="button"
-              data-testid="submit-session"
-              disabled={!clean || submitMutation.isPending}
-              onClick={() => {
-                setError(null);
-                setConfirmSubmit(true);
-              }}
-              className="rounded-md bg-zinc-900 px-2.5 py-1 font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-            >
-              Submit essay
-            </button>
           </span>
         </>
       )}
 
-      {!clean && active && (
-        <span className="w-full text-amber-600 dark:text-amber-400">
-          Save your edits before submitting.
-        </span>
-      )}
       {error && (
         <span role="alert" data-testid="session-error" className="w-full text-red-600 dark:text-red-400">
           {error}
@@ -323,33 +276,6 @@ export function SessionControls({
                 {startMutation.isPending ? "Starting…" : "Start session"}
               </button>
             </div>
-          </div>
-        </Dialog>
-      )}
-
-      {confirmSubmit && active && (
-        <Dialog title="Submit this essay?" onClose={() => setConfirmSubmit(false)}>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Submitting saves an immutable final snapshot and ends the session. AI evaluation
-            becomes available afterwards; your original text is never overwritten.
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setConfirmSubmit(false)}
-              className="rounded-md px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            >
-              Keep writing
-            </button>
-            <button
-              type="button"
-              data-testid="confirm-submit"
-              disabled={submitMutation.isPending}
-              onClick={() => submitMutation.mutate(active)}
-              className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-            >
-              {submitMutation.isPending ? "Submitting…" : "Submit"}
-            </button>
           </div>
         </Dialog>
       )}

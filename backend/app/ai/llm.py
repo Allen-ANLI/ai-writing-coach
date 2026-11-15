@@ -10,6 +10,7 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from app.ai.providers.base import LlmError, LlmProvider, LlmUsage
+from app.ai.providers.deepseek import DeepSeekProvider
 from app.ai.providers.mock import MockProvider
 from app.ai.providers.openai_compat import OpenAiCompatProvider
 from app.core.config import get_settings
@@ -21,6 +22,8 @@ def get_provider() -> LlmProvider:
     settings = get_settings()
     if settings.llm_provider == "mock":
         return MockProvider()
+    if settings.llm_provider == "deepseek":
+        return DeepSeekProvider()
     if settings.llm_provider == "openai_compat":
         return OpenAiCompatProvider()
     raise ApiError(500, "LLM_PROVIDER_ERROR", f"Unknown LLM provider: {settings.llm_provider}")

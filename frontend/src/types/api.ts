@@ -119,6 +119,7 @@ export interface EssayData {
   writing_type: WritingType;
   status: string;
   question_id: string | null;
+  question_prompt: string | null;
   original_version_id: string | null;
   final_version_id: string | null;
   created_at: string;
@@ -460,5 +461,26 @@ export interface TeachingData {
 
 export interface TeachingResponse {
   data: TeachingData;
+  meta?: RequestMeta;
+}
+
+export interface AcceptIssueRequest {
+  base_revision: number;
+  client_revision: number;
+  suggestion_id?: string | null;
+}
+
+export interface AcceptIssueData {
+  issue_id: string;
+  suggestion_id: string;
+  server_revision: number;
+  applied_text: string;
+  content_json: TipTapDocument;
+  plain_text: string;
+  word_count: number;
+}
+
+export interface AcceptIssueResponse {
+  data: AcceptIssueData;
   meta?: RequestMeta;
 }

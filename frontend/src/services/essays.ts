@@ -12,6 +12,7 @@ export function listEssays(limit = 50, cursor?: string): Promise<EssayListRespon
 export function createEssay(payload: {
   title: string | null;
   writing_type: WritingType;
+  question_prompt?: string | null;
 }): Promise<EssayResponse> {
   return apiFetch<EssayResponse>("/essays", { method: "POST", body: payload });
 }

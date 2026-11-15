@@ -320,6 +320,107 @@ def ignore_issue(db: Session, user: User, essay_id: uuid.UUID, issue_id: uuid.UU
     return _issue_stub_data(issue)
 
 
+def accept_issue_suggestion(
+    db: Session, user: User, essay_id: uuid.UUID, issue_id: uuid.UUID, payload
+) -> dict:
+    """Atomically apply a stored correction (user decision 2026-11-15 §2.5).
+
+    The replacement text comes from the server-stored suggestion, never from
+    client input: Working Document update + revision increment + issue
+    resolution + suggestion acceptance + Edit Event in one transaction, with
+    a base_revision check (AGENTS §4 atomic acceptance invariants).
+    """
+    essay = get_essay(db, user, essay_id)
+    issue = _get_issue(db, user, essay_id, issue_id)
+    if issue.status != "detected":
+        raise ApiError(409, "VALIDATION_ERROR", "This issue is no longer active.")
+    document = essay_repository.lock_working_document(db, essay_id)
+    if document.server_revision != payload.base_revision:
+        raise ApiError(
+            409, "WORKING_DOCUMENT_CONFLICT", "The working document changed; reload and retry."
+        )
+    if issue.source_server_revision != document.server_revision:
+        raise ApiError(
+            409, "STALE_AI_RESULT", "This issue belongs to an older revision; re-check first."
+        )
+
+    suggestion = None
+    if payload.suggestion_id is not None:
+        suggestion = next((s for s in issue.suggestions if s.id == payload.suggestion_id), None)
+        if suggestion is None:
+            raise ApiError(404, "RESOURCE_NOT_FOUND", "Suggestion not found for this issue.")
+    else:
+        suggestion = next((s for s in issue.suggestions if s.is_recommended), None)
+        if suggestion is None and issue.suggestions:
+            suggestion = issue.suggestions[0]
+    if suggestion is None:
+        raise ApiError(404, "RESOURCE_NOT_FOUND", "This issue has no suggestion to accept.")
+    if suggestion.status != "pending":
+        raise ApiError(409, "VALIDATION_ERROR", "This suggestion was already handled.")
+
+    new_content = tiptap.replace_text_range(
+        document.content_json, issue.start_offset, issue.end_offset, suggestion.suggested_text
+    )
+    new_text, word_count = tiptap.derive_text(new_content)
+    now = utcnow()
+    old_revision = document.server_revision
+    document.content_json = new_content
+    document.plain_text = new_text
+    document.word_count = word_count
+    document.server_revision += 1
+    document.content_hash = hashlib.sha256(new_text.encode("utf-8")).hexdigest()
+    document.last_saved_at = now
+    document.updated_at = now
+    essay.updated_at = now
+
+    issue.status = "resolved"
+    issue.resolved_by_server_revision = document.server_revision
+    issue.updated_at = now
+    suggestion.status = "accepted"
+    for other in issue.suggestions:
+        if other.id != suggestion.id and other.status == "pending":
+            other.status = "dismissed"
+
+    stale_others = db.execute(
+        select(WritingIssue).where(
+            WritingIssue.essay_id == essay_id,
+            WritingIssue.status == "detected",
+            WritingIssue.source_server_revision == old_revision,
+            WritingIssue.id != issue.id,
+        )
+    ).scalars()
+    for other in stale_others:
+        other.status = "stale"
+        other.updated_at = now
+
+    db.add(
+        EssayEditEvent(
+            essay_id=essay_id,
+            from_server_revision=old_revision,
+            to_server_revision=document.server_revision,
+            issue_id=issue.id,
+            suggestion_id=suggestion.id,
+            actor_type="ai_accept",
+            event_type="accept_suggestion",
+            before_text=issue.anchor_text,
+            after_text=suggestion.suggested_text,
+            event_metadata={"source": suggestion.source},
+            created_at=now,
+        )
+    )
+    db.commit()
+
+    return {
+        "issue_id": issue.id,
+        "suggestion_id": suggestion.id,
+        "server_revision": document.server_revision,
+        "applied_text": suggestion.suggested_text,
+        "content_json": new_content,
+        "plain_text": new_text,
+        "word_count": word_count,
+    }
+
+
 def _sentence_around(text: str, offset: int) -> tuple[str, int]:
     """Return (sentence, start_codepoint) containing the offset."""
     start = offset

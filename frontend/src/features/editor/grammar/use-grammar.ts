@@ -1,15 +1,18 @@
 "use client";
 
 /**
- * Grammar orchestration: debounced checks after saves, self-correction
- * validation, reveal/ignore, contextual teaching, keyboard shortcuts.
- *
- * Coordinates with autosave: checks and validations always use the latest
- * saved server_revision; stale responses are discarded, never applied.
+ * Grammar orchestration (finalized UX, user decision 2026-11-15):
+ * - Automatic checks when a sentence is COMPLETED (punctuation/paragraph
+ *   break), debounced, with stale-request cancellation. No manual check button.
+ * - Hover feedback card; clicking the blurred answer reveals and pins it;
+ *   Tab accepts the correction ONLY while pinned (normal Tab otherwise).
+ * - Self-correction validation after saves; teaching via the small icon.
+ * - Rule-first on the backend; this layer never calls an LLM directly.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import {
   GRAMMAR_EVENTS,
@@ -18,11 +21,16 @@ import {
   type GrammarIssueState,
   type GrammarMeta,
 } from "@/features/editor/grammar/grammar-extension";
+import type { HoverCardState } from "@/features/editor/grammar/grammar-hover-card";
 import type { AutosaveApi } from "@/features/editor/use-autosave";
 import { ApiClientError } from "@/lib/api-client";
-import { BLOCK_SEPARATOR, sentenceAround } from "@/lib/document-text";
-import { codepointRangeToPm, codepointToUtf16, pmRangeToCodepoints, utf16ToCodepoint } from "@/lib/text-positions";
+import { BLOCK_SEPARATOR, splitSentences } from "@/lib/document-text";
 import {
+  codepointRangeToPm,
+  pmRangeToCodepoints,
+} from "@/lib/text-positions";
+import {
+  acceptIssue,
   getIssue,
   grammarCheck,
   ignoreIssue,
@@ -43,11 +51,11 @@ export interface TeachingState {
 
 export interface GrammarApi {
   issueCount: number;
-  checking: boolean;
-  checkNow: () => void;
-  reveal: (issueId: string) => void;
-  ignore: (issueId: string) => void;
-  teach: (issueId: string) => void;
+  hoverCard: HoverCardState | null;
+  onCardMouseEnter: () => void;
+  onCardMouseLeave: () => void;
+  revealAnswer: () => void;
+  teachFromCard: () => void;
   teaching: TeachingState | null;
   closeTeaching: () => void;
 }
@@ -73,30 +81,39 @@ export function useGrammar({
   editor,
   session,
   autosave,
+  applyContent,
 }: {
   essayId: string;
   editor: Editor | null;
   session: SessionData | null;
   autosave: AutosaveApi;
+  applyContent: (content: TipTapDocument) => void;
 }): GrammarApi {
+  const queryClient = useQueryClient();
   const enabled = Boolean(session?.enabled_features.realtime_grammar);
   const [issueCount, setIssueCount] = useState(0);
-  const [checking, setChecking] = useState(false);
+  const [hoverCard, setHoverCard] = useState<HoverCardState | null>(null);
   const [teaching, setTeaching] = useState<TeachingState | null>(null);
 
   const editorRef = useRef<Editor | null>(editor);
   const autosaveRef = useRef(autosave);
   const sessionRef = useRef(session);
   const enabledRef = useRef(enabled);
-  const pendingCheckRef = useRef(false);
+  const applyContentRef = useRef(applyContent);
+  const hoverRef = useRef<HoverCardState | null>(null);
+  const hoverGraceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const pendingValidationRef = useRef<Map<string, { start: number; end: number }>>(new Map());
   const validatingRef = useRef(false);
-  const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     editorRef.current = editor;
     autosaveRef.current = autosave;
     sessionRef.current = session;
     enabledRef.current = enabled;
+    applyContentRef.current = applyContent;
+    hoverRef.current = hoverCard;
   });
 
   const syncCount = useCallback(() => {
@@ -104,67 +121,97 @@ export function useGrammar({
     setIssueCount(current ? getGrammarIssues(current.view).length : 0);
   }, []);
 
-  const runCheck = useCallback(async () => {
-    const current = editorRef.current;
-    const currentSession = sessionRef.current;
-    const save = autosaveRef.current;
-    if (!current || !currentSession || !enabledRef.current) {
-      return;
-    }
-    if (save.status !== "saved") {
-      pendingCheckRef.current = true;
-      save.saveNow();
-      return;
-    }
-    const plainText = current.getText({ blockSeparator: BLOCK_SEPARATOR });
-    if (plainText.trim() === "") {
-      dispatchMeta(current, { type: "set", issues: [] });
-      syncCount();
-      return;
-    }
-    const cursorCp = pmRangeToCodepoints(
-      current.state.doc,
-      current.state.selection.from,
-      current.state.selection.from,
-    ).start;
-    const [sentence, startU16] = sentenceAround(plainText, codepointToUtf16(plainText, cursorCp));
-    if (sentence.trim() === "") {
-      return;
-    }
-    const start = utf16ToCodepoint(plainText, startU16);
-    const end = utf16ToCodepoint(plainText, startU16 + sentence.length);
-    setChecking(true);
-    try {
-      const response = await grammarCheck(essayId, {
-        session_id: currentSession.id,
-        server_revision: save.serverRevision,
-        client_revision: save.clientRevision,
-        text: sentence,
-        text_range: { start, end, offset_unit: "unicode_codepoint" },
-        context: { paragraph_text: sentence },
-      });
-      if (response.data.server_revision !== autosaveRef.current.serverRevision) {
-        return; // stale response: user kept editing; discard
+  const setHover = useCallback((next: HoverCardState | null) => {
+    hoverRef.current = next;
+    setHoverCard(next);
+  }, []);
+
+  // --- Checking -------------------------------------------------------------
+
+  const runCheck = useCallback(
+    async (span: { start: number; end: number; text: string }) => {
+      const current = editorRef.current;
+      const currentSession = sessionRef.current;
+      const save = autosaveRef.current;
+      if (!current || !currentSession || !enabledRef.current || save.status !== "saved") {
+        return;
       }
-      dispatchMeta(current, {
-        type: "set",
-        issues: toIssueStates(current, response.data.issues),
-      });
-      syncCount();
-    } catch {
-      // 403 (independent mode) / 409 (stale) / network: keep the editor usable.
-    } finally {
-      setChecking(false);
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const revisionAtRequest = save.serverRevision;
+      try {
+        const response = await grammarCheck(
+          essayId,
+          {
+            session_id: currentSession.id,
+            server_revision: revisionAtRequest,
+            client_revision: save.clientRevision,
+            text: span.text,
+            text_range: {
+              start: span.start,
+              end: span.end,
+              offset_unit: "unicode_codepoint",
+            },
+            context: { paragraph_text: span.text },
+          },
+          controller.signal,
+        );
+        // Stale-response guard: document moved on while the check ran.
+        if (
+          controller.signal.aborted ||
+          response.data.server_revision !== autosaveRef.current.serverRevision
+        ) {
+          return;
+        }
+        dispatchMeta(current, {
+          type: "set",
+          issues: toIssueStates(current, response.data.issues),
+        });
+        syncCount();
+      } catch {
+        // aborted / 403 independent / 409 stale / network: editor stays usable
+      }
+    },
+    [essayId, syncCount],
+  );
+
+  const scheduleCheckForEdit = useCallback(() => {
+    const current = editorRef.current;
+    if (!current || !enabledRef.current) {
+      return;
     }
-  }, [essayId, syncCount]);
+    if (checkTimerRef.current) {
+      clearTimeout(checkTimerRef.current);
+    }
+    checkTimerRef.current = setTimeout(() => {
+      const save = autosaveRef.current;
+      if (save.status !== "saved") {
+        return; // wait for the save; the saved-effect re-triggers
+      }
+      const plainText = current.getText({ blockSeparator: BLOCK_SEPARATOR });
+      const cursorCp = pmRangeToCodepoints(
+        current.state.doc,
+        current.state.selection.from,
+        current.state.selection.from,
+      ).start;
+      const spans = splitSentences(plainText);
+      const span = spans.find((s) => cursorCp >= s.start && cursorCp <= s.end);
+      if (!span || !span.complete || span.text.trim() === "") {
+        return; // never check incomplete input prematurely
+      }
+      void runCheck(span);
+    }, 900);
+  }, [runCheck]);
+
+  // --- Self-correction validation -------------------------------------------
 
   const runValidations = useCallback(async () => {
     const current = editorRef.current;
     if (!current || validatingRef.current || pendingValidationRef.current.size === 0) {
       return;
     }
-    const save = autosaveRef.current;
-    if (save.status !== "saved") {
+    if (autosaveRef.current.status !== "saved") {
       return;
     }
     validatingRef.current = true;
@@ -199,7 +246,7 @@ export function useGrammar({
           }
         } catch (error) {
           if (error instanceof ApiClientError && error.status === 409) {
-            pendingCheckRef.current = true;
+            scheduleCheckForEdit();
           }
         }
       }
@@ -207,32 +254,21 @@ export function useGrammar({
       validatingRef.current = false;
       syncCount();
     }
-  }, [essayId, syncCount]);
+  }, [essayId, syncCount, scheduleCheckForEdit]);
 
-  // After each successful save: run pending validations, then a fresh check.
+  // After each successful save: validate edited issues, then check completed
+  // sentences at the new revision.
   useEffect(() => {
     if (!enabled || autosave.status !== "saved") {
       return;
     }
-    if (checkTimerRef.current) {
-      clearTimeout(checkTimerRef.current);
-    }
-    checkTimerRef.current = setTimeout(() => {
-      void runValidations().then(() => {
-        if (pendingCheckRef.current) {
-          pendingCheckRef.current = false;
-        }
-        void runCheck();
-      });
-    }, 400);
-    return () => {
-      if (checkTimerRef.current) {
-        clearTimeout(checkTimerRef.current);
-      }
-    };
-  }, [enabled, autosave.status, autosave.serverRevision, runCheck, runValidations]);
+    const timer = setTimeout(() => {
+      void runValidations().then(() => scheduleCheckForEdit());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [enabled, autosave.status, autosave.serverRevision, runValidations, scheduleCheckForEdit]);
 
-  // Track edits intersecting issue ranges for self-correction validation.
+  // Track edits: schedule sentence checks + mark intersected issues pending.
   useEffect(() => {
     if (!editor) {
       return;
@@ -242,9 +278,10 @@ export function useGrammar({
         return;
       }
       const current = editorRef.current;
-      if (!current) {
-        return;
+      if (!current || current.view.composing) {
+        return; // IME composition: wait for compositionend
       }
+      scheduleCheckForEdit();
       const issues = getGrammarIssues(current.view);
       if (issues.length === 0) {
         return;
@@ -260,46 +297,148 @@ export function useGrammar({
         });
       }
     };
+    const onCompositionEnd = () => scheduleCheckForEdit();
     editor.on("update", onUpdate);
+    editor.view.dom.addEventListener("compositionend", onCompositionEnd);
     return () => {
       editor.off("update", onUpdate);
+      editor.view.dom.removeEventListener("compositionend", onCompositionEnd);
     };
-  }, [editor]);
+  }, [editor, scheduleCheckForEdit]);
 
-  const reveal = useCallback(
-    (issueId: string) => {
+  // --- Hover / reveal / accept ----------------------------------------------
+
+  useEffect(() => {
+    const onHover = (event: Event) => {
+      const detail = (event as CustomEvent).detail as {
+        issueId: string;
+        top: number;
+        left: number;
+      };
       const current = editorRef.current;
       if (!current) {
         return;
       }
-      void revealIssue(essayId, issueId)
-        .then((response) => {
-          dispatchMeta(current, {
-            type: "reveal",
-            issueId,
-            suggestions: response.data.suggestions,
-          });
-        })
-        .catch(() => undefined);
-    },
-    [essayId],
-  );
-
-  const ignore = useCallback(
-    (issueId: string) => {
-      const current = editorRef.current;
-      if (!current) {
+      const item = getGrammarIssues(current.view).find((i) => i.issue.id === detail.issueId);
+      if (!item) {
         return;
       }
-      void ignoreIssue(essayId, issueId)
-        .then(() => {
-          dispatchMeta(current, { type: "remove", issueId });
-          syncCount();
-        })
-        .catch(() => undefined);
-    },
-    [essayId, syncCount],
-  );
+      if (hoverGraceRef.current) {
+        clearTimeout(hoverGraceRef.current);
+        hoverGraceRef.current = null;
+      }
+      const existing = hoverRef.current;
+      const pinned = existing?.pinned && existing.issueId === detail.issueId;
+      setHover({
+        issueId: detail.issueId,
+        top: detail.top,
+        left: detail.left,
+        explanation: item.issue.short_explanation,
+        revealed: pinned ? existing.revealed : item.revealed,
+        pinned: Boolean(pinned),
+      });
+    };
+    const onHoverEnd = () => {
+      if (hoverRef.current?.pinned) {
+        return; // pinned correction stays until Tab/Esc
+      }
+      if (hoverGraceRef.current) {
+        clearTimeout(hoverGraceRef.current);
+      }
+      hoverGraceRef.current = setTimeout(() => {
+        if (!hoverRef.current?.pinned) {
+          setHover(null);
+        }
+      }, 260);
+    };
+    document.addEventListener(GRAMMAR_EVENTS.hover, onHover);
+    document.addEventListener(GRAMMAR_EVENTS.hoverEnd, onHoverEnd);
+    return () => {
+      document.removeEventListener(GRAMMAR_EVENTS.hover, onHover);
+      document.removeEventListener(GRAMMAR_EVENTS.hoverEnd, onHoverEnd);
+    };
+  }, [setHover]);
+
+  const onCardMouseEnter = useCallback(() => {
+    if (hoverGraceRef.current) {
+      clearTimeout(hoverGraceRef.current);
+      hoverGraceRef.current = null;
+    }
+  }, []);
+
+  const onCardMouseLeave = useCallback(() => {
+    if (hoverRef.current?.pinned) {
+      return;
+    }
+    if (hoverGraceRef.current) {
+      clearTimeout(hoverGraceRef.current);
+    }
+    hoverGraceRef.current = setTimeout(() => setHover(null), 200);
+  }, [setHover]);
+
+  const revealAnswer = useCallback(() => {
+    const current = editorRef.current;
+    const card = hoverRef.current;
+    if (!current || !card) {
+      return;
+    }
+    void revealIssue(essayId, card.issueId)
+      .then((response) => {
+        dispatchMeta(current, {
+          type: "reveal",
+          issueId: card.issueId,
+          suggestions: response.data.suggestions,
+        });
+        setHover({
+          ...card,
+          revealed: response.data.suggestions,
+          pinned: true,
+        });
+      })
+      .catch(() => undefined);
+  }, [essayId, setHover]);
+
+  const acceptPinned = useCallback(() => {
+    const current = editorRef.current;
+    const card = hoverRef.current;
+    if (!current || !card?.pinned || !card.revealed) {
+      return;
+    }
+    const save = autosaveRef.current;
+    const recommended = card.revealed.find((s) => s.is_recommended) ?? card.revealed[0];
+    void acceptIssue(essayId, card.issueId, {
+      base_revision: save.serverRevision,
+      client_revision: save.clientRevision,
+      suggestion_id: recommended?.id ?? null,
+    })
+      .then((response) => {
+        applyContentRef.current(response.data.content_json);
+        autosaveRef.current.setServerRevision(response.data.server_revision);
+        dispatchMeta(current, { type: "remove", issueId: card.issueId });
+        setHover(null);
+        syncCount();
+        void queryClient.invalidateQueries({ queryKey: ["essay", essayId] });
+      })
+      .catch(() => undefined);
+  }, [essayId, setHover, syncCount, queryClient]);
+
+  // Tab accepts ONLY while a revealed correction is pinned; Esc closes.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const card = hoverRef.current;
+      if (event.key === "Tab" && card?.pinned && card.revealed) {
+        event.preventDefault();
+        event.stopPropagation();
+        acceptPinned();
+      } else if (event.key === "Escape" && card) {
+        setHover(null);
+      }
+    };
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [acceptPinned, setHover]);
+
+  // --- Teaching / ignore / shortcuts -----------------------------------------
 
   const teach = useCallback(
     (issueId: string) => {
@@ -314,7 +453,9 @@ export function useGrammar({
       const coords = current.view.coordsAtPos(item.from);
       const plainText = current.getText({ blockSeparator: BLOCK_SEPARATOR });
       const cp = pmRangeToCodepoints(current.state.doc, item.from, item.from).start;
-      const [sentence] = sentenceAround(plainText, codepointToUtf16(plainText, cp));
+      const spans = splitSentences(plainText);
+      const span = spans.find((s) => cp >= s.start && cp <= s.end);
+      const sentence = span?.text ?? plainText;
       setTeaching({
         issueId,
         loading: true,
@@ -355,14 +496,36 @@ export function useGrammar({
     [essayId],
   );
 
+  const teachFromCard = useCallback(() => {
+    const card = hoverRef.current;
+    if (card) {
+      teach(card.issueId);
+    }
+  }, [teach]);
+
+  const ignore = useCallback(
+    (issueId: string) => {
+      const current = editorRef.current;
+      if (!current) {
+        return;
+      }
+      void ignoreIssue(essayId, issueId)
+        .then(() => {
+          dispatchMeta(current, { type: "remove", issueId });
+          if (hoverRef.current?.issueId === issueId) {
+            setHover(null);
+          }
+          syncCount();
+        })
+        .catch(() => undefined);
+    },
+    [essayId, setHover, syncCount],
+  );
+
   const closeTeaching = useCallback(() => setTeaching(null), []);
 
-  const checkNow = useCallback(() => {
-    pendingCheckRef.current = true;
-    void runCheck();
-  }, [runCheck]);
-
-  // Keyboard shortcuts: Alt+R reveal, Alt+T teach, Alt+I ignore (issue at caret).
+  // Keyboard shortcuts: Alt+R reveal, Alt+T teach, Alt+I ignore (issue at caret
+  // or pinned card).
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (!event.altKey || event.ctrlKey || event.metaKey) {
@@ -373,14 +536,31 @@ export function useGrammar({
         return;
       }
       const pos = current.state.selection.from;
-      const item = getGrammarIssues(current.view).find((i) => pos >= i.from && pos <= i.to);
+      const item =
+        getGrammarIssues(current.view).find((i) => pos >= i.from && pos <= i.to) ??
+        getGrammarIssues(current.view).find((i) => i.issue.id === hoverRef.current?.issueId);
       if (!item) {
         return;
       }
       const key = event.key.toLowerCase();
       if (key === "r") {
         event.preventDefault();
-        reveal(item.issue.id);
+        void revealIssue(essayId, item.issue.id).then((response) => {
+          dispatchMeta(current, {
+            type: "reveal",
+            issueId: item.issue.id,
+            suggestions: response.data.suggestions,
+          });
+          const coords = current.view.coordsAtPos(item.from);
+          setHover({
+            issueId: item.issue.id,
+            top: coords.bottom,
+            left: coords.left,
+            explanation: item.issue.short_explanation,
+            revealed: response.data.suggestions,
+            pinned: true,
+          });
+        });
       } else if (key === "t") {
         event.preventDefault();
         teach(item.issue.id);
@@ -391,31 +571,27 @@ export function useGrammar({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [reveal, teach, ignore]);
+  }, [essayId, teach, ignore, setHover]);
 
-  // Bridge ProseMirror widget events to the latest handlers (subscribed in an
-  // effect; the extension itself stays render-phase pure).
+  // Bridge extension DOM events to the latest handlers.
   useEffect(() => {
-    const onReveal = (event: Event) => reveal((event as CustomEvent).detail.issueId);
-    const onIgnore = (event: Event) => ignore((event as CustomEvent).detail.issueId);
     const onTeach = (event: Event) => teach((event as CustomEvent).detail.issueId);
-    document.addEventListener(GRAMMAR_EVENTS.reveal, onReveal);
-    document.addEventListener(GRAMMAR_EVENTS.ignore, onIgnore);
+    const onIgnore = (event: Event) => ignore((event as CustomEvent).detail.issueId);
     document.addEventListener(GRAMMAR_EVENTS.teach, onTeach);
+    document.addEventListener(GRAMMAR_EVENTS.ignore, onIgnore);
     return () => {
-      document.removeEventListener(GRAMMAR_EVENTS.reveal, onReveal);
-      document.removeEventListener(GRAMMAR_EVENTS.ignore, onIgnore);
       document.removeEventListener(GRAMMAR_EVENTS.teach, onTeach);
+      document.removeEventListener(GRAMMAR_EVENTS.ignore, onIgnore);
     };
-  }, [reveal, ignore, teach]);
+  }, [teach, ignore]);
 
   return {
     issueCount,
-    checking,
-    checkNow,
-    reveal,
-    ignore,
-    teach,
+    hoverCard,
+    onCardMouseEnter,
+    onCardMouseLeave,
+    revealAnswer,
+    teachFromCard,
     teaching,
     closeTeaching,
   };

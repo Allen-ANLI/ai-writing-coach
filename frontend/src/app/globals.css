@@ -222,3 +222,16 @@ body {
     color: #a1a1aa;
   }
 }
+
+/* Blurred correction in the floating feedback card (UX decision §2.5):
+   click the blurred text itself to reveal — no separate reveal button. */
+.awc-blurred-answer {
+  filter: blur(5px);
+  user-select: none;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.awc-blurred-answer:hover {
+  filter: blur(3px);
+}

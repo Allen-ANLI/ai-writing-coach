@@ -34,10 +34,15 @@ export function CreateEssayDialog({
   onCreate,
 }: {
   onClose: () => void;
-  onCreate: (payload: { title: string | null; writing_type: WritingType }) => Promise<unknown>;
+  onCreate: (payload: {
+    title: string | null;
+    writing_type: WritingType;
+    question_prompt: string | null;
+  }) => Promise<unknown>;
 }) {
   const [title, setTitle] = useState("");
   const [writingType, setWritingType] = useState<WritingType>("free_writing");
+  const [questionPrompt, setQuestionPrompt] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +54,7 @@ export function CreateEssayDialog({
       await onCreate({
         title: title.trim() === "" ? null : title.trim(),
         writing_type: writingType,
+        question_prompt: questionPrompt.trim() === "" ? null : questionPrompt.trim(),
       });
     } catch (caught) {
       setError(errorMessage(caught));
@@ -91,6 +97,21 @@ export function CreateEssayDialog({
               </option>
             ))}
           </select>
+        </div>
+        <div>
+          <label htmlFor="essay-question" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Question <span className="font-normal text-zinc-400">(optional — shown separately from your writing)</span>
+          </label>
+          <textarea
+            id="essay-question"
+            data-testid="essay-question-input"
+            rows={3}
+            maxLength={5000}
+            value={questionPrompt}
+            onChange={(event) => setQuestionPrompt(event.target.value)}
+            className={inputClass}
+            placeholder="Paste the essay question or prompt here…"
+          />
         </div>
         {error && (
           <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">

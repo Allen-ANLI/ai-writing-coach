@@ -46,6 +46,7 @@ def create_essay(db: Session, user: User, payload: CreateEssayRequest) -> Essay:
         title=payload.title,
         writing_type=payload.writing_type,
         question_id=payload.question_id,
+        question_prompt=payload.question_prompt,
         status="active",
     )
     db.add(essay)
@@ -101,6 +102,8 @@ def update_essay(db: Session, user: User, essay_id: uuid.UUID, payload: PatchEss
     updates = payload.model_dump(exclude_unset=True)
     if "title" in updates:
         essay.title = updates["title"]
+    if "question_prompt" in updates:
+        essay.question_prompt = updates["question_prompt"]
     essay.updated_at = utcnow()
     db.commit()
     db.refresh(essay)

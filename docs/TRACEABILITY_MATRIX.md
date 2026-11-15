@@ -78,11 +78,11 @@ authoritative starting references; resolutions below are the adopted engineering
 ## 3. Contract operation inventory (87 operations)
 
 Verified 2026-11-15 by script comparing `contracts/openapi.yaml` paths against the
-FastAPI-generated OpenAPI: **33 implemented, 54 missing, 0 out-of-contract routes**
-(15 at baseline; +6 Slice 2B; +5 Slice 2D; +7 Slice 3). Enforced permanently by
-`tests/test_contract.py::test_no_out_of_contract_routes`.
+FastAPI-generated OpenAPI: **34 implemented, 53 missing, 0 out-of-contract routes**
+(15 at baseline; +6 Slice 2B; +5 Slice 2D; +7 Slice 3; +1 accept, contract 1.2.0).
+Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`.
 
-### Implemented (33) — all IV
+### Implemented (34) — all IV
 
 | Method | Path | Slice |
 |---|---|---|
@@ -118,9 +118,10 @@ FastAPI-generated OpenAPI: **33 implemented, 54 missing, 0 out-of-contract route
 | POST | /essays/{essay_id}/issues/validate | 3 |
 | PATCH | /essays/{essay_id}/issues/{issue_id} | 3 |
 | POST | /essays/{essay_id}/issues/{issue_id}/reveal | 3 |
+| POST | /essays/{essay_id}/issues/{issue_id}/accept | 3UX (contract 1.2.0) |
 | POST | /essays/{essay_id}/issues/{issue_id}/teaching | 3 |
 
-### Missing (54) — grouped by planned slice
+### Missing (53) — grouped by planned slice
 
 | Slice | Operations |
 |---|---|
@@ -193,7 +194,8 @@ FastAPI-generated OpenAPI: **33 implemented, 54 missing, 0 out-of-contract route
 
 | Date | Change |
 |---|---|
-| 2026-11-15 (Slice 3) | Grammar core implemented + verified: LanguageTool 6.6 self-hosted (Docker; broken :latest/6.6 erikvl87 builds rejected, meyay image used), custom deterministic rules (Chinese punctuation, missing space), classification + Chinese short explanations, LLM deep-check only for uncertain fragments (capped), issue lifecycle (check/list/detail/validate/reveal/ignore/teaching), atomic self-correction with re-anchoring, contextual teaching with context-hash caching, LLM provider abstraction (mock + OpenAI-compatible) with versioned prompts and full usage logging. Migration 0006. Frontend: category-colored inline underlines, hint widgets with blurred answers, reveal/teach/ignore + Alt+R/T/I shortcuts, floating teaching card, independent-mode enforcement. Verification: backend **204 passed** (46 new), Playwright **37 passed** (7 new), vitest 12, tsc/ESLint/build/ruff clean. Environment: Docker data moved to D: (user-authorized; C: was full), LanguageTool container added. **Open decision: real LLM provider keys needed for AI linguistic quality verification (mock provider active).** |
+| 2026-11-15 (DeepSeek + finalized UX) | User decisions implemented (ADR-016/017): DeepSeek provider (OpenAI- + Anthropic-compatible, env-only credentials, mock strictly separated for tests, verify_llm.py + eval_ai.py harness with grammar/teaching datasets); finalized editor UX — separate question section (essays.question_prompt, migration 0007), hierarchical text outline (sections→paragraphs→sentences), automatic sentence-completion checking (abbreviations/decimals/quotes/IME/pause-safe, no manual button), hover floating feedback, click-blurred-to-reveal, Tab-to-accept via new atomic accept endpoint (contract 1.2.0), teaching icon, no Submit button during writing. Verification: backend 215+ passed, Playwright **38 passed**, vitest 21, tsc/ESLint/build/ruff clean. **Open item: rotated DeepSeek key must be placed in .env by the user (exposed chat credential NOT used); real AI quality evaluation pending that.** |
+| 2026-11-15 (Slice 3) | Grammar core implemented + verified: LanguageTool 6.6 self-hosted (Docker; broken :latest/6.6 erikvl87 builds rejected, meyay image used), custom deterministic rules (Chinese punctuation, missing space), classification + Chinese short explanations, LLM deep-check only for uncertain fragments (capped), issue lifecycle (check/list/detail/validate/reveal/ignore/teaching), atomic self-correction with re-anchoring, contextual teaching with context-hash caching, LLM provider abstraction (mock + OpenAI-compatible) with versioned prompts and full usage logging. Migration 0006. Frontend: category-colored inline underlines, hint widgets with blurred answers, reveal/teach/ignore + Alt+R/T/I shortcuts, floating teaching card, independent-mode enforcement. Verification: backend **204 passed** (46 new), Playwright **37 passed** (7 new), vitest 12, tsc/ESLint/build/ruff clean. Environment: Docker data moved to D: (user-authorized; C: was full), LanguageTool container added. |
 | 2026-11-15 (Slice 2D) | Writing sessions implemented + verified: two modes with server-derived enabled_features (backend enforcement), exam config + deadline, one-active-session rule, cancel, atomic submit (Final Snapshot, shared-original optimization, Edit Event, Idempotency-Key). Migration 0005 adds writing_sessions + essays UNIQUE(id,user_id) + composite same-owner FK. Frontend session controls: mode picker, exam countdown, submit/cancel. Verification: backend **158 passed** (14 new), Playwright **30 passed** (5 new), vitest 12, tsc/ESLint/build clean, ruff clean. Contract operations 26/87. |
 | 2026-11-15 (Slice 2C) | TipTap writing editor live on /essays/[id]: debounced autosave + Ctrl+S + save status + conflict recovery (keep local / copy / load latest), word count, undo/redo, formatting toolbar, collapsible left outline (expanded by default), version history dialog with checkpoints + confirmed restore, IME-composition-safe saving. Unicode codepoint↔UTF-16↔ProseMirror mapping utilities with 12 unit tests. OpenAPI type generation pipeline (R11). Verification: Playwright **25 passed** (7 new editor tests), vitest 12 passed, tsc/ESLint/build clean. Fixed real defects: toolbar no-op on fresh unfocused editor; descendants() pruning in position mapping; E2E rate-limit exhaustion (E2E-only env relaxation). `awc-screenshots.mjs` review utility recreated. |
 | 2026-11-15 (Slice 2B) | Working Document GET/PUT, snapshots, versions, restore implemented + verified: backend **144 passed** (50 new), ruff clean. Migration 0004 (essay_edit_events, essay_versions.label, idempotency_keys). Fixed two real defects found by tests: stale identity-map read under FOR UPDATE (populate_existing) and unreliable ON CONFLICT rowcount (RETURNING). ERD V1.2.1 increments recorded. Contract operations 21/87. |

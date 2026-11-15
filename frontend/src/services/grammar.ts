@@ -1,5 +1,7 @@
 import { apiFetch } from "@/lib/api-client";
 import type {
+  AcceptIssueRequest,
+  AcceptIssueResponse,
   GrammarCheckRequest,
   GrammarCheckResponse,
   IssueListResponse,
@@ -68,6 +70,17 @@ export function requestTeaching(
   payload: TeachingRequest,
 ): Promise<TeachingResponse> {
   return apiFetch<TeachingResponse>(`/essays/${essayId}/issues/${issueId}/teaching`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function acceptIssue(
+  essayId: string,
+  issueId: string,
+  payload: AcceptIssueRequest,
+): Promise<AcceptIssueResponse> {
+  return apiFetch<AcceptIssueResponse>(`/essays/${essayId}/issues/${issueId}/accept`, {
     method: "POST",
     body: payload,
   });

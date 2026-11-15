@@ -1,11 +1,14 @@
 openapi: 3.1.0
 info:
   title: AI Writing Coach API
-  version: 1.1.1
+  version: 1.2.0
   description: Final API contract aligned with Database ERD V1.2. Working documents use server_revision; immutable
     snapshots use version_no. Refresh tokens are HttpOnly cookies. 1.1.1 adds the additive
     infrastructure endpoint GET /health (200 database reachable, 503 database unavailable);
-    no approved business endpoint semantics were changed.
+    no approved business endpoint semantics were changed. 1.2.0 (user decisions 2026-11-15)
+    adds POST /essays/{essay_id}/issues/{issue_id}/accept (atomic acceptance of a stored
+    correction) and essays.question_prompt (separate non-editable question section);
+    additive only, no existing semantics changed.
 servers:
 - url: https://api.example.com/api/v1
   description: Production placeholder
@@ -362,6 +365,13 @@ paths:
                   - string
                   - 'null'
                   format: uuid
+                question_prompt:
+                  type:
+                  - string
+                  - 'null'
+                  maxLength: 5000
+                  description: Added 1.2.0 — question text shown in a separate non-editable
+                    editor section; never part of the essay document.
               required:
               - writing_type
       parameters:
@@ -1052,6 +1062,47 @@ paths:
           description: Request validation error
         '429':
           description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/issues/{issue_id}/accept:
+    post:
+      tags:
+      - Grammar
+      summary: Atomically accept a revealed correction (server-stored text only)
+      description: Added 1.2.0 (user UX decision 2026-11-15). Applies the stored suggestion
+        to the Working Document in one transaction with revision increment, issue
+        resolution, suggestion acceptance and an Edit Event. The replacement text is
+        never taken from client input. 409 on revision conflict or stale issue.
+      responses:
+        '200':
+          description: Correction applied; returns the updated document
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '409':
+          description: Revision conflict, stale issue, or suggestion already handled
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueAcceptRequest'
       parameters:
       - name: essay_id
         in: path
@@ -2660,6 +2711,25 @@ components:
       required:
       - data
     IssueValidationRequest: *id003
+    IssueAcceptRequest:
+      type: object
+      description: Added 1.2.0. Accepts a stored correction; suggestion_id defaults to the
+        recommended suggestion when omitted. Replacement text is server-stored only.
+      properties:
+        base_revision:
+          type: integer
+          minimum: 1
+        client_revision:
+          type: integer
+          minimum: 0
+        suggestion_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+      required:
+      - base_revision
+      - client_revision
     TeachingRequest: *id004
     EvaluationCreate: *id005
     RewriteAccept: *id006

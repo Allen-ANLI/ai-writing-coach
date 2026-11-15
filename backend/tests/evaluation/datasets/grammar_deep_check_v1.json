@@ -1,0 +1,82 @@
+[
+  {
+    "id": "agr-001",
+    "sentence": "He go to school yesterday.",
+    "fragment": "go",
+    "rule_message": "The pronoun 'He' is usually used with a third-person or a past tense verb.",
+    "expected_confirmed": true,
+    "note": "clear subject-verb/tense error"
+  },
+  {
+    "id": "agr-002",
+    "sentence": "She goes to school every day.",
+    "fragment": "goes",
+    "rule_message": "Possible agreement issue.",
+    "expected_confirmed": false,
+    "note": "correct sentence; false positive must be rejected"
+  },
+  {
+    "id": "agr-003",
+    "sentence": "The list of items are on the desk.",
+    "fragment": "are",
+    "rule_message": "Possible agreement issue.",
+    "expected_confirmed": true,
+    "note": "subject 'list' is singular"
+  },
+  {
+    "id": "agr-004",
+    "sentence": "The list of items is on the desk.",
+    "fragment": "is",
+    "rule_message": "Possible agreement issue.",
+    "expected_confirmed": false,
+    "note": "correct agreement"
+  },
+  {
+    "id": "art-001",
+    "sentence": "She is a honest person.",
+    "fragment": "a honest",
+    "rule_message": "Use 'an' before a vowel sound.",
+    "expected_confirmed": true,
+    "note": "'honest' has a silent h"
+  },
+  {
+    "id": "art-002",
+    "sentence": "She is an honest person.",
+    "fragment": "an honest",
+    "rule_message": "Possible article issue.",
+    "expected_confirmed": false,
+    "note": "correct article"
+  },
+  {
+    "id": "tense-001",
+    "sentence": "I have seen him yesterday.",
+    "fragment": "have seen",
+    "rule_message": "Present perfect with a finished past time expression.",
+    "expected_confirmed": true,
+    "note": "'yesterday' requires past simple"
+  },
+  {
+    "id": "tense-002",
+    "sentence": "I have seen him this week.",
+    "fragment": "have seen",
+    "rule_message": "Possible tense issue.",
+    "expected_confirmed": false,
+    "note": "'this week' is unfinished; present perfect is fine"
+  },
+  {
+    "id": "style-001",
+    "sentence": "In my personal opinion, I think students should choose freely.",
+    "fragment": "In my personal opinion, I think",
+    "rule_message": "Possible redundancy.",
+    "expected_confirmed": false,
+    "note": "redundancy is a style preference, not a true error; must not be confirmed as an error"
+  },
+  {
+    "id": "plural-001",
+    "sentence": "There are many informations online.",
+    "fragment": "informations",
+    "rule_message": "Possible plural issue.",
+    "expected_confirmed": true,
+    "note": "'information' is uncountable"
+  }
+]

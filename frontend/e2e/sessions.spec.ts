@@ -38,34 +38,27 @@ async function startSession(
   await expect(page.getByTestId("session-mode-chip")).toBeVisible();
 }
 
-test("assisted session shows mode and submit creates a final snapshot", async ({ page }) => {
+test("assisted session shows mode; no submit button during writing", async ({ page }) => {
   await openNewEssay(page, "Assisted session essay");
   await startSession(page, "assisted");
   await expect(page.getByTestId("session-mode-chip")).toHaveText("Assisted learning");
 
   await page.getByTestId("editor-content").click();
-  await page.keyboard.type("This is my submitted essay.");
+  await page.keyboard.type("This is my essay in progress.");
   await expect(page.getByTestId("save-status")).toContainText("Saved", { timeout: 15_000 });
 
-  await page.getByTestId("submit-session").click();
-  await page.getByTestId("confirm-submit").click();
-  await expect(page.getByTestId("session-submitted-chip")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByTestId("session-mode-chip")).toBeHidden();
-
-  // Final snapshot exists in history.
-  await page.getByTestId("open-history").click();
-  await expect(page.getByTestId("version-list")).toContainText("Final");
+  // UX decision 2026-11-15 §2.7: evaluation/rewrite are post-writing actions,
+  // not a mandatory submit button during normal writing.
+  await expect(page.getByTestId("submit-session")).toHaveCount(0);
+  await expect(page.getByTestId("confirm-submit")).toHaveCount(0);
 });
 
-test("independent session disables assistance and can submit", async ({ page }) => {
+test("independent session disables assistance controls", async ({ page }) => {
   await openNewEssay(page, "Independent session essay");
   await startSession(page, "independent");
   await expect(page.getByTestId("session-mode-chip")).toHaveText("Independent writing");
   await expect(page.getByTestId("independent-notice")).toBeVisible();
-
-  await page.getByTestId("submit-session").click();
-  await page.getByTestId("confirm-submit").click();
-  await expect(page.getByTestId("session-submitted-chip")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("submit-session")).toHaveCount(0);
 });
 
 test("mock exam session shows a countdown", async ({ page }) => {
@@ -80,18 +73,7 @@ test("mock exam session shows a countdown", async ({ page }) => {
   await expect(page.getByTestId("exam-countdown")).toContainText(/\d+:\d{2}/);
 });
 
-test("submit is blocked until edits are saved", async ({ page }) => {
-  await openNewEssay(page, "Unsaved submit essay");
-  await startSession(page, "assisted");
-
-  await page.getByTestId("editor-content").click();
-  await page.keyboard.type("Unsaved text");
-  await expect(page.getByTestId("submit-session")).toBeDisabled();
-  await expect(page.getByTestId("save-status")).toContainText("Saved", { timeout: 15_000 });
-  await expect(page.getByTestId("submit-session")).toBeEnabled();
-});
-
-test("cancel session allows starting a new one", async ({ page }) => {
+test("writing continues without submission; cancel frees the essay", async ({ page }) => {
   await openNewEssay(page, "Cancel session essay");
   await startSession(page, "assisted");
   await page.getByTestId("cancel-session").click();

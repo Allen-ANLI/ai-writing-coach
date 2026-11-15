@@ -1,0 +1,67 @@
+[
+  {
+    "id": "teach-001",
+    "category": "grammar",
+    "anchor_text": "go",
+    "current_sentence": "He go to school yesterday.",
+    "paragraph_context": "He go to school yesterday. He wants to study engineering.",
+    "user_current_text": "He go to school yesterday.",
+    "rubric": {
+      "mentions_fragment_or_sentence": true,
+      "correction_differs_from_anchor": true,
+      "min_examples": 2
+    }
+  },
+  {
+    "id": "teach-002",
+    "category": "grammar",
+    "anchor_text": "a honest",
+    "current_sentence": "She is a honest person.",
+    "paragraph_context": "She is a honest person. Everyone trusts her.",
+    "user_current_text": "She is a honest person.",
+    "rubric": {
+      "mentions_fragment_or_sentence": true,
+      "correction_differs_from_anchor": true,
+      "min_examples": 2
+    }
+  },
+  {
+    "id": "teach-003",
+    "category": "grammar",
+    "anchor_text": "have seen",
+    "current_sentence": "I have seen him yesterday.",
+    "paragraph_context": "I have seen him yesterday. We talked about the project.",
+    "user_current_text": "I have seen him yesterday.",
+    "rubric": {
+      "mentions_fragment_or_sentence": true,
+      "correction_differs_from_anchor": true,
+      "min_examples": 2
+    }
+  },
+  {
+    "id": "teach-004",
+    "category": "grammar",
+    "anchor_text": "informations",
+    "current_sentence": "There are many informations online.",
+    "paragraph_context": "There are many informations online. Students should check the source.",
+    "user_current_text": "There are many informations online.",
+    "rubric": {
+      "mentions_fragment_or_sentence": true,
+      "correction_differs_from_anchor": true,
+      "min_examples": 2
+    }
+  },
+  {
+    "id": "teach-005",
+    "category": "grammar",
+    "anchor_text": "are",
+    "current_sentence": "The list of items are on the desk.",
+    "paragraph_context": "The list of items are on the desk. Please review it before noon.",
+    "user_current_text": "The list of items are on the desk.",
+    "rubric": {
+      "mentions_fragment_or_sentence": true,
+      "correction_differs_from_anchor": true,
+      "min_examples": 2
+    }
+  }
+]

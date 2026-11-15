@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { WRITING_TYPE_LABELS } from "@/features/essays/essay-dialogs";
 import { createGrammarExtension } from "@/features/editor/grammar/grammar-extension";
+import { GrammarHoverCard } from "@/features/editor/grammar/grammar-hover-card";
 import { TeachingCard } from "@/features/editor/grammar/teaching-card";
 import { useGrammar } from "@/features/editor/grammar/use-grammar";
 import { OutlinePanel } from "@/features/editor/outline-panel";
@@ -111,7 +112,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     autosaveRef.current = autosave;
   }, [autosave]);
 
-  const grammar = useGrammar({ essayId, editor, session: activeSession, autosave });
+  const grammar = useGrammar({ essayId, editor, session: activeSession, autosave, applyContent });
 
   // Initialize once per essay when both the editor and the document are ready.
   useEffect(() => {
@@ -250,32 +251,9 @@ export function WritingEditor({ essayId }: { essayId: string }) {
         >
           History
         </button>
-        {activeSession?.enabled_features.realtime_grammar && (
-          <>
-            <button
-              type="button"
-              data-testid="check-now"
-              onClick={() => grammar.checkNow()}
-              disabled={grammar.checking}
-              className={toolbarButton}
-            >
-              {grammar.checking ? "Checking…" : "Check now"}
-            </button>
-            <span
-              data-testid="issue-count"
-              className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
-            >
-              {grammar.issueCount} issues
-            </span>
-          </>
-        )}
       </header>
 
-      <SessionControls
-        essayId={essayId}
-        serverRevision={autosave.serverRevision}
-        saveStatus={autosave.status}
-      />
+      <SessionControls essayId={essayId} />
 
       {autosave.status === "conflict" && (
         <div
@@ -345,6 +323,20 @@ export function WritingEditor({ essayId }: { essayId: string }) {
 
         <div className="min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl px-6 py-6">
+            {essay.question_prompt && (
+              <section
+                aria-label="Essay question"
+                data-testid="question-section"
+                className="mb-5 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900"
+              >
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                  Question
+                </h2>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
+                  {essay.question_prompt}
+                </p>
+              </section>
+            )}
             <div className="mb-4 flex flex-wrap items-center gap-1 border-b border-zinc-100 pb-2 dark:border-zinc-900">
               <button type="button" aria-label="Undo" data-testid="undo" disabled={!canUndo} onClick={() => { ensureFocus(); editor?.chain().undo().run(); }} className={toolbarButton}>
                 Undo
@@ -379,6 +371,9 @@ export function WritingEditor({ essayId }: { essayId: string }) {
 
       <footer className="flex items-center gap-4 border-t border-zinc-200 px-4 py-1.5 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
         <span data-testid="word-count">{wordCount} words</span>
+        {activeSession?.enabled_features.realtime_grammar && (
+          <span data-testid="issue-count">{grammar.issueCount} issues</span>
+        )}
         <span
           data-testid="save-status"
           className={
@@ -406,6 +401,16 @@ export function WritingEditor({ essayId }: { essayId: string }) {
           saveStatus={autosave.status}
           onClose={() => setHistoryOpen(false)}
           onRestored={handleRestored}
+        />
+      )}
+
+      {grammar.hoverCard && (
+        <GrammarHoverCard
+          state={grammar.hoverCard}
+          onRevealAnswer={grammar.revealAnswer}
+          onTeach={grammar.teachFromCard}
+          onMouseEnter={grammar.onCardMouseEnter}
+          onMouseLeave={grammar.onCardMouseLeave}
         />
       )}
 

@@ -106,3 +106,77 @@ def check_client_values(
         details.append({"field": "word_count", "reason": "does not match content_json"})
     if details:
         raise ApiError(422, "VALIDATION_ERROR", "Document fields are inconsistent.", details)
+
+
+def replace_text_range(content_json: dict, start: int, end: int, replacement: str) -> dict:
+    """Replace a unicode_codepoint range of the document text with replacement.
+
+    Used for server-side suggestion acceptance: the applied text comes from the
+    stored suggestion, never from arbitrary client input. Structure and marks
+    outside the range are preserved; hardBreaks inside the range are removed.
+    Python str indices are code points, matching offset_unit.
+    """
+    if start < 0 or end <= start:
+        raise ApiError(422, "VALIDATION_ERROR", "Invalid replacement range.")
+    total_length = len(_node_text(content_json))
+    if end > total_length:
+        raise ApiError(422, "VALIDATION_ERROR", "Replacement range is outside the document text.")
+    counter = [0]
+    inserted = [False]
+
+    def transform(node: dict) -> list[dict]:
+        node_type = node.get("type")
+        if node_type == "text":
+            text = node.get("text", "")
+            node_start, node_end = counter[0], counter[0] + len(text)
+            counter[0] = node_end
+            if node_end <= start or node_start >= end:
+                return [node]
+            pre = text[: max(0, start - node_start)]
+            post = text[max(0, min(len(text), end - node_start)) :]
+            out: list[dict] = []
+            if pre:
+                out.append({**node, "text": pre})
+            if not inserted[0] and node_start <= start < node_end:
+                if replacement:
+                    out.append({"type": "text", "text": replacement})
+                inserted[0] = True
+            if post:
+                out.append({**node, "text": post})
+            return out
+        if node_type == "hardBreak":
+            node_start, node_end = counter[0], counter[0] + 1
+            counter[0] = node_end
+            if node_end <= start or node_start >= end:
+                return [node]
+            out = []
+            if not inserted[0] and node_start <= start < node_end:
+                if replacement:
+                    out.append({"type": "text", "text": replacement})
+                inserted[0] = True
+            return out
+        # Block separators contribute code points exactly as derive_text does.
+        if node_type in ("doc", "blockquote"):
+            separator = 2
+        elif node_type in ("bulletList", "orderedList"):
+            separator = 1
+        else:
+            separator = 0
+        new_children: list[dict] = []
+        for index, child in enumerate(node.get("content") or []):
+            if index > 0 and separator:
+                sep_start, sep_end = counter[0], counter[0] + separator
+                if start < sep_end and end > sep_start:
+                    raise ApiError(
+                        422,
+                        "VALIDATION_ERROR",
+                        "Replacement range crosses a paragraph boundary.",
+                    )
+                counter[0] = sep_end
+            new_children.extend(transform(child))
+        return [{**node, "content": new_children}]
+
+    result = transform(content_json)
+    if not inserted[0]:
+        raise ApiError(422, "VALIDATION_ERROR", "Replacement range is outside the document text.")
+    return result[0]
