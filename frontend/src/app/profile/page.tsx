@@ -37,10 +37,10 @@ function ProfileContent() {
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Your profile
+            个人中心
           </h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Signed in as <span data-testid="profile-email">{user?.email}</span>
+            当前登录：<span data-testid="profile-email">{user?.email}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -48,7 +48,7 @@ function ProfileContent() {
             href="/dashboard"
             className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
           >
-            Dashboard
+            我的作文
           </Link>
           <button
             type="button"
@@ -59,59 +59,59 @@ function ProfileContent() {
             }}
             className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
           >
-            Refresh data
+            刷新数据
           </button>
           <button
             type="button"
             onClick={() => void handleLogout()}
             className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
           >
-            Sign out
+            退出登录
           </button>
         </div>
       </header>
 
       <section
-        aria-label="Account details"
+        aria-label="账号信息"
         className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950"
       >
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-          Account
+          账号
         </h2>
-        {meQuery.isPending && <p className="mt-3 text-sm text-zinc-500">Loading profile…</p>}
+        {meQuery.isPending && <p className="mt-3 text-sm text-zinc-500">资料加载中…</p>}
         {meQuery.isError && (
           <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
-            Could not load your profile.
+            无法加载个人资料。
           </p>
         )}
         {me && (
           <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-zinc-500 dark:text-zinc-400">Display name</dt>
+              <dt className="text-zinc-500 dark:text-zinc-400">昵称</dt>
               <dd className="font-medium text-zinc-900 dark:text-zinc-100" data-testid="display-name">
                 {me.profile.display_name ?? "—"}
               </dd>
             </div>
             <div>
-              <dt className="text-zinc-500 dark:text-zinc-400">Status</dt>
+              <dt className="text-zinc-500 dark:text-zinc-400">状态</dt>
               <dd className="font-medium text-zinc-900 dark:text-zinc-100">{me.status}</dd>
             </div>
             <div>
-              <dt className="text-zinc-500 dark:text-zinc-400">Native language</dt>
+              <dt className="text-zinc-500 dark:text-zinc-400">母语</dt>
               <dd className="font-medium text-zinc-900 dark:text-zinc-100">{me.profile.native_language}</dd>
             </div>
             <div>
-              <dt className="text-zinc-500 dark:text-zinc-400">Target exam</dt>
+              <dt className="text-zinc-500 dark:text-zinc-400">目标考试</dt>
               <dd className="font-medium text-zinc-900 dark:text-zinc-100">{me.profile.target_exam ?? "—"}</dd>
             </div>
             <div>
-              <dt className="text-zinc-500 dark:text-zinc-400">Email verified</dt>
+              <dt className="text-zinc-500 dark:text-zinc-400">邮箱验证</dt>
               <dd className="font-medium text-zinc-900 dark:text-zinc-100">
-                {me.email_verified_at ? "Yes" : "Not yet"}
+                {me.email_verified_at ? "已验证" : "未验证"}
               </dd>
             </div>
             <div>
-              <dt className="text-zinc-500 dark:text-zinc-400">Member since</dt>
+              <dt className="text-zinc-500 dark:text-zinc-400">注册时间</dt>
               <dd className="font-medium text-zinc-900 dark:text-zinc-100">
                 {new Date(me.created_at).toLocaleDateString()}
               </dd>
@@ -127,16 +127,16 @@ function ProfileContent() {
       <PrivacyCard />
 
       <section
-        aria-label="Device sessions"
+        aria-label="设备会话"
         className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950"
       >
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-          Device sessions
+          设备会话
         </h2>
-        {sessionsQuery.isPending && <p className="mt-3 text-sm text-zinc-500">Loading sessions…</p>}
+        {sessionsQuery.isPending && <p className="mt-3 text-sm text-zinc-500">会话加载中…</p>}
         {sessionsQuery.isError && (
           <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
-            Could not load your sessions.
+            无法加载设备会话。
           </p>
         )}
         {sessions && (
@@ -148,15 +148,15 @@ function ProfileContent() {
               >
                 <div className="min-w-0">
                   <p className="truncate font-medium text-zinc-900 dark:text-zinc-100">
-                    {session.ip_address ?? "Unknown IP"}
+                    {session.ip_address ?? "未知 IP"}
                     {session.is_current && (
                       <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                        This device
+                        本机
                       </span>
                     )}
                   </p>
                   <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-                    Started {new Date(session.created_at).toLocaleString()}
+                    登录于 {new Date(session.created_at).toLocaleString()}
                   </p>
                 </div>
               </li>

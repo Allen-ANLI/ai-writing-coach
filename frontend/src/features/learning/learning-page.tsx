@@ -1,9 +1,8 @@
 "use client";
 
 /**
- * Learning Center (PRD FR-05/FR-07, API Spec §10–11): spaced-repetition
- * translation practice (Chinese prompt → English answer), summary stats and
- * the personal weakness profile. Scheduling is server-side SM-2.
+ * 学习中心（PRD FR-05/FR-07，API Spec §10–11）：间隔重复翻译练习
+ * （中文提示 → 英文作答）、统计摘要与个人弱项画像。调度由服务端 SM-2 决定。
  */
 
 import { useState } from "react";
@@ -13,6 +12,29 @@ import { dueReviews, learningSummary, submitReview, weaknesses } from "@/service
 import { createWorkflow, getWorkflow, resumeWorkflow } from "@/services/workflows";
 import type { ReviewPrompt, ReviewResultData, StudyPlanResult } from "@/types/api";
 import { PlansCard } from "@/features/learning/plans-card";
+
+const CATEGORY_LABELS: Record<string, string> = {
+  grammar: "语法",
+  spelling: "拼写",
+  vocabulary: "词汇",
+  collocation: "搭配",
+  naturalness: "地道性",
+  style: "风格",
+};
+
+const TASK_TYPE_LABELS: Record<string, string> = {
+  review: "复习",
+  practice: "练习",
+  writing: "写作",
+};
+
+const WORKFLOW_STATUS_LABELS: Record<string, string> = {
+  running: "运行中",
+  awaiting_confirmation: "等待确认",
+  completed: "已完成",
+  failed: "失败",
+  cancelled: "已取消",
+};
 
 export function LearningPage() {
   const queryClient = useQueryClient();
@@ -53,7 +75,7 @@ export function LearningPage() {
       setPlannerWorkflowId(response.data.workflow_id);
       setPlannerError(null);
     },
-    onError: (err) => setPlannerError(err instanceof Error ? err.message : "Could not start planner."),
+    onError: (err) => setPlannerError(err instanceof Error ? err.message : "无法启动学习规划。"),
   });
 
   const resumePlanner = useMutation({
@@ -65,7 +87,7 @@ export function LearningPage() {
       void queryClient.invalidateQueries({ queryKey: ["learning-plans"] });
       void queryClient.invalidateQueries({ queryKey: ["learning-tasks"] });
     },
-    onError: (err) => setPlannerError(err instanceof Error ? err.message : "Action failed."),
+    onError: (err) => setPlannerError(err instanceof Error ? err.message : "操作失败。"),
   });
 
   const planner = plannerQuery.data ?? null;
@@ -76,7 +98,7 @@ export function LearningPage() {
   const reviewMutation = useMutation({
     mutationFn: async () => {
       if (!current) {
-        throw new Error("No review available.");
+        throw new Error("没有可复习的内容。");
       }
       return (await submitReview(current.expression_id, answer.trim())).data;
     },
@@ -87,7 +109,7 @@ export function LearningPage() {
       void queryClient.invalidateQueries({ queryKey: ["learning-summary"] });
       void queryClient.invalidateQueries({ queryKey: ["weaknesses"] });
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "Review failed."),
+    onError: (err) => setError(err instanceof Error ? err.message : "复习提交失败。"),
   });
 
   const nextReview = () => {
@@ -100,44 +122,43 @@ export function LearningPage() {
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-10">
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-        Learning Center
+        学习中心
       </h1>
       <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-        Translate from Chinese; any natural correct English is accepted. Spaced repetition
-        schedules your reviews.
+        看中文写英文，任何自然正确的英文答案都会被接受。间隔重复为你安排复习。
       </p>
 
       {summary && (
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="learning-summary">
           <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-            <p className="text-xs text-zinc-500">Expressions</p>
+            <p className="text-xs text-zinc-500">表达总数</p>
             <p className="text-xl font-semibold">{summary.total_expressions}</p>
           </div>
           <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-            <p className="text-xs text-zinc-500">Due now</p>
+            <p className="text-xs text-zinc-500">待复习</p>
             <p className="text-xl font-semibold" data-testid="due-count">{summary.due_now}</p>
           </div>
           <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-            <p className="text-xs text-zinc-500">Mastered</p>
+            <p className="text-xs text-zinc-500">已掌握</p>
             <p className="text-xl font-semibold">{summary.mastered}</p>
           </div>
           <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-            <p className="text-xs text-zinc-500">Reviewed today</p>
+            <p className="text-xs text-zinc-500">今日已复习</p>
             <p className="text-xl font-semibold">{summary.reviewed_today}</p>
           </div>
         </div>
       )}
 
-      <section className="mt-8" aria-label="Translation practice">
+      <section className="mt-8" aria-label="翻译练习">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
-          Practice
+          翻译练习
         </h2>
 
-        {dueQuery.isPending && <p className="mt-3 text-sm text-zinc-500">Loading reviews…</p>}
+        {dueQuery.isPending && <p className="mt-3 text-sm text-zinc-500">复习加载中…</p>}
 
         {!dueQuery.isPending && !current && !result && (
           <p data-testid="no-reviews" className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
-            Nothing due right now. Collect expressions from the editor or knowledge base.
+            当前没有待复习内容。去编辑器或知识库收集表达吧。
           </p>
         )}
 
@@ -151,13 +172,13 @@ export function LearningPage() {
             }}
           >
             <p className="text-xs text-zinc-400">
-              {current.topic ?? "General"} · review #{current.review_count + 1}
+              {current.topic ?? "综合"} · 第 {current.review_count + 1} 次复习
             </p>
             <p className="mt-2 text-lg font-medium text-zinc-900 dark:text-zinc-100" data-testid="review-prompt">
-              {current.chinese_meaning ?? current.usage_context ?? "Translate this expression"}
+              {current.chinese_meaning ?? current.usage_context ?? "翻译这个表达"}
             </p>
             <label className="mt-3 block text-sm">
-              <span className="text-xs font-medium text-zinc-500">Your English translation</span>
+              <span className="text-xs font-medium text-zinc-500">你的英文翻译</span>
               <input
                 data-testid="review-answer"
                 value={answer}
@@ -178,7 +199,7 @@ export function LearningPage() {
               disabled={reviewMutation.isPending || answer.trim() === ""}
               className="mt-3 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
             >
-              {reviewMutation.isPending ? "Checking…" : "Check answer"}
+              {reviewMutation.isPending ? "判分中…" : "检查答案"}
             </button>
           </form>
         )}
@@ -195,16 +216,16 @@ export function LearningPage() {
                   : "text-red-600 dark:text-red-400"
               }`}
             >
-              {result.is_correct ? "Correct — well done." : "Not quite."}
+              {result.is_correct ? "正确 — 做得好。" : "还差一点。"}
             </p>
             <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
-              Reference: <strong>{result.reference_expression}</strong>
+              参考表达：<strong>{result.reference_expression}</strong>
             </p>
             {result.feedback && (
               <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{result.feedback}</p>
             )}
             <p className="mt-1 text-xs text-zinc-400">
-              Next review in {result.interval_days} day(s) · streak {result.streak_count}
+              下次复习：{result.interval_days} 天后 · 连续正确 {result.streak_count} 次
             </p>
             <button
               type="button"
@@ -212,19 +233,19 @@ export function LearningPage() {
               onClick={nextReview}
               className="mt-3 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900"
             >
-              Next review
+              下一个
             </button>
           </div>
         )}
       </section>
 
-      <section className="mt-8" aria-label="Weakness profile">
+      <section className="mt-8" aria-label="弱项画像">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
-          Your recurring weaknesses
+          你的高频弱项
         </h2>
         {weaknessQuery.data && weaknessQuery.data.length === 0 && (
           <p className="mt-3 text-sm text-zinc-500">
-            No recurring weaknesses detected yet — keep writing.
+            暂未发现高频弱项 — 继续写作吧。
           </p>
         )}
         <ul className="mt-3 space-y-2" data-testid="weakness-list">
@@ -234,11 +255,11 @@ export function LearningPage() {
               className="flex items-center justify-between rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-800"
             >
               <span className="font-medium text-zinc-800 dark:text-zinc-200">
-                {weakness.category}
+                {CATEGORY_LABELS[weakness.category] ?? weakness.category}
                 {weakness.sub_category ? ` · ${weakness.sub_category}` : ""}
               </span>
               <span className="text-xs text-zinc-500">
-                {weakness.total_occurrences} occurrence{weakness.total_occurrences === 1 ? "" : "s"}
+                出现 {weakness.total_occurrences} 次
               </span>
             </li>
           ))}
@@ -247,24 +268,23 @@ export function LearningPage() {
 
       <PlansCard />
 
-      <section className="mt-8" aria-label="Study planner" data-testid="study-planner">
+      <section className="mt-8" aria-label="学习规划" data-testid="study-planner">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
-          Personalized study planner
+          个性化学习规划
         </h2>
         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          An AI workflow combines your weakness profile and mastery status into study
-          suggestions. Nothing is saved until you confirm.
+          AI 工作流结合你的弱项画像与掌握情况给出学习建议。确认前不会保存任何内容。
         </p>
 
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <label className="text-sm">
-            <span className="text-xs font-medium text-zinc-500">Goal (optional)</span>
+            <span className="text-xs font-medium text-zinc-500">目标（可选）</span>
             <input
               data-testid="planner-goal"
               value={plannerGoal}
               onChange={(event) => setPlannerGoal(event.target.value)}
               maxLength={200}
-              placeholder="e.g. Reach band 7 in three months"
+              placeholder="例如：三个月内达到 7 分"
               className="mt-1 block w-64 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
             />
           </label>
@@ -275,7 +295,7 @@ export function LearningPage() {
             onClick={() => startPlanner.mutate()}
             className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
-            {startPlanner.isPending || planner?.status === "running" ? "Planning…" : "Generate study plan"}
+            {startPlanner.isPending || planner?.status === "running" ? "规划中…" : "生成学习计划"}
           </button>
         </div>
 
@@ -285,8 +305,8 @@ export function LearningPage() {
 
         {planner && (
           <p className="mt-2 text-xs text-zinc-400" data-testid="plan-status">
-            Status: {planner.status}
-            {planner.current_step ? ` · step: ${planner.current_step}` : ""}
+            状态：{WORKFLOW_STATUS_LABELS[planner.status] ?? planner.status}
+            {planner.current_step ? ` · 步骤：${planner.current_step}` : ""}
           </p>
         )}
         {planner?.status === "failed" && (
@@ -296,13 +316,13 @@ export function LearningPage() {
         {planner?.status === "awaiting_confirmation" && studyPlan && (
           <div className="mt-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
             <p className="text-xs font-medium text-zinc-500">
-              Focus: {studyPlan.focus_areas.join(", ")}
+              重点：{studyPlan.focus_areas.join("、")}
             </p>
             <ul className="mt-2 space-y-2" data-testid="plan-suggestions">
               {studyPlan.suggestions.map((suggestion, index) => (
                 <li key={`${suggestion.title}-${index}`} className="text-sm">
                   <p className="font-medium text-zinc-800 dark:text-zinc-200">
-                    [{suggestion.task_type}] {suggestion.title}
+                    [{TASK_TYPE_LABELS[suggestion.task_type] ?? suggestion.task_type}] {suggestion.title}
                   </p>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400">{suggestion.description}</p>
                 </li>
@@ -316,7 +336,7 @@ export function LearningPage() {
                 onClick={() => resumePlanner.mutate("confirm")}
                 className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
               >
-                Confirm plan
+                确认计划
               </button>
               <button
                 type="button"
@@ -325,7 +345,7 @@ export function LearningPage() {
                 onClick={() => resumePlanner.mutate("reject")}
                 className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
               >
-                Reject
+                拒绝
               </button>
             </div>
           </div>
@@ -335,8 +355,8 @@ export function LearningPage() {
           <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400" data-testid="plan-done">
             {planner.result_json?.outcome &&
             (planner.result_json.outcome as Record<string, unknown>).rejected
-              ? "Plan rejected."
-              : "Plan confirmed — follow the suggestions in your practice."}
+              ? "计划已拒绝。"
+              : "计划已确认 — 按建议开始练习吧。"}
           </p>
         )}
       </section>

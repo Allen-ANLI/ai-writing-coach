@@ -887,6 +887,26 @@ export interface OutlineNodeResponse {
   meta?: RequestMeta;
 }
 
+// Conversational planner (ADR-024, contract 1.5.0)
+
+export interface PlannerChatMessageData {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  outline_id: string | null;
+  created_at: string;
+}
+
+export interface PlannerChatResponse {
+  data: { message: PlannerChatMessageData; outline: OutlineDetailData | null };
+  meta?: RequestMeta;
+}
+
+export interface PlannerMessagesResponse {
+  data: { items: PlannerChatMessageData[] };
+  meta?: RequestMeta;
+}
+
 // Workflows (Slice 8, API Spec §15)
 
 export type WorkflowType = "writing_planner" | "learning_extractor" | "personalized_study_planner";

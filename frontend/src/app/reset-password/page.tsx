@@ -24,7 +24,7 @@ function ResetPasswordForm() {
       setDone(true);
       setTimeout(() => router.replace("/login"), 1500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Reset failed.");
+      setError(err instanceof Error ? err.message : "重置失败，请稍后重试。");
     } finally {
       setPending(false);
     }
@@ -33,7 +33,7 @@ function ResetPasswordForm() {
   if (!token) {
     return (
       <p className="text-sm text-red-600 dark:text-red-400" data-testid="reset-no-token">
-        This reset link is missing its token. Request a new one from the sign-in page.
+        该重置链接缺少令牌。请从登录页重新申请。
       </p>
     );
   }
@@ -41,7 +41,7 @@ function ResetPasswordForm() {
   if (done) {
     return (
       <p className="text-sm text-emerald-600 dark:text-emerald-400" data-testid="reset-done">
-        Password updated. Redirecting to sign in…
+        密码已更新，正在跳转到登录页…
       </p>
     );
   }
@@ -49,7 +49,7 @@ function ResetPasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4" data-testid="reset-form">
       <label className="block text-sm">
-        <span className="text-xs font-medium text-zinc-500">New password (min 10 characters)</span>
+        <span className="text-xs font-medium text-zinc-500">新密码（至少 10 个字符）</span>
         <input
           type="password"
           required
@@ -71,7 +71,7 @@ function ResetPasswordForm() {
         disabled={pending}
         className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
       >
-        {pending ? "Updating…" : "Set new password"}
+        {pending ? "更新中…" : "设置新密码"}
       </button>
     </form>
   );
@@ -82,14 +82,14 @@ export default function ResetPasswordPage() {
     <main className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-16">
       <div className="text-center">
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Choose a new password
+          设置新密码
         </h1>
       </div>
-      <Suspense fallback={<p className="text-sm text-zinc-500">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-zinc-500">加载中…</p>}>
         <ResetPasswordForm />
       </Suspense>
       <Link href="/login" className="text-sm text-zinc-500 underline dark:text-zinc-400">
-        Back to sign in
+        返回登录
       </Link>
     </main>
   );

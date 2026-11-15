@@ -1,0 +1,188 @@
+"""Conversational planner (ADR-024): chat with the agent to agree on and
+revise the essay outline from the editor's left panel.
+
+The LLM call happens OUTSIDE any DB transaction (AGENTS §4). Proposed and
+revised outlines are stored as regular writing_outlines drafts via
+service.save_generated_outline, so confirmation, ghost hints and ownership
+rules are reused unchanged. Every call is quota-guarded and usage-logged.
+"""
+
+import json
+import uuid
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.ai import llm
+from app.ai.prompts.registry import get_prompt
+from app.ai.providers.base import LlmUsage
+from app.ai.schemas import PlannerChatResult
+from app.core.config import get_settings
+from app.core.exceptions import ApiError
+from app.core.time import utcnow
+from app.modules.billing import service as billing_service
+from app.modules.essays.service import get_essay
+from app.modules.expressions import knowledge
+from app.modules.outlines import service
+from app.modules.outlines.models import OutlineChatMessage, WritingOutline
+from app.modules.users.models import User
+
+HISTORY_WINDOW = 20
+
+
+def list_messages(db: Session, user: User, essay_id: uuid.UUID) -> list[OutlineChatMessage]:
+    get_essay(db, user, essay_id)
+    rows = db.execute(
+        select(OutlineChatMessage)
+        .where(OutlineChatMessage.essay_id == essay_id, OutlineChatMessage.user_id == user.id)
+        .order_by(OutlineChatMessage.created_at.asc())
+        .limit(200)
+    ).scalars()
+    return list(rows)
+
+
+def _current_confirmed(db: Session, essay_id: uuid.UUID) -> WritingOutline | None:
+    return db.execute(
+        select(WritingOutline)
+        .where(WritingOutline.essay_id == essay_id, WritingOutline.status == "confirmed")
+        .order_by(WritingOutline.version_no.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def _outline_json(outline: WritingOutline | None) -> str:
+    if outline is None:
+        return "(none)"
+    sections = []
+    for section in sorted(
+        (n for n in outline.nodes if n.parent_id is None), key=lambda n: n.sort_order
+    ):
+        paragraphs = []
+        for paragraph in sorted(
+            (n for n in outline.nodes if n.parent_id == section.id), key=lambda n: n.sort_order
+        ):
+            ideas = [
+                n.title
+                for n in sorted(
+                    (n for n in outline.nodes if n.parent_id == paragraph.id),
+                    key=lambda n: n.sort_order,
+                )
+            ]
+            paragraphs.append({"title": paragraph.title, "sentence_ideas": ideas})
+        sections.append({"title": section.title, "paragraphs": paragraphs})
+    return json.dumps(
+        {"thesis_statement": outline.thesis_statement, "sections": sections}, ensure_ascii=False
+    )
+
+
+def _create_draft(
+    db: Session, user: User, essay_id: uuid.UUID, result: PlannerChatResult
+) -> WritingOutline:
+    next_no = (
+        db.execute(
+            select(func.coalesce(func.max(WritingOutline.version_no), 0)).where(
+                WritingOutline.essay_id == essay_id
+            )
+        ).scalar_one()
+        + 1
+    )
+    outline = WritingOutline(
+        essay_id=essay_id,
+        user_id=user.id,
+        version_no=next_no,
+        status="generating",
+        source_context={"source": "planner_chat"},
+        created_at=utcnow(),
+        updated_at=utcnow(),
+    )
+    db.add(outline)
+    db.flush()
+    service.save_generated_outline(
+        db,
+        outline,
+        result.outline.thesis_statement,
+        [section.model_dump() for section in result.outline.sections],
+    )
+    return outline
+
+
+def send_message(
+    db: Session, user: User, essay_id: uuid.UUID, message: str
+) -> tuple[OutlineChatMessage, WritingOutline | None]:
+    essay = get_essay(db, user, essay_id)
+    billing_service.guard_ai_call(db, user.id)
+
+    history = list_messages(db, user, essay_id)[-HISTORY_WINDOW:]
+    confirmed = _current_confirmed(db, essay_id)
+    history_text = "\n".join(f"{m.role}: {m.content}" for m in history) or "(empty)"
+    recalled = knowledge.semantic_candidates(db, user.id, message, limit=5)
+    previously_learned = "; ".join(e.english_text for e in recalled) or "(none)"
+
+    user_message = OutlineChatMessage(
+        essay_id=essay.id, user_id=user.id, role="user", content=message, created_at=utcnow()
+    )
+    db.add(user_message)
+    db.commit()  # no transaction held during the LLM call
+
+    prompt = get_prompt("planner_chat", "v1")
+    user_prompt = prompt.user_template.format(
+        question_prompt=essay.question_prompt or "(free writing)",
+        current_outline=_outline_json(confirmed),
+        history=history_text,
+        user_message=message,
+        previously_learned=previously_learned,
+    )
+    try:
+        result, usage = llm.call_llm(
+            system=prompt.system, user=user_prompt, response_model=PlannerChatResult
+        )
+    except ApiError:
+        llm.record_usage(
+            db,
+            user_id=user.id,
+            feature="planner_chat",
+            usage=_error_usage(),
+            prompt_version=prompt.version,
+            status="error",
+        )
+        db.commit()
+        raise
+
+    outline: WritingOutline | None = None
+    if result.action in ("propose", "revise") and result.outline is not None:
+        outline = _create_draft(db, user, essay.id, result)
+
+    assistant_message = OutlineChatMessage(
+        essay_id=essay.id,
+        user_id=user.id,
+        role="assistant",
+        content=result.reply,
+        outline_id=outline.id if outline is not None else None,
+        created_at=utcnow(),
+    )
+    db.add(assistant_message)
+    llm.record_usage(
+        db,
+        user_id=user.id,
+        feature="planner_chat",
+        usage=usage,
+        prompt_version=prompt.version,
+        status="success",
+    )
+    db.commit()
+    db.refresh(assistant_message)
+    if outline is not None:
+        db.refresh(outline)
+    return assistant_message, outline
+
+
+def _error_usage() -> LlmUsage:
+    settings = get_settings()
+    return LlmUsage(
+        provider=settings.llm_provider,
+        model_name=settings.llm_model,
+        input_tokens=0,
+        output_tokens=0,
+        latency_ms=0,
+        estimated_cost=0.0,
+    )

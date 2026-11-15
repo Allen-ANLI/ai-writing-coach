@@ -13,9 +13,9 @@ function uniqueEmail(): string {
 
 async function register(page: Page): Promise<void> {
   await page.goto("/register");
-  await page.getByLabel("Email").fill(uniqueEmail());
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("邮箱").fill(uniqueEmail());
+  await page.getByLabel("密码", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "注册账号" }).click();
   await expect(page).toHaveURL(/\/profile/);
 }
 
@@ -46,9 +46,9 @@ test("review flow: Chinese prompt, correct answer, scheduling feedback", async (
 
   const result = page.getByTestId("review-result");
   await expect(result).toBeVisible({ timeout: 15_000 });
-  await expect(result).toContainText("Correct");
+  await expect(result).toContainText("正确");
   await expect(result).toContainText("gain hands-on experience");
-  await expect(result).toContainText("Next review in");
+  await expect(result).toContainText("下次复习");
 
   await page.getByTestId("review-next").click();
   await expect(page.getByTestId("no-reviews")).toBeVisible({ timeout: 10_000 });
@@ -65,7 +65,7 @@ test("wrong answer shows reference and keeps the expression in rotation", async 
 
   const result = page.getByTestId("review-result");
   await expect(result).toBeVisible({ timeout: 15_000 });
-  await expect(result).toContainText("Reference:");
+  await expect(result).toContainText("参考表达：");
   await expect(result).toContainText("gain hands-on experience");
 });
 

@@ -92,3 +92,33 @@ class OutlineNode(Base):
     event_metadata: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
 
     outline: Mapped[WritingOutline] = relationship(back_populates="nodes")
+
+
+class OutlineChatMessage(Base):
+    """Conversational planner history (ADR-024, migration 0018).
+
+    The learner chats with the planning agent in the editor's left panel;
+    assistant messages may link the outline draft they proposed.
+    """
+
+    __tablename__ = "outline_chat_messages"
+    __table_args__ = (
+        CheckConstraint("role IN ('user', 'assistant')", name="ck_outline_chat_messages_role"),
+        ForeignKeyConstraint(
+            ["essay_id", "user_id"],
+            ["essays.id", "essays.user_id"],
+            name="fk_outline_chat_messages_same_owner",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    essay_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("essays.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    outline_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("writing_outlines.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )

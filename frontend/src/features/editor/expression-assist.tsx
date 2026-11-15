@@ -171,7 +171,7 @@ export function ExpressionAssist({
               ...previous,
               loading: false,
               error:
-                error instanceof ApiClientError ? error.message : "Assistance is unavailable.",
+                error instanceof ApiClientError ? error.message : "表达辅助暂时不可用。",
             }
           : previous,
       );
@@ -217,7 +217,7 @@ export function ExpressionAssist({
                 error:
                   error instanceof ApiClientError
                     ? error.message
-                    : "Could not apply the expression.",
+                    : "无法应用该表达。",
               }
             : previous,
         );
@@ -252,7 +252,7 @@ export function ExpressionAssist({
               error:
                 error instanceof ApiClientError
                   ? error.message
-                  : "Could not save to the knowledge base.",
+                  : "无法保存到知识库。",
             }
           : previous,
       );
@@ -274,11 +274,11 @@ export function ExpressionAssist({
     >
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-          {assist.mode === "polish" ? "Improve expression" : "Translate to English"}
+          {assist.mode === "polish" ? "表达润色" : "中译英"}
         </p>
         <button
           type="button"
-          aria-label="Close expression assistance"
+          aria-label="关闭表达辅助"
           data-testid="close-expression-assist"
           onClick={() => setAssist(null)}
           className="rounded px-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
@@ -296,10 +296,10 @@ export function ExpressionAssist({
           className="mt-2 w-full rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
         >
           {assist.loading
-            ? "Thinking…"
+            ? "思考中…"
             : assist.mode === "polish"
-              ? `Suggest better wording for “${assist.selectedText.slice(0, 40)}”`
-              : `Translate “${assist.selectedText.slice(0, 40)}”`}
+              ? `为“${assist.selectedText.slice(0, 40)}”推荐更地道的写法`
+              : `翻译“${assist.selectedText.slice(0, 40)}”`}
         </button>
       )}
 
@@ -328,7 +328,7 @@ export function ExpressionAssist({
                       data-testid="previously-learned-badge"
                       className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:bg-sky-950 dark:text-sky-300"
                     >
-                      Previously learned
+                      曾学过
                     </span>
                   )}
                 </span>
@@ -351,11 +351,11 @@ export function ExpressionAssist({
       {assist.acceptedItem && (
         <div className="mt-2" data-testid="expression-accepted">
           <p className="text-xs text-emerald-700 dark:text-emerald-400">
-            Applied: <strong>{assist.acceptedItem.english_text}</strong>
+            已应用：<strong>{assist.acceptedItem.english_text}</strong>
           </p>
           {assist.savedToKb ? (
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              Saved to your knowledge base.
+              已保存到知识库。
             </p>
           ) : (
             <button
@@ -364,7 +364,7 @@ export function ExpressionAssist({
               onClick={() => void saveToKnowledgeBase()}
               className="mt-2 rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
-              Add to knowledge base
+              加入知识库
             </button>
           )}
         </div>

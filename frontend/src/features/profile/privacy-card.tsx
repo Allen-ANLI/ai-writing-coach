@@ -31,7 +31,7 @@ export function PrivacyCard() {
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Export failed.");
+      setError(err instanceof Error ? err.message : "导出失败，请稍后重试。");
     } finally {
       setBusy(false);
     }
@@ -45,19 +45,19 @@ export function PrivacyCard() {
       await logout();
       router.replace("/login");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Deletion failed.");
+      setError(err instanceof Error ? err.message : "删除失败，请稍后重试。");
       setBusy(false);
     }
   }
 
   return (
     <section
-      aria-label="Data and privacy"
+      aria-label="数据与隐私"
       className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950"
       data-testid="privacy-card"
     >
       <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-        Data & privacy
+        数据与隐私
       </h2>
       <div className="mt-3 flex flex-wrap gap-3">
         <button
@@ -67,7 +67,7 @@ export function PrivacyCard() {
           onClick={() => void handleExport()}
           className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
         >
-          Export my data (JSON)
+          导出我的数据（JSON）
         </button>
         {!confirming ? (
           <button
@@ -77,12 +77,12 @@ export function PrivacyCard() {
             onClick={() => setConfirming(true)}
             className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
           >
-            Delete account
+            注销账号
           </button>
         ) : (
           <span className="flex items-center gap-2" data-testid="delete-confirm">
             <span className="text-xs text-red-600 dark:text-red-400">
-              Permanently delete everything?
+              永久删除所有数据？
             </span>
             <button
               type="button"
@@ -91,7 +91,7 @@ export function PrivacyCard() {
               onClick={() => void handleDelete()}
               className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
             >
-              {busy ? "Deleting…" : "Yes, delete"}
+              {busy ? "删除中…" : "确认删除"}
             </button>
             <button
               type="button"
@@ -99,7 +99,7 @@ export function PrivacyCard() {
               onClick={() => setConfirming(false)}
               className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
             >
-              Cancel
+              取消
             </button>
           </span>
         )}

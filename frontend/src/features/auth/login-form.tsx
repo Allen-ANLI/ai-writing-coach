@@ -34,13 +34,13 @@ export function LoginForm() {
       if (caught instanceof ApiClientError) {
         setError(
           caught.code === "INVALID_CREDENTIALS"
-            ? "Invalid email or password."
+            ? "邮箱或密码错误。"
             : caught.code === "RATE_LIMIT_EXCEEDED"
-              ? "Too many attempts. Please try again later."
+              ? "尝试次数过多，请稍后再试。"
               : caught.message,
         );
       } else {
-        setError("Cannot reach the server. Please try again.");
+        setError("无法连接服务器，请稍后重试。");
       }
     } finally {
       setPending(false);
@@ -51,7 +51,7 @@ export function LoginForm() {
     <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4" noValidate={false}>
       <div>
         <label htmlFor="login-email" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Email
+          邮箱
         </label>
         <input
           id="login-email"
@@ -66,7 +66,7 @@ export function LoginForm() {
       </div>
       <div>
         <label htmlFor="login-password" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Password
+          密码
         </label>
         <input
           id="login-password"
@@ -89,7 +89,7 @@ export function LoginForm() {
         disabled={pending}
         className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
       >
-        {pending ? "Signing in…" : "Sign in"}
+        {pending ? "登录中…" : "登录"}
       </button>
     </form>
   );

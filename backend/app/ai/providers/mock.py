@@ -68,6 +68,13 @@ class MockProvider:
     ) -> LlmResult:
         started = time.monotonic()
         instance = build_mock_instance(response_model, user)
+        # Deterministic planner-chat special case: the generic builder picks
+        # the first Literal value ("discuss"), which would never propose an
+        # outline. E2E needs the propose path to exercise confirmation.
+        from app.ai.schemas import PlannerChatResult
+
+        if isinstance(instance, PlannerChatResult):
+            instance = instance.model_copy(update={"action": "propose"})
         content = instance.model_dump(mode="json")
         latency_ms = int((time.monotonic() - started) * 1000)
         serialized = json.dumps(content, ensure_ascii=False)

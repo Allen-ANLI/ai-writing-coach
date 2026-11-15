@@ -41,7 +41,7 @@ export function ExtractionDialog({
       })
       .catch(() => {
         if (!cancelled) {
-          setError("Extraction is unavailable right now.");
+          setError("表达提取暂时不可用，请稍后重试。");
         }
       });
     return () => {
@@ -93,7 +93,7 @@ export function ExtractionDialog({
   };
 
   return (
-    <Dialog title="Extract expressions" onClose={onClose}>
+    <Dialog title="提取表达" onClose={onClose}>
       {error && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}
@@ -102,18 +102,18 @@ export function ExtractionDialog({
 
       {!candidates && !error && (
         <p role="status" className="text-sm text-zinc-500">
-          Analyzing this version for expressions worth learning…
+          正在分析该版本中值得学习的表达…
         </p>
       )}
 
       {candidates && candidates.length === 0 && (
-        <p className="text-sm text-zinc-500">No extraction candidates found in this version.</p>
+        <p className="text-sm text-zinc-500">该版本没有可提取的表达。</p>
       )}
 
       {savedCount !== null ? (
         <div data-testid="extraction-saved">
           <p className="text-sm text-emerald-700 dark:text-emerald-400">
-            Saved {savedCount} expression{savedCount === 1 ? "" : "s"} to your knowledge base.
+            已将 {savedCount} 条表达保存到知识库。
           </p>
           <div className="mt-4 flex justify-end">
             <button
@@ -121,7 +121,7 @@ export function ExtractionDialog({
               onClick={onClose}
               className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900"
             >
-              Done
+              完成
             </button>
           </div>
         </div>
@@ -130,9 +130,9 @@ export function ExtractionDialog({
         candidates.length > 0 && (
           <div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Confirm before saving — select the expressions you want to keep.
+              保存前请确认 — 勾选你想保留的表达。
             </p>
-            <ul className="mt-3 max-h-72 space-y-2 overflow-y-auto" data-testid="extraction-candidates">
+            <ul className="awc-scroll mt-3 max-h-72 space-y-2 overflow-y-auto" data-testid="extraction-candidates">
               {candidates.map((candidate, index) => (
                 <li key={index}>
                   <label className="flex cursor-pointer items-start gap-2 rounded-md border border-zinc-200 p-2 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800">
@@ -164,7 +164,7 @@ export function ExtractionDialog({
                 onClick={onClose}
                 className="rounded-md px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
               >
-                Cancel
+                取消
               </button>
               <button
                 type="button"
@@ -173,7 +173,7 @@ export function ExtractionDialog({
                 onClick={() => void saveSelected()}
                 className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
               >
-                {saving ? "Saving…" : `Save selected (${selected.size})`}
+                {saving ? "保存中…" : `保存所选（${selected.size}）`}
               </button>
             </div>
           </div>

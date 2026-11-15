@@ -37,7 +37,7 @@ export function PreferencesCard() {
     },
     onError: (err, _payload, context) => {
       setSaved(false);
-      setError(err instanceof Error ? err.message : "Could not save preferences.");
+      setError(err instanceof Error ? err.message : "无法保存偏好设置。");
       if (context?.previous) {
         queryClient.setQueryData(["preferences"], context.previous);
       }
@@ -51,14 +51,14 @@ export function PreferencesCard() {
 
   return (
     <section
-      aria-label="Writing preferences"
+      aria-label="写作偏好"
       className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950"
       data-testid="preferences-card"
     >
       <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-        Writing preferences
+        写作偏好
       </h2>
-      {preferencesQuery.isPending && <p className="mt-3 text-sm text-zinc-500">Loading…</p>}
+      {preferencesQuery.isPending && <p className="mt-3 text-sm text-zinc-500">加载中…</p>}
       {preferences && (
         <div className="mt-3 space-y-3 text-sm">
           <label className="flex items-center gap-2">
@@ -69,7 +69,7 @@ export function PreferencesCard() {
               onChange={(event) => save.mutate({ auto_grammar_check: event.target.checked })}
               className="h-4 w-4"
             />
-            <span className="text-zinc-700 dark:text-zinc-300">Automatic grammar checking</span>
+            <span className="text-zinc-700 dark:text-zinc-300">自动语法检查</span>
           </label>
           <label className="flex items-center gap-2">
             <input
@@ -79,10 +79,10 @@ export function PreferencesCard() {
               onChange={(event) => save.mutate({ auto_expression_assist: event.target.checked })}
               className="h-4 w-4"
             />
-            <span className="text-zinc-700 dark:text-zinc-300">Expression assistance</span>
+            <span className="text-zinc-700 dark:text-zinc-300">表达辅助</span>
           </label>
           <label className="block">
-            <span className="text-xs font-medium text-zinc-500">Daily review goal</span>
+            <span className="text-xs font-medium text-zinc-500">每日复习目标</span>
             <input
               type="number"
               min={1}
@@ -97,7 +97,7 @@ export function PreferencesCard() {
             />
           </label>
           <label className="block">
-            <span className="text-xs font-medium text-zinc-500">UI language</span>
+            <span className="text-xs font-medium text-zinc-500">界面语言</span>
             <select
               data-testid="pref-language"
               value={preferences.ui_language}
@@ -110,7 +110,7 @@ export function PreferencesCard() {
           </label>
           {saved && !save.isPending && (
             <p className="text-xs text-emerald-600 dark:text-emerald-400" data-testid="pref-saved">
-              Preferences saved.
+              偏好已保存。
             </p>
           )}
           {error && (

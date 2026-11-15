@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.infrastructure.database import get_db
-from app.modules.outlines import processing, service
+from app.modules.outlines import chat, processing, service
 from app.modules.outlines.schemas import (
     CreateNodeRequest,
     GenerateOutlineRequest,
@@ -17,6 +17,9 @@ from app.modules.outlines.schemas import (
     OutlineResponse,
     PatchNodeRequest,
     PatchOutlineRequest,
+    PlannerChatRequest,
+    PlannerChatResponse,
+    PlannerMessagesResponse,
 )
 from app.modules.users.models import User
 from app.schemas.common import new_request_id
@@ -61,6 +64,34 @@ def list_outlines(
 ) -> OutlineListResponse:
     items = service.list_outlines(db, user, essay_id)
     return OutlineListResponse.model_validate(
+        {"data": {"items": items}, "meta": {"request_id": new_request_id()}}
+    )
+
+
+@router.post("/essays/{essay_id}/planner/chat", response_model=PlannerChatResponse)
+def planner_chat(
+    essay_id: uuid.UUID,
+    payload: PlannerChatRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PlannerChatResponse:
+    message, outline = chat.send_message(db, user, essay_id, payload.message.strip())
+    return PlannerChatResponse.model_validate(
+        {
+            "data": {"message": message, "outline": outline},
+            "meta": {"request_id": new_request_id()},
+        }
+    )
+
+
+@router.get("/essays/{essay_id}/planner/messages", response_model=PlannerMessagesResponse)
+def planner_messages(
+    essay_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PlannerMessagesResponse:
+    items = chat.list_messages(db, user, essay_id)
+    return PlannerMessagesResponse.model_validate(
         {"data": {"items": items}, "meta": {"request_id": new_request_id()}}
     )
 

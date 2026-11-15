@@ -141,24 +141,32 @@ document is missing, do not invent its contents; report the missing dependency.
    Document, create an `ai_rewrite` snapshot, set `result_version_id`, and create an
    Edit Event.
 
-### Editor UX (finalized 2026-11-15, ADR-016 — overrides earlier assumptions)
+### Editor UX (revised 2026-11-15, ADR-024 — supersedes ADR-016 §2.3–2.6)
 1. The essay question is shown in a separate non-editable section
    (`essays.question_prompt`); never mixed into the editable document.
-2. The left outline is a collapsible hierarchical text list (sections →
-   paragraphs → sentence ideas), not a chart/diagram.
+2. The left panel is a **conversational planner chat** with the agent: agree on
+   the outline before writing, revise it mid-writing. No Plan button, no
+   document-outline tree in the editor. Confirmed outlines drive inline hints.
 3. Grammar checking is automatic on sentence completion (debounce +
    cancellation); no manual check button, no numbered errors. Incomplete
-   input is never checked prematurely. Rule-first still applies.
-4. Feedback floats on hover over the underlined error (slightly transparent
-   surface); it must not obstruct editing.
-5. The correction is blurred initially; clicking the blurred text itself
-   reveals it (no reveal button). Tab replaces the original ONLY while the
-   revealed correction interaction is active; otherwise Tab is normal.
-   Acceptance applies the server-stored suggestion atomically.
-6. A small teaching icon opens the contextual floating teaching card; no
-   permanent grammar panel.
+   input is never checked prematurely. Rule-first still applies. Opening the
+   editor auto-creates an assisted session (unless the user explicitly
+   cancelled one), so feedback works without manual setup.
+4. Hovering an underlined error floats a card (slightly transparent surface)
+   that shows the short explanation, the **correction directly (no blur, no
+   reveal click)**, alternatives, and the contextual detailed explanation
+   (LLM, cached) with loading/error/retry states. It must not obstruct editing.
+5. Tab replaces the original while the hover card is visible with a
+   suggestion; otherwise Tab is normal. Acceptance applies the server-stored
+   suggestion atomically. Esc closes; Alt+I ignores. Clicking an error only
+   places the caret — no click-to-teach.
+6. Gray **Chinese** inline ghost hints show the next sentence idea from the
+   confirmed outline at the caret (empty/unfinished paragraph). Guidance only:
+   never persisted, never counted, never auto-inserted into the essay.
 7. No Submit Essay button during writing; evaluation/assessment/rewrites are
    post-writing actions. The session submit API remains for that flow.
+8. The UI language is Simplified Chinese (mainland-China users); essay content,
+   question prompts and IELTS question text stay English.
 
 ### Authentication
 1. `auth_sessions` represents a stable device login session.

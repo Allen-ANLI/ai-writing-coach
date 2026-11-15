@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * Writing editor (confirmed layout): wide central canvas, collapsible left
- * outline expanded by default, no permanent right AI panel. Autosave with
- * optimistic concurrency, word count, undo/redo, checkpoints and version
- * restore. Grammar/AI feedback arrives inline in later slices.
+ * 写作编辑器（ADR-024 布局）：中央宽画布 + 左侧构思助手对话面板。
+ * 打开时若无活动会话自动创建辅助学习会话（语法检查即时可用）；
+ * 已确认大纲驱动光标处的灰色中文指引；右上不再有 Plan 按钮，
+ * 编辑器内不再维护文档大纲树。自动保存、字数、撤销/重做、历史版本保留。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -13,15 +13,13 @@ import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { WRITING_TYPE_LABELS } from "@/features/essays/essay-dialogs";
 import { EvaluationDialog } from "@/features/editor/evaluation-dialog";
 import { ExpressionAssist } from "@/features/editor/expression-assist";
+import { createGhostHintExtension, setGhostPlan, type GhostParagraph } from "@/features/editor/ghost-hint-extension";
 import { createGrammarExtension } from "@/features/editor/grammar/grammar-extension";
 import { GrammarHoverCard } from "@/features/editor/grammar/grammar-hover-card";
-import { TeachingCard } from "@/features/editor/grammar/teaching-card";
 import { useGrammar } from "@/features/editor/grammar/use-grammar";
-import { OutlinePanel } from "@/features/editor/outline-panel";
-import { OutlinePlannerDialog } from "@/features/editor/outline-planner-dialog";
+import { PlannerChatPanel } from "@/features/editor/planner-chat-panel";
 import { SessionControls } from "@/features/editor/session-controls";
 import { useAutosave, type AutosaveApi, type SaveStatus } from "@/features/editor/use-autosave";
 import { VersionHistory } from "@/features/editor/version-history";
@@ -29,22 +27,21 @@ import { BLOCK_SEPARATOR, countWords } from "@/lib/document-text";
 import { getEssay } from "@/services/essays";
 import { getWorkingDocument } from "@/services/documents";
 import { getOutline, listOutlines } from "@/services/outlines";
-import { listSessions } from "@/services/sessions";
-import type { OutlineNodeData, TipTapDocument } from "@/types/api";
+import { createSession, listSessions } from "@/services/sessions";
+import type { TipTapDocument } from "@/types/api";
 
 const SAVE_STATUS_LABELS: Record<SaveStatus, string> = {
-  saved: "Saved",
-  dirty: "Unsaved changes",
-  saving: "Saving…",
-  conflict: "Save conflict",
-  error: "Save failed",
+  saved: "已保存",
+  dirty: "有未保存修改",
+  saving: "保存中…",
+  conflict: "保存冲突",
+  error: "保存失败",
 };
 
 export function WritingEditor({ essayId }: { essayId: string }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [evaluationOpen, setEvaluationOpen] = useState(false);
-  const [plannerOpen, setPlannerOpen] = useState(false);
-  const [mobileOutlineOpen, setMobileOutlineOpen] = useState(false);
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const [, setTick] = useState(0);
   const queryClient = useQueryClient();
 
@@ -63,6 +60,33 @@ export function WritingEditor({ essayId }: { essayId: string }) {
   const activeSession =
     sessionsQuery.data?.find((session) => session.status === "active") ?? null;
 
+  // 打开编辑器即自动进入辅助学习会话，语法检查无需手动启动（ADR-024）。
+  // 仅在"从未有过会话"或"最近一次会话已提交（继续写作）"时自动创建；
+  // 用户显式取消后不自动重建，独立写作/模拟考试由会话栏显式切换。
+  const autoSessionAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (!sessionsQuery.isSuccess || activeSession || autoSessionAttemptedRef.current) {
+      return;
+    }
+    const sessions = sessionsQuery.data ?? [];
+    const latest = sessions[0];
+    if (latest && latest.status !== "submitted") {
+      return;
+    }
+    autoSessionAttemptedRef.current = true;
+    void createSession(essayId, {
+      mode: "assisted",
+      activity_type: "free_writing",
+      exam_config: null,
+    })
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: ["sessions", essayId] });
+      })
+      .catch(() => {
+        autoSessionAttemptedRef.current = false;
+      });
+  }, [sessionsQuery.isSuccess, sessionsQuery.data, activeSession, essayId, queryClient]);
+
   const outlinesQuery = useQuery({
     queryKey: ["outlines", essayId],
     queryFn: async () => (await listOutlines(essayId)).data.items,
@@ -73,19 +97,19 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     queryFn: async () => (await getOutline(confirmedPlan?.id as string)).data,
     enabled: confirmedPlan !== null,
   });
-  const planIdeas = useMemo(() => {
+  const planParagraphs = useMemo<GhostParagraph[]>(() => {
     const nodes = planQuery.data?.nodes ?? [];
     const byParent = (parentId: string | null) =>
       nodes
         .filter((node) => node.parent_id === parentId)
         .sort((a, b) => a.sort_order - b.sort_order);
-    const ideas: OutlineNodeData[] = [];
+    const paragraphs: GhostParagraph[] = [];
     for (const section of byParent(null)) {
       for (const paragraph of byParent(section.id)) {
-        ideas.push(...byParent(paragraph.id));
+        paragraphs.push({ ideas: byParent(paragraph.id).map((idea) => idea.title) });
       }
     }
-    return ideas;
+    return paragraphs;
   }, [planQuery.data]);
 
   const suppressUpdateRef = useRef(false);
@@ -95,6 +119,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
   const autosaveRef = useRef<AutosaveApi | null>(null);
 
   const grammarExtension = useMemo(() => createGrammarExtension(), []);
+  const ghostExtension = useMemo(() => createGhostHintExtension(), []);
 
   const applyContent = useCallback((content: TipTapDocument) => {
     const currentEditor = editorRef.current;
@@ -109,12 +134,12 @@ export function WritingEditor({ essayId }: { essayId: string }) {
   }, []);
 
   const editor = useEditor({
-    extensions: [StarterKit, grammarExtension],
+    extensions: [StarterKit, grammarExtension, ghostExtension],
     content: { type: "doc", content: [] },
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        "aria-label": "Essay text",
+        "aria-label": "作文正文",
         "data-testid": "editor-content",
       },
     },
@@ -156,6 +181,13 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     autosave.initialize(documentQuery.data);
     setTick((value) => value + 1);
   }, [editor, documentQuery.data, applyContent, autosave]);
+
+  // 已确认大纲 → 灰色中文指引（段落级推进）。
+  useEffect(() => {
+    if (editor) {
+      setGhostPlan(editor.view, planParagraphs);
+    }
+  }, [editor, planParagraphs]);
 
   // IME composition: save after composition ends, never mid-composition.
   useEffect(() => {
@@ -223,7 +255,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     return (
       <main className="flex flex-1 items-center justify-center">
         <p role="status" className="text-sm text-zinc-500 dark:text-zinc-400">
-          Loading editor…
+          编辑器加载中…
         </p>
       </main>
     );
@@ -233,10 +265,10 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     return (
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-12">
         <Link href="/dashboard" className="text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400">
-          ← Back to essays
+          ← 返回作文列表
         </Link>
         <p role="alert" data-testid="essay-detail-error" className="mt-6 text-sm text-red-600 dark:text-red-400">
-          This essay could not be loaded. It may have been deleted.
+          无法加载这篇作文，它可能已被删除。
         </p>
       </main>
     );
@@ -259,22 +291,22 @@ export function WritingEditor({ essayId }: { essayId: string }) {
           href="/dashboard"
           className="text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
         >
-          ← Back to essays
+          ← 返回作文列表
         </Link>
         <button
           type="button"
-          aria-label="Toggle outline"
-          data-testid="toggle-outline"
-          onClick={() => setMobileOutlineOpen((open) => !open)}
+          aria-label="打开构思助手"
+          data-testid="toggle-planner-chat"
+          onClick={() => setMobileChatOpen((open) => !open)}
           className={`${toolbarButton} lg:hidden`}
         >
-          Outline
+          构思助手
         </button>
         <h1
           data-testid="essay-detail-title"
           className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100"
         >
-          {essay.title ?? "Untitled"}
+          {essay.title ?? "未命名作文"}
         </h1>
         <button
           type="button"
@@ -283,7 +315,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
           disabled={autosave.status === "conflict"}
           className={toolbarButton}
         >
-          Save now
+          立即保存
         </button>
         <button
           type="button"
@@ -291,7 +323,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
           onClick={() => setHistoryOpen(true)}
           className={toolbarButton}
         >
-          History
+          历史版本
         </button>
         <button
           type="button"
@@ -299,15 +331,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
           onClick={() => setEvaluationOpen(true)}
           className={toolbarButton}
         >
-          Evaluate
-        </button>
-        <button
-          type="button"
-          data-testid="open-planner"
-          onClick={() => setPlannerOpen(true)}
-          className={toolbarButton}
-        >
-          Plan
+          评分
         </button>
       </header>
 
@@ -326,7 +350,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
             onClick={() => void navigator.clipboard.writeText(plainText)}
             className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900"
           >
-            Copy my text
+            复制我的文本
           </button>
           <button
             type="button"
@@ -334,7 +358,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
             onClick={() => void autosave.loadLatest()}
             className="rounded-md bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-700"
           >
-            Load latest version
+            加载最新版本
           </button>
         </div>
       )}
@@ -352,107 +376,66 @@ export function WritingEditor({ essayId }: { essayId: string }) {
             onClick={() => autosave.saveNow()}
             className="rounded-md bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700"
           >
-            Retry
+            重试
           </button>
         </div>
       )}
 
       <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-64 shrink-0 border-r border-zinc-200 dark:border-zinc-800 lg:block">
-          <OutlinePanel
-            editor={editor}
-            essayId={essayId}
-            essayTitle={essay.title ?? "Untitled"}
-            writingTypeLabel={WRITING_TYPE_LABELS[essay.writing_type]}
-          />
+        <aside className="hidden w-72 shrink-0 border-r border-zinc-200 dark:border-zinc-800 lg:block">
+          <PlannerChatPanel essayId={essayId} />
         </aside>
 
-        {mobileOutlineOpen && (
-          <div className="fixed inset-0 z-40 flex lg:hidden" onClick={() => setMobileOutlineOpen(false)}>
-            <div className="h-full w-72 max-w-[85%] bg-white shadow-xl dark:bg-zinc-950" onClick={(event) => event.stopPropagation()}>
-              <OutlinePanel
-                editor={editor}
-                essayId={essayId}
-                essayTitle={essay.title ?? "Untitled"}
-                writingTypeLabel={WRITING_TYPE_LABELS[essay.writing_type]}
-              />
+        {mobileChatOpen && (
+          <div className="fixed inset-0 z-40 flex lg:hidden" onClick={() => setMobileChatOpen(false)}>
+            <div className="h-full w-80 max-w-[85%] bg-white shadow-xl dark:bg-zinc-950" onClick={(event) => event.stopPropagation()}>
+              <PlannerChatPanel essayId={essayId} />
             </div>
             <div className="flex-1 bg-black/30" />
           </div>
         )}
 
-        <div className="min-w-0 flex-1 overflow-y-auto">
+        <div className="awc-scroll min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl px-6 py-6">
             {essay.question_prompt && (
               <section
-                aria-label="Essay question"
+                aria-label="作文题目"
                 data-testid="question-section"
                 className="mb-5 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900"
               >
                 <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
-                  Question
+                  题目
                 </h2>
                 <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
                   {essay.question_prompt}
                 </p>
               </section>
             )}
-            {confirmedPlan && planIdeas.length > 0 && editor && editor.state.doc.childCount < planIdeas.length && (
-              <div
-                data-testid="ghost-text-hint"
-                className="mb-4 flex items-center gap-3 rounded-lg border border-dashed border-zinc-300 bg-zinc-50/60 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/60"
-              >
-                <p className="min-w-0 flex-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
-                  Next idea from your plan: {planIdeas[editor.state.doc.childCount].title}
-                </p>
-                <button
-                  type="button"
-                  data-testid="insert-ghost-text"
-                  onClick={() => {
-                    const idea = planIdeas[editor.state.doc.childCount];
-                    if (!idea) {
-                      return;
-                    }
-                    editor
-                      .chain()
-                      .focus()
-                      .insertContent({
-                        type: "paragraph",
-                        content: [{ type: "text", text: idea.title }],
-                      })
-                      .run();
-                  }}
-                  className="shrink-0 rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                >
-                  Insert
-                </button>
-              </div>
-            )}
             <div className="mb-4 flex flex-wrap items-center gap-1 border-b border-zinc-100 pb-2 dark:border-zinc-900">
-              <button type="button" aria-label="Undo" data-testid="undo" disabled={!canUndo} onClick={() => { ensureFocus(); editor?.chain().undo().run(); }} className={toolbarButton}>
-                Undo
+              <button type="button" aria-label="撤销" data-testid="undo" disabled={!canUndo} onClick={() => { ensureFocus(); editor?.chain().undo().run(); }} className={toolbarButton}>
+                撤销
               </button>
-              <button type="button" aria-label="Redo" data-testid="redo" disabled={!canRedo} onClick={() => { ensureFocus(); editor?.chain().redo().run(); }} className={toolbarButton}>
-                Redo
+              <button type="button" aria-label="重做" data-testid="redo" disabled={!canRedo} onClick={() => { ensureFocus(); editor?.chain().redo().run(); }} className={toolbarButton}>
+                重做
               </button>
               <span className="mx-1 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
-              <button type="button" aria-label="Bold" aria-pressed={editor?.isActive("bold") ?? false} onClick={() => { ensureFocus(); editor?.chain().toggleBold().run(); }} className={`${toolbarButton} ${editor?.isActive("bold") ? toolbarActive : ""}`}>
+              <button type="button" aria-label="加粗" aria-pressed={editor?.isActive("bold") ?? false} onClick={() => { ensureFocus(); editor?.chain().toggleBold().run(); }} className={`${toolbarButton} ${editor?.isActive("bold") ? toolbarActive : ""}`}>
                 <strong>B</strong>
               </button>
-              <button type="button" aria-label="Italic" aria-pressed={editor?.isActive("italic") ?? false} onClick={() => { ensureFocus(); editor?.chain().toggleItalic().run(); }} className={`${toolbarButton} ${editor?.isActive("italic") ? toolbarActive : ""}`}>
+              <button type="button" aria-label="斜体" aria-pressed={editor?.isActive("italic") ?? false} onClick={() => { ensureFocus(); editor?.chain().toggleItalic().run(); }} className={`${toolbarButton} ${editor?.isActive("italic") ? toolbarActive : ""}`}>
                 <em>I</em>
               </button>
-              <button type="button" aria-label="Heading 1" aria-pressed={editor?.isActive("heading", { level: 1 }) ?? false} onClick={() => { ensureFocus(); editor?.chain().toggleHeading({ level: 1 }).run(); }} className={`${toolbarButton} ${editor?.isActive("heading", { level: 1 }) ? toolbarActive : ""}`}>
+              <button type="button" aria-label="一级标题" aria-pressed={editor?.isActive("heading", { level: 1 }) ?? false} onClick={() => { ensureFocus(); editor?.chain().toggleHeading({ level: 1 }).run(); }} className={`${toolbarButton} ${editor?.isActive("heading", { level: 1 }) ? toolbarActive : ""}`}>
                 H1
               </button>
-              <button type="button" aria-label="Heading 2" aria-pressed={editor?.isActive("heading", { level: 2 }) ?? false} onClick={() => { ensureFocus(); editor?.chain().toggleHeading({ level: 2 }).run(); }} className={`${toolbarButton} ${editor?.isActive("heading", { level: 2 }) ? toolbarActive : ""}`}>
+              <button type="button" aria-label="二级标题" aria-pressed={editor?.isActive("heading", { level: 2 }) ?? false} onClick={() => { ensureFocus(); editor?.chain().toggleHeading({ level: 2 }).run(); }} className={`${toolbarButton} ${editor?.isActive("heading", { level: 2 }) ? toolbarActive : ""}`}>
                 H2
               </button>
-              <button type="button" aria-label="Bullet list" aria-pressed={editor?.isActive("bulletList") ?? false} onClick={() => { ensureFocus(); editor?.chain().toggleBulletList().run(); }} className={`${toolbarButton} ${editor?.isActive("bulletList") ? toolbarActive : ""}`}>
-                • List
+              <button type="button" aria-label="无序列表" aria-pressed={editor?.isActive("bulletList") ?? false} onClick={() => { ensureFocus(); editor?.chain().toggleBulletList().run(); }} className={`${toolbarButton} ${editor?.isActive("bulletList") ? toolbarActive : ""}`}>
+                • 列表
               </button>
-              <button type="button" aria-label="Quote" aria-pressed={editor?.isActive("blockquote") ?? false} onClick={() => { ensureFocus(); editor?.chain().toggleBlockquote().run(); }} className={`${toolbarButton} ${editor?.isActive("blockquote") ? toolbarActive : ""}`}>
-                Quote
+              <button type="button" aria-label="引用" aria-pressed={editor?.isActive("blockquote") ?? false} onClick={() => { ensureFocus(); editor?.chain().toggleBlockquote().run(); }} className={`${toolbarButton} ${editor?.isActive("blockquote") ? toolbarActive : ""}`}>
+                引用
               </button>
             </div>
             <EditorContent editor={editor} className="awc-editor" />
@@ -461,9 +444,9 @@ export function WritingEditor({ essayId }: { essayId: string }) {
       </div>
 
       <footer className="flex items-center gap-4 border-t border-zinc-200 px-4 py-1.5 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-        <span data-testid="word-count">{wordCount} words</span>
+        <span data-testid="word-count">{wordCount} 词</span>
         {activeSession?.enabled_features.realtime_grammar && (
-          <span data-testid="issue-count">{grammar.issueCount} issues</span>
+          <span data-testid="issue-count">{grammar.issueCount} 处问题</span>
         )}
         <span
           data-testid="save-status"
@@ -481,7 +464,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
             : ""}
         </span>
         <span className="ml-auto hidden sm:inline">
-          rev {autosave.serverRevision} · Ctrl+S saves · autosave on
+          修订 {autosave.serverRevision} · Ctrl+S 保存 · 自动保存已开启
         </span>
       </footer>
 
@@ -506,22 +489,12 @@ export function WritingEditor({ essayId }: { essayId: string }) {
         />
       )}
 
-      {plannerOpen && (
-        <OutlinePlannerDialog
-          essayId={essayId}
-          onClose={() => setPlannerOpen(false)}
-          onConfirmed={() => {
-            void queryClient.invalidateQueries({ queryKey: ["outlines", essayId] });
-            setPlannerOpen(false);
-          }}
-        />
-      )}
-
       {grammar.hoverCard && (
         <GrammarHoverCard
           state={grammar.hoverCard}
-          onRevealAnswer={grammar.revealAnswer}
-          onTeach={grammar.teachFromCard}
+          onAccept={grammar.acceptCorrection}
+          onIgnore={grammar.ignoreFromCard}
+          onRetryTeaching={grammar.retryTeaching}
           onMouseEnter={grammar.onCardMouseEnter}
           onMouseLeave={grammar.onCardMouseLeave}
         />
@@ -534,10 +507,6 @@ export function WritingEditor({ essayId }: { essayId: string }) {
         autosave={autosave}
         applyContent={applyContent}
       />
-
-      {grammar.teaching && (
-        <TeachingCard teaching={grammar.teaching} onClose={grammar.closeTeaching} />
-      )}
     </main>
   );
 }

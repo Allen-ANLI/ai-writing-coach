@@ -13,11 +13,11 @@ function uniqueEmail(): string {
 
 async function registerAndOpenDashboard(page: Page): Promise<void> {
   await page.goto("/register");
-  await page.getByLabel("Email").fill(uniqueEmail());
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("邮箱").fill(uniqueEmail());
+  await page.getByLabel("密码", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "注册账号" }).click();
   await expect(page).toHaveURL(/\/profile/);
-  await page.getByRole("link", { name: "Dashboard" }).click();
+  await page.getByRole("link", { name: "我的作文" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
 }
 
@@ -30,9 +30,9 @@ async function createEssayViaUi(page: Page, title: string): Promise<void> {
 
 test("dashboard shows a loading state then the empty state", async ({ page }) => {
   await page.goto("/register");
-  await page.getByLabel("Email").fill(uniqueEmail());
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("邮箱").fill(uniqueEmail());
+  await page.getByLabel("密码", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "注册账号" }).click();
   await expect(page).toHaveURL(/\/profile/);
 
   // Delay only the FIRST essays request so the loading state is observable;
@@ -45,7 +45,7 @@ test("dashboard shows a loading state then the empty state", async ({ page }) =>
     }
     await route.continue();
   });
-  await page.getByRole("link", { name: "Dashboard" }).click();
+  await page.getByRole("link", { name: "我的作文" }).click();
   await expect(page.getByTestId("essays-loading")).toBeVisible();
   await expect(page.getByTestId("essays-empty")).toBeVisible({ timeout: 15_000 });
   await page.unroute("**/api/v1/essays*");
@@ -101,7 +101,7 @@ test("essay title navigates to the detail page and back", async ({ page }) => {
   await expect(page).toHaveURL(/\/essays\/[0-9a-f-]{36}/);
   await expect(page.getByTestId("essay-detail-title")).toHaveText("Detail navigation");
 
-  await page.getByRole("link", { name: "← Back to essays" }).click();
+  await page.getByRole("link", { name: "← 返回作文列表" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
   await expect(page.getByTestId("essay-item")).toHaveCount(1);
 });
@@ -114,7 +114,7 @@ test("deleted essay detail shows an error state", async ({ page }) => {
   await expect(page).toHaveURL(/\/essays\/[0-9a-f-]{36}/);
   const detailUrl = page.url();
 
-  await page.getByRole("link", { name: "← Back to essays" }).click();
+  await page.getByRole("link", { name: "← 返回作文列表" }).click();
   await page.getByTestId("delete-essay").click();
   await page.getByTestId("confirm-delete").click();
   await expect(page.getByTestId("essays-empty")).toBeVisible();

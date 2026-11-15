@@ -19,11 +19,11 @@ import {
 import type { ExpressionData } from "@/types/api";
 
 const STATUS_LABELS: Record<string, string> = {
-  collected: "Collected",
-  learning: "Learning",
-  reviewing: "Reviewing",
-  mastered: "Mastered",
-  archived: "Archived",
+  collected: "已收藏",
+  learning: "学习中",
+  reviewing: "复习中",
+  mastered: "已掌握",
+  archived: "已归档",
 };
 
 export function KnowledgePage() {
@@ -68,7 +68,7 @@ export function KnowledgePage() {
       setError(null);
       invalidate();
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "Could not save."),
+    onError: (err) => setError(err instanceof Error ? err.message : "无法保存。"),
   });
 
   const archiveMutation = useMutation({
@@ -88,10 +88,10 @@ export function KnowledgePage() {
       <header className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Knowledge Base
+            知识库
           </h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Your collected expressions — searchable, reviewable, yours.
+            你收集的表达 — 可搜索、可复习、只属于你。
           </p>
         </div>
         <button
@@ -100,7 +100,7 @@ export function KnowledgePage() {
           onClick={() => setAddOpen(true)}
           className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
         >
-          Add expression
+          添加表达
         </button>
       </header>
 
@@ -110,7 +110,7 @@ export function KnowledgePage() {
           data-testid="kb-search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search English or Chinese…"
+          placeholder="搜索英文或中文…"
           className="min-w-0 flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
         />
         <select
@@ -119,7 +119,7 @@ export function KnowledgePage() {
           onChange={(event) => setStatusFilter(event.target.value)}
           className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
         >
-          <option value="">All statuses</option>
+          <option value="">全部状态</option>
           {Object.entries(STATUS_LABELS).map(([value, label]) => (
             <option key={value} value={value}>
               {label}
@@ -131,23 +131,23 @@ export function KnowledgePage() {
           value={searchMode}
           onChange={(event) => setSearchMode(event.target.value as "keyword" | "semantic" | "hybrid")}
           className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          title="Semantic search uses your personal embeddings (user-scoped)"
+          title="语义搜索使用你的个人向量（仅限本人数据）"
         >
-          <option value="keyword">Keyword</option>
-          <option value="semantic">Semantic</option>
-          <option value="hybrid">Hybrid</option>
+          <option value="keyword">关键词</option>
+          <option value="semantic">语义</option>
+          <option value="hybrid">混合</option>
         </select>
       </div>
 
       {expressionsQuery.isPending && (
         <p role="status" className="mt-6 text-sm text-zinc-500">
-          Loading expressions…
+          表达加载中…
         </p>
       )}
 
       {!expressionsQuery.isPending && items.length === 0 && (
         <p data-testid="kb-empty" className="mt-6 text-sm text-zinc-500 dark:text-zinc-400">
-          No expressions yet. Save suggestions from the editor, or add one manually.
+          还没有表达。从编辑器保存建议，或手动添加。
         </p>
       )}
 
@@ -182,7 +182,7 @@ export function KnowledgePage() {
                     onClick={() => archiveMutation.mutate(expression.id)}
                     className="rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                   >
-                    Archive
+                    归档
                   </button>
                 )}
                 <button
@@ -191,7 +191,7 @@ export function KnowledgePage() {
                   onClick={() => deleteMutation.mutate(expression.id)}
                   className="rounded px-2 py-1 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
                 >
-                  Delete
+                  删除
                 </button>
               </div>
             </div>
@@ -200,7 +200,7 @@ export function KnowledgePage() {
       </ul>
 
       {addOpen && (
-        <Dialog title="Add expression" onClose={() => setAddOpen(false)}>
+        <Dialog title="添加表达" onClose={() => setAddOpen(false)}>
           <form
             className="space-y-3"
             onSubmit={(event) => {
@@ -209,7 +209,7 @@ export function KnowledgePage() {
             }}
           >
             <label className="block text-sm">
-              <span className="text-xs font-medium text-zinc-500">English expression</span>
+              <span className="text-xs font-medium text-zinc-500">英文表达</span>
               <input
                 data-testid="kb-english-input"
                 required
@@ -220,7 +220,7 @@ export function KnowledgePage() {
               />
             </label>
             <label className="block text-sm">
-              <span className="text-xs font-medium text-zinc-500">Chinese meaning (optional)</span>
+              <span className="text-xs font-medium text-zinc-500">中文释义（可选）</span>
               <input
                 data-testid="kb-chinese-input"
                 maxLength={2000}
@@ -230,7 +230,7 @@ export function KnowledgePage() {
               />
             </label>
             <label className="block text-sm">
-              <span className="text-xs font-medium text-zinc-500">Topic (optional)</span>
+              <span className="text-xs font-medium text-zinc-500">主题（可选）</span>
               <input
                 data-testid="kb-topic-input"
                 maxLength={80}
@@ -250,7 +250,7 @@ export function KnowledgePage() {
                 onClick={() => setAddOpen(false)}
                 className="rounded-md px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
               >
-                Cancel
+                取消
               </button>
               <button
                 type="submit"
@@ -258,7 +258,7 @@ export function KnowledgePage() {
                 disabled={addMutation.isPending || english.trim() === ""}
                 className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
               >
-                {addMutation.isPending ? "Saving…" : "Save"}
+                {addMutation.isPending ? "保存中…" : "保存"}
               </button>
             </div>
           </form>

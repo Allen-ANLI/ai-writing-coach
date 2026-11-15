@@ -134,7 +134,7 @@ body {
   text-decoration-style: wavy;
   text-decoration-thickness: 1.5px;
   text-underline-offset: 3px;
-  cursor: pointer;
+  cursor: text;
 }
 
 .awc-issue--grammar,
@@ -156,82 +156,60 @@ body {
   text-decoration-style: dotted;
 }
 
-.awc-hint {
-  display: block;
-  margin: 2px 0 6px;
-  padding: 4px 8px;
-  border-left: 2px solid #e4e4e7;
-  background: rgba(113, 113, 122, 0.06);
-  border-radius: 0 6px 6px 0;
-  font-size: 0.8rem;
-  line-height: 1.5;
-  color: #52525b;
+/* 灰色中文写作指引（ADR-024）：光标处的内联 widget，基于已确认大纲；
+   不进入持久化正文与字数，点击可关闭，开始输入即消失。 */
+.awc-ghost-hint {
+  color: #a1a1aa;
+  font-size: 0.85em;
+  cursor: pointer;
   user-select: none;
+  opacity: 0.85;
+}
+
+.awc-ghost-hint:hover {
+  opacity: 1;
 }
 
 @media (prefers-color-scheme: dark) {
-  .awc-hint {
-    border-left-color: #3f3f46;
-    color: #a1a1aa;
+  .awc-ghost-hint {
+    color: #71717a;
   }
 }
 
-.awc-hint__text {
-  margin-right: 8px;
+/* 滚动条采用应用自身的视觉语言（悬浮卡、聊天面板等）。 */
+.awc-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d8 transparent;
 }
 
-.awc-hint__answer {
-  margin-right: 8px;
-  padding: 0 4px;
-  border-radius: 4px;
-  background: rgba(113, 113, 122, 0.15);
-  filter: blur(5px);
-  user-select: none;
+.awc-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-.awc-hint__answer--revealed {
-  filter: none;
-  font-weight: 600;
-  color: #18181b;
-}
-
-@media (prefers-color-scheme: dark) {
-  .awc-hint__answer--revealed {
-    color: #f4f4f5;
-  }
-}
-
-.awc-hint__actions button {
-  margin-right: 4px;
-  padding: 1px 6px;
-  border: 1px solid #d4d4d8;
-  border-radius: 4px;
+.awc-scroll::-webkit-scrollbar-track {
   background: transparent;
-  font-size: 0.72rem;
-  color: #52525b;
-  cursor: pointer;
 }
 
-.awc-hint__actions button:hover {
-  background: rgba(113, 113, 122, 0.12);
+.awc-scroll::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
+  border-radius: 4px;
+}
+
+.awc-scroll::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
 }
 
 @media (prefers-color-scheme: dark) {
-  .awc-hint__actions button {
-    border-color: #3f3f46;
-    color: #a1a1aa;
+  .awc-scroll {
+    scrollbar-color: #3f3f46 transparent;
   }
-}
 
-/* Blurred correction in the floating feedback card (UX decision §2.5):
-   click the blurred text itself to reveal — no separate reveal button. */
-.awc-blurred-answer {
-  filter: blur(5px);
-  user-select: none;
-  cursor: pointer;
-  transition: filter 0.15s ease;
-}
+  .awc-scroll::-webkit-scrollbar-thumb {
+    background: #3f3f46;
+  }
 
-.awc-blurred-answer:hover {
-  filter: blur(3px);
+  .awc-scroll::-webkit-scrollbar-thumb:hover {
+    background: #52525b;
+  }
 }

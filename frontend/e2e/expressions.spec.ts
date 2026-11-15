@@ -14,24 +14,30 @@ function uniqueEmail(): string {
 
 async function register(page: Page): Promise<void> {
   await page.goto("/register");
-  await page.getByLabel("Email").fill(uniqueEmail());
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("邮箱").fill(uniqueEmail());
+  await page.getByLabel("密码", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "注册账号" }).click();
   await expect(page).toHaveURL(/\/profile/);
 }
 
 async function openEditorWithSession(page: Page, mode: "assisted" | "independent"): Promise<void> {
-  await page.getByRole("link", { name: "Dashboard" }).click();
+  await page.getByRole("link", { name: "我的作文" }).click();
   await page.getByTestId("new-essay").click();
   await page.getByTestId("essay-title-input").fill("Expression essay");
   await page.getByTestId("submit-create").click();
   await expect(page.getByTestId("create-dialog")).toBeHidden();
   await page.getByTestId("essay-title").click();
   await expect(page.getByTestId("editor-content")).toBeVisible();
-  await page.getByTestId("start-session").click();
-  await page.getByTestId(mode === "assisted" ? "mode-assisted" : "mode-independent").check();
-  await page.getByTestId("confirm-start-session").click();
-  await expect(page.getByTestId("session-mode-chip")).toBeVisible();
+  // ADR-024：辅助会话自动创建；独立模式需先取消再显式启动。
+  await expect(page.getByTestId("session-mode-chip")).toBeVisible({ timeout: 15_000 });
+  if (mode === "independent") {
+    await page.getByTestId("cancel-session").click();
+    await expect(page.getByTestId("start-session")).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId("start-session").click();
+    await page.getByTestId("mode-independent").check();
+    await page.getByTestId("confirm-start-session").click();
+    await expect(page.getByTestId("session-mode-chip")).toContainText("独立写作");
+  }
 }
 
 test("knowledge base: add, search, archive, delete", async ({ page }) => {
@@ -56,7 +62,7 @@ test("knowledge base: add, search, archive, delete", async ({ page }) => {
 
   const archiveButton = page.locator("[data-testid^='kb-archive-']").first();
   await archiveButton.click();
-  await expect(page.getByTestId("kb-list")).toContainText("Archived", { timeout: 10_000 });
+  await expect(page.getByTestId("kb-list")).toContainText("已归档", { timeout: 10_000 });
 
   const deleteButton = page.locator("[data-testid^='kb-delete-']").first();
   await deleteButton.click();
@@ -69,7 +75,7 @@ test("polish: select text, accept a candidate, save to knowledge base", async ({
 
   await page.getByTestId("editor-content").click();
   await page.keyboard.type("I want to get more experience in this field.");
-  await expect(page.getByTestId("save-status")).toContainText("Saved", { timeout: 15_000 });
+  await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
 
   // Select the sentence (deterministic keyboard selection).
   await page.getByTestId("editor-content").click();
@@ -85,7 +91,7 @@ test("polish: select text, accept a candidate, save to knowledge base", async ({
   await expect(page.getByTestId("expression-accepted")).toBeVisible({ timeout: 15_000 });
 
   await page.getByTestId("save-to-kb").click();
-  await expect(assist).toContainText("Saved to your knowledge base", { timeout: 10_000 });
+  await expect(assist).toContainText("已保存到知识库", { timeout: 10_000 });
 
   await page.getByTestId("close-expression-assist").click();
   await page.goto("/knowledge");
@@ -98,12 +104,12 @@ test("translation: Chinese text gets English candidates and can be applied", asy
 
   await page.getByTestId("editor-content").click();
   await page.keyboard.type("提高公众环保意识");
-  await expect(page.getByTestId("save-status")).toContainText("Saved", { timeout: 15_000 });
+  await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
 
   await page.keyboard.press("Control+a");
   const assist = page.getByTestId("expression-assist");
   await expect(assist).toBeVisible({ timeout: 10_000 });
-  await expect(assist).toContainText("Translate to English");
+  await expect(assist).toContainText("中译英");
 
   await page.getByTestId("request-suggestions").click();
   await expect(page.getByTestId("expression-candidates")).toBeVisible({ timeout: 15_000 });
@@ -124,7 +130,7 @@ test("independent mode: no expression assistance", async ({ page }) => {
 
   await page.getByTestId("editor-content").click();
   await page.keyboard.type("I want to get more experience.");
-  await expect(page.getByTestId("save-status")).toContainText("Saved", { timeout: 15_000 });
+  await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
   await page.keyboard.press("Control+a");
   await page.waitForTimeout(1000);
   await expect(page.getByTestId("expression-assist")).toHaveCount(0);
@@ -153,12 +159,12 @@ test("extraction: candidates from a version require confirmation before saving",
 
   await page.getByTestId("editor-content").click();
   await page.keyboard.type("Students should gain hands-on experience before graduation.");
-  await expect(page.getByTestId("save-status")).toContainText("Saved", { timeout: 15_000 });
+  await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
 
   // Create a checkpoint, then extract from it via History.
   await page.getByTestId("open-history").click();
   await page.getByTestId("create-checkpoint").click();
-  await expect(page.getByTestId("version-list")).toContainText("Checkpoint", { timeout: 10_000 });
+  await expect(page.getByTestId("version-list")).toContainText("存档点", { timeout: 10_000 });
   await page.getByTestId("extract-2").click();
 
   await expect(page.getByTestId("extraction-candidates")).toBeVisible({ timeout: 20_000 });

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Writing Coach API
-  version: 1.4.0
+  version: 1.5.0
   description: Final API contract aligned with Database ERD V1.2. Working documents use server_revision; immutable
     snapshots use version_no. Refresh tokens are HttpOnly cookies. 1.1.1 adds the additive
     infrastructure endpoint GET /health (200 database reachable, 503 database unavailable);
@@ -13,7 +13,10 @@ info:
     cancel, billing history, quota usage); payment provider runs in sandbox mode only
     until real activation is explicitly approved; additive only. 1.4.0 (Slice 11,
     reconciliations R7/R9) adds password reset (request/confirm) and account
-    deletion/export; additive only.
+    deletion/export; additive only. 1.5.0 (ADR-024, user decisions 2026-11-15) adds the
+    conversational planner (POST /essays/{essay_id}/planner/chat, GET
+    /essays/{essay_id}/planner/messages); outline confirmation now archives earlier
+    confirmed versions (one current plan per essay); additive only.
 servers:
 - url: https://api.example.com/api/v1
   description: Production placeholder
@@ -2163,6 +2166,68 @@ paths:
       responses:
         '200':
           description: Outline list
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/planner/chat:
+    post:
+      tags:
+      - Outlines
+      summary: Conversational planner turn (ADR-024)
+      description: >-
+        Chat with the writing-planning agent to agree on or revise the essay
+        outline. Returns the assistant message and, when the agent proposes or
+        revises a structure, the new outline draft (confirm via
+        /outlines/{outline_id}/confirm).
+      responses:
+        '200':
+          description: Assistant message with optional proposed outline draft
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit or AI quota exceeded
+        '502':
+          description: AI provider error
+        '504':
+          description: AI provider timeout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/planner/messages:
+    get:
+      tags:
+      - Outlines
+      summary: List planner chat history
+      responses:
+        '200':
+          description: Chat message list (ascending)
         '401':
           description: Authentication required or token invalid
         '403':

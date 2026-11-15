@@ -1,10 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * Inline grammar feedback E2E — finalized UX (user decision 2026-11-15):
- * automatic sentence-completion checking (no manual button), hover feedback
- * card, click-blurred-to-reveal, Tab-to-replace, teaching icon, independent
- * mode enforcement. Real LanguageTool on the isolated stack.
+ * 行内语法反馈 E2E（ADR-024）：句子完成自动检查（无手动按钮）、
+ * 悬浮直接显示修改建议与详细讲解、Tab 替换、Alt+I 忽略、独立模式禁用。
+ * 隔离栈上使用真实 LanguageTool；LLM 为 mock（仅验证管线）。
  */
 
 const PASSWORD = "SecurePassword123";
@@ -15,16 +14,16 @@ function uniqueEmail(): string {
   return `e2e-grammar-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 }
 
-async function openEditorWithSession(
+async function openEditor(
   page: Page,
   mode: "assisted" | "independent" = "assisted",
 ): Promise<void> {
   await page.goto("/register");
-  await page.getByLabel("Email").fill(uniqueEmail());
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("邮箱").fill(uniqueEmail());
+  await page.getByLabel("密码", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "注册账号" }).click();
   await expect(page).toHaveURL(/\/profile/);
-  await page.getByRole("link", { name: "Dashboard" }).click();
+  await page.getByRole("link", { name: "我的作文" }).click();
   await page.getByTestId("new-essay").click();
   await page.getByTestId("essay-title-input").fill("Grammar essay");
   await page.getByTestId("submit-create").click();
@@ -32,25 +31,34 @@ async function openEditorWithSession(
   await page.getByTestId("essay-title").click();
   await expect(page.getByTestId("editor-content")).toBeVisible();
 
-  await page.getByTestId("start-session").click();
-  await page.getByTestId(mode === "assisted" ? "mode-assisted" : "mode-independent").check();
-  await page.getByTestId("confirm-start-session").click();
-  await expect(page.getByTestId("session-mode-chip")).toBeVisible();
+  // 辅助学习会话自动创建（ADR-024），无需手动启动。
+  await expect(page.getByTestId("session-mode-chip")).toBeVisible({ timeout: 15_000 });
+
+  if (mode === "independent") {
+    await page.getByTestId("cancel-session").click();
+    await expect(page.getByTestId("start-session")).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId("start-session").click();
+    await page.getByTestId("mode-independent").check();
+    await page.getByTestId("confirm-start-session").click();
+    await expect(page.getByTestId("session-mode-chip")).toContainText("独立写作");
+  } else {
+    await expect(page.getByTestId("session-mode-chip")).toContainText("辅助学习");
+  }
 }
 
 async function typeAndWaitSaved(page: Page, text: string): Promise<void> {
   await page.getByTestId("editor-content").click();
   await page.keyboard.press("Control+a");
   await page.keyboard.type(text);
-  await expect(page.getByTestId("save-status")).toContainText("Saved", { timeout: 15_000 });
+  await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
 }
 
 async function waitForFirstIssue(page: Page): Promise<void> {
   await expect(page.locator(".awc-issue").first()).toBeVisible({ timeout: 30_000 });
 }
 
-test("completed sentence is checked automatically; hover shows floating hint", async ({ page }) => {
-  await openEditorWithSession(page);
+test("completed sentence is checked automatically; hover shows correction directly", async ({ page }) => {
+  await openEditor(page);
   // No manual check button exists anywhere.
   await expect(page.getByTestId("check-now")).toHaveCount(0);
 
@@ -58,28 +66,42 @@ test("completed sentence is checked automatically; hover shows floating hint", a
   await waitForFirstIssue(page);
   await expect(page.locator(".awc-issue--grammar").first()).toBeVisible();
 
-  // No always-visible hint block; feedback floats on hover.
-  await expect(page.locator(".awc-hint")).toHaveCount(0);
   await page.locator(".awc-issue--grammar").first().hover();
   const card = page.getByTestId("grammar-hover-card");
   await expect(card).toBeVisible({ timeout: 10_000 });
-  await expect(card).toContainText(/主谓一致|语法/);
-  await expect(page.getByTestId("blurred-answer")).toBeVisible();
-  await expect(page.getByTestId("revealed-answer")).toHaveCount(0);
+  // 取消模糊显示：悬浮即直接看到推荐修改（ADR-024）。
+  const revealed = page.getByTestId("revealed-answer");
+  await expect(revealed).toBeVisible({ timeout: 15_000 });
+  await expect(revealed).toHaveText(/went|goes/);
+  await expect(page.getByTestId("blurred-answer")).toHaveCount(0);
 });
 
-test("clicking the blurred answer reveals it; Tab replaces the original", async ({ page }) => {
-  await openEditorWithSession(page);
+test("hover card includes the contextual detailed explanation", async ({ page }) => {
+  await openEditor(page);
+  await typeAndWaitSaved(page, BAD_TEXT);
+  await waitForFirstIssue(page);
+
+  await page.locator(".awc-issue--grammar").first().hover();
+  const card = page.getByTestId("grammar-hover-card");
+  await expect(card).toBeVisible({ timeout: 10_000 });
+  await expect(card).toContainText("详细讲解");
+  // mock provider 的讲解内容带 [mock:...] 前缀；此处验证管线而非语言质量。
+  const teaching = page.getByTestId("teaching-content");
+  await expect(teaching).toBeVisible({ timeout: 20_000 });
+  await expect(teaching).toContainText("mock");
+  // 独立教学卡与教学图标已移除。
+  await expect(page.getByTestId("teaching-card")).toHaveCount(0);
+  await expect(page.getByTestId("teaching-icon")).toHaveCount(0);
+});
+
+test("Tab while the hover card is visible replaces the original", async ({ page }) => {
+  await openEditor(page);
   await typeAndWaitSaved(page, BAD_TEXT);
   await waitForFirstIssue(page);
 
   await page.locator(".awc-issue--grammar").first().hover();
   await expect(page.getByTestId("grammar-hover-card")).toBeVisible({ timeout: 10_000 });
-  await page.getByTestId("blurred-answer").click();
-
-  const revealed = page.getByTestId("revealed-answer");
-  await expect(revealed).toBeVisible({ timeout: 10_000 });
-  await expect(revealed).toHaveText(/went|goes/);
+  await expect(page.getByTestId("revealed-answer")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("tab-instruction")).toContainText("Tab");
 
   await page.keyboard.press("Tab");
@@ -89,12 +111,14 @@ test("clicking the blurred answer reveals it; Tab replaces the original", async 
   await expect(page.getByTestId("grammar-hover-card")).toBeHidden();
 });
 
-test("Tab without an active correction keeps normal editor behavior", async ({ page }) => {
-  await openEditorWithSession(page);
+test("Tab without a visible correction keeps normal editor behavior", async ({ page }) => {
+  await openEditor(page);
   await typeAndWaitSaved(page, BAD_TEXT);
   await waitForFirstIssue(page);
 
-  // Focus the editor away from any pinned correction; Tab must not replace.
+  // Move the pointer away so the card closes; Tab must not replace anything.
+  await page.getByTestId("essay-detail-title").hover();
+  await expect(page.getByTestId("grammar-hover-card")).toBeHidden({ timeout: 10_000 });
   await page.getByTestId("editor-content").click();
   await page.keyboard.press("End");
   await page.keyboard.press("Tab");
@@ -103,7 +127,7 @@ test("Tab without an active correction keeps normal editor behavior", async ({ p
 });
 
 test("correct self-edit clears the highlight automatically", async ({ page }) => {
-  await openEditorWithSession(page);
+  await openEditor(page);
   await typeAndWaitSaved(page, BAD_TEXT);
   await waitForFirstIssue(page);
 
@@ -112,7 +136,7 @@ test("correct self-edit clears the highlight automatically", async ({ page }) =>
 });
 
 test("incorrect self-edit keeps the highlight", async ({ page }) => {
-  await openEditorWithSession(page);
+  await openEditor(page);
   await typeAndWaitSaved(page, BAD_TEXT);
   await waitForFirstIssue(page);
 
@@ -120,40 +144,29 @@ test("incorrect self-edit keeps the highlight", async ({ page }) => {
   await expect(page.locator(".awc-issue").first()).toBeVisible({ timeout: 30_000 });
 });
 
-test("teaching icon opens the contextual floating card", async ({ page }) => {
-  await openEditorWithSession(page);
+test("Alt+I ignores the hovered issue", async ({ page }) => {
+  await openEditor(page);
   await typeAndWaitSaved(page, BAD_TEXT);
   await waitForFirstIssue(page);
 
   await page.locator(".awc-issue--grammar").first().hover();
   await expect(page.getByTestId("grammar-hover-card")).toBeVisible({ timeout: 10_000 });
-  await page.getByTestId("teaching-icon").click();
-
-  const card = page.getByTestId("teaching-card");
-  await expect(card).toBeVisible({ timeout: 15_000 });
-  await expect(card).toContainText("Why it is wrong here", { timeout: 15_000 });
-  await page.getByTestId("close-teaching").click();
-  await expect(card).toBeHidden();
-});
-
-test("Alt+I ignores the issue at the caret", async ({ page }) => {
-  await openEditorWithSession(page);
-  await typeAndWaitSaved(page, BAD_TEXT);
-  await waitForFirstIssue(page);
-
-  await page.locator(".awc-issue--grammar").first().click();
-  // Clicking the error opens teaching; close it, then ignore via shortcut.
-  const teaching = page.getByTestId("teaching-card");
-  if (await teaching.isVisible()) {
-    await page.getByTestId("close-teaching").click();
-  }
-  await page.locator(".awc-issue--grammar").first().hover();
   await page.keyboard.press("Alt+i");
   await expect(page.locator(".awc-issue")).toHaveCount(0, { timeout: 15_000 });
 });
 
+test("clicking an error only places the caret (no teaching popup)", async ({ page }) => {
+  await openEditor(page);
+  await typeAndWaitSaved(page, BAD_TEXT);
+  await waitForFirstIssue(page);
+
+  await page.locator(".awc-issue--grammar").first().click();
+  await expect(page.getByTestId("teaching-card")).toHaveCount(0);
+  await expect(page.getByTestId("editor-content")).toBeFocused();
+});
+
 test("independent mode shows no grammar assistance", async ({ page }) => {
-  await openEditorWithSession(page, "independent");
+  await openEditor(page, "independent");
   await typeAndWaitSaved(page, BAD_TEXT);
   await page.waitForTimeout(3000);
   await expect(page.locator(".awc-issue")).toHaveCount(0);
@@ -161,11 +174,11 @@ test("independent mode shows no grammar assistance", async ({ page }) => {
 });
 
 test("incomplete sentence is not checked prematurely", async ({ page }) => {
-  await openEditorWithSession(page);
+  await openEditor(page);
   await page.getByTestId("editor-content").click();
   // No sentence-final punctuation: must not trigger a check.
   await page.keyboard.type("He go to school");
-  await expect(page.getByTestId("save-status")).toContainText("Saved", { timeout: 15_000 });
+  await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
   await page.waitForTimeout(2500);
   await expect(page.locator(".awc-issue")).toHaveCount(0);
 });

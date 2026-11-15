@@ -14,11 +14,11 @@ function uniqueEmail(): string {
 
 async function openNewEssay(page: Page, title: string): Promise<void> {
   await page.goto("/register");
-  await page.getByLabel("Email").fill(uniqueEmail());
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("邮箱").fill(uniqueEmail());
+  await page.getByLabel("密码", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "注册账号" }).click();
   await expect(page).toHaveURL(/\/profile/);
-  await page.getByRole("link", { name: "Dashboard" }).click();
+  await page.getByRole("link", { name: "我的作文" }).click();
   await page.getByTestId("new-essay").click();
   await page.getByTestId("essay-title-input").fill(title);
   await page.getByTestId("submit-create").click();
@@ -34,13 +34,13 @@ async function typeInEditor(page: Page, text: string): Promise<void> {
 }
 
 async function expectSaved(page: Page): Promise<void> {
-  await expect(page.getByTestId("save-status")).toContainText("Saved", { timeout: 15_000 });
+  await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
 }
 
 test("typing autosaves and survives a full reload", async ({ page }) => {
   await openNewEssay(page, "Autosave essay");
   await typeInEditor(page, "The first draft of my essay.");
-  await expect(page.getByTestId("save-status")).toContainText("Unsaved changes");
+  await expect(page.getByTestId("save-status")).toContainText("有未保存修改");
   await expectSaved(page);
 
   await page.reload();
@@ -50,9 +50,9 @@ test("typing autosaves and survives a full reload", async ({ page }) => {
 
 test("word count mirrors the server rule", async ({ page }) => {
   await openNewEssay(page, "Word count essay");
-  await expect(page.getByTestId("word-count")).toHaveText("0 words");
+  await expect(page.getByTestId("word-count")).toHaveText("0 词");
   await typeInEditor(page, "Hello world");
-  await expect(page.getByTestId("word-count")).toHaveText("2 words");
+  await expect(page.getByTestId("word-count")).toHaveText("2 词");
   await expectSaved(page);
 });
 
@@ -78,7 +78,7 @@ test("checkpoint appears in history and restore brings the text back", async ({ 
   await expectSaved(page);
 
   await page.getByTestId("open-history").click();
-  await page.getByLabel("Save a checkpoint of the current text").fill("Before changes");
+  await page.getByLabel("为当前文本创建存档点").fill("Before changes");
   await page.getByTestId("create-checkpoint").click();
   await expect(page.getByTestId("version-list")).toContainText("Before changes");
   await page.keyboard.press("Escape");
@@ -100,7 +100,7 @@ test("checkpoint appears in history and restore brings the text back", async ({ 
   // The restored checkpoint itself is unchanged and still viewable.
   // Versions list newest-first: the checkpoint (v2) is the first row.
   await page.getByTestId("open-history").click();
-  await page.getByRole("button", { name: "View" }).nth(0).click();
+  await page.getByRole("button", { name: "查看" }).nth(0).click();
   await expect(page.getByTestId("version-content")).toContainText("Version one text.");
 });
 
@@ -143,13 +143,16 @@ test("save conflict keeps local edits and offers recovery", async ({ page }) => 
   await expectSaved(page);
 });
 
-test("headings build the left outline", async ({ page }) => {
+test("headings render in the editor; left panel is the planner chat (ADR-024)", async ({ page }) => {
   await openNewEssay(page, "Outline essay");
-  await page.getByRole("button", { name: "Heading 1" }).click();
+  await page.getByRole("button", { name: "一级标题" }).click();
   await page.keyboard.type("Introduction");
   await page.keyboard.press("Enter");
-  await page.getByRole("button", { name: "Heading 1" }).click();
+  await page.getByRole("button", { name: "一级标题" }).click();
   await page.keyboard.type("Body paragraph");
-  await expect(page.getByRole("button", { name: "Introduction" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Body paragraph" })).toBeVisible();
+  await expect(page.getByTestId("editor-content")).toContainText("Introduction");
+  await expect(page.getByTestId("editor-content")).toContainText("Body paragraph");
+  // 旧版文档大纲树已移除，左侧是对话式构思面板。
+  await expect(page.getByTestId("outline-tree")).toHaveCount(0);
+  await expect(page.getByTestId("planner-chat-panel")).toBeVisible();
 });

@@ -41,7 +41,8 @@ def process_outline_generation(session_factory: sessionmaker, outline_id: uuid.U
         previously_learned = "; ".join(e.english_text for e in recalled) or "(none)"
         db.commit()  # no transaction held during the LLM call
 
-        prompt = get_prompt("outline_generate", "v1")
+        # v2: Chinese section/paragraph/idea guidance, English thesis (ADR-024).
+        prompt = get_prompt("outline_generate", "v2")
         user_message = prompt.user_template.format(
             question_prompt=question_prompt,
             viewpoint=viewpoint,

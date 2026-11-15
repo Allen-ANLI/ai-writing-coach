@@ -9,7 +9,7 @@ export default function Home() {
           AI Writing Coach
         </h1>
         <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-          English writing training — backend authentication is live.
+          英语写作训练 — 行内语法反馈 · 情境化讲解 · 个人表达知识库
         </p>
       </div>
       <AuthNav />

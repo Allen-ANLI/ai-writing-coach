@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.common import RequestMeta
 
@@ -87,4 +87,45 @@ class OutlineResponse(BaseModel):
 
 class NodeResponse(BaseModel):
     data: NodeData
+    meta: RequestMeta
+
+
+class PlannerChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("message")
+    @classmethod
+    def message_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("message must not be blank")
+        return stripped
+
+
+class ChatMessageData(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    role: str
+    content: str
+    outline_id: uuid.UUID | None
+    created_at: datetime
+
+
+class PlannerChatData(BaseModel):
+    message: ChatMessageData
+    outline: OutlineDetailData | None
+
+
+class PlannerChatResponse(BaseModel):
+    data: PlannerChatData
+    meta: RequestMeta
+
+
+class PlannerMessagesData(BaseModel):
+    items: list[ChatMessageData]
+
+
+class PlannerMessagesResponse(BaseModel):
+    data: PlannerMessagesData
     meta: RequestMeta

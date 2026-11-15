@@ -82,7 +82,7 @@ def delete_account(db: Session, user: User) -> None:
         LearningTask,
         UserWeakness,
     )
-    from app.modules.outlines.models import OutlineNode, WritingOutline
+    from app.modules.outlines.models import OutlineChatMessage, OutlineNode, WritingOutline
     from app.modules.workflows.models import Workflow, WorkflowEvent
     from app.modules.writing_sessions.models import WritingSession
 
@@ -129,6 +129,7 @@ def delete_account(db: Session, user: User) -> None:
     db.execute(delete(UserWeakness).where(UserWeakness.user_id == uid))
     db.execute(delete(LearningTask).where(LearningTask.user_id == uid))
     db.execute(delete(LearningPlan).where(LearningPlan.user_id == uid))
+    db.execute(delete(OutlineChatMessage).where(OutlineChatMessage.user_id == uid))
     db.execute(delete(OutlineNode).where(OutlineNode.outline_id.in_(outline_ids)))
     db.execute(delete(WritingOutline).where(WritingOutline.user_id == uid))
     db.execute(delete(WorkflowEvent).where(WorkflowEvent.workflow_id.in_(workflow_ids)))
@@ -165,7 +166,7 @@ def export_data(db: Session, user: User) -> dict:
         LearningTask,
         UserWeakness,
     )
-    from app.modules.outlines.models import OutlineNode, WritingOutline
+    from app.modules.outlines.models import OutlineChatMessage, OutlineNode, WritingOutline
     from app.modules.workflows.models import Workflow
     from app.modules.writing_sessions.models import WritingSession
 
@@ -214,6 +215,9 @@ def export_data(db: Session, user: User) -> dict:
         "outlines": _rows(db, select(WritingOutline).where(WritingOutline.user_id == uid)),
         "outline_nodes": _rows(
             db, select(OutlineNode).where(OutlineNode.outline_id.in_(outline_ids))
+        ),
+        "outline_chat_messages": _rows(
+            db, select(OutlineChatMessage).where(OutlineChatMessage.user_id == uid)
         ),
         "evaluations": _rows(db, select(EssayEvaluation).where(EssayEvaluation.user_id == uid)),
         "rewrites": _rows(

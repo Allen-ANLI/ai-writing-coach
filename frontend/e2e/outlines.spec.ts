@@ -1,9 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * Outlines & workflows E2E (Slice 8): plan generation → confirmation → left
- * panel + ghost-text insertion (user-initiated only), and the personalized
- * study planner workflow with human confirmation. Mock LLM on the E2E stack.
+ * 对话式构思 E2E（ADR-024）：左侧聊天 → 大纲卡片 → 确认 → 灰色中文指引；
+ * 个性化学习规划工作流的人工确认/拒绝。E2E 栈使用 mock LLM（确定性 propose）。
  */
 
 const PASSWORD = "SecurePassword123";
@@ -14,15 +13,15 @@ function uniqueEmail(): string {
 
 async function register(page: Page): Promise<void> {
   await page.goto("/register");
-  await page.getByLabel("Email").fill(uniqueEmail());
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("邮箱").fill(uniqueEmail());
+  await page.getByLabel("密码", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "注册账号" }).click();
   await expect(page).toHaveURL(/\/profile/);
 }
 
 async function openNewEssay(page: Page, title: string): Promise<void> {
   await register(page);
-  await page.getByRole("link", { name: "Dashboard" }).click();
+  await page.getByRole("link", { name: "我的作文" }).click();
   await page.getByTestId("new-essay").click();
   await page.getByTestId("essay-title-input").fill(title);
   await page.getByTestId("submit-create").click();
@@ -32,29 +31,36 @@ async function openNewEssay(page: Page, title: string): Promise<void> {
   await expect(page.getByTestId("editor-content")).toBeVisible();
 }
 
-test("plan generation, confirmation, panel and ghost-text insertion", async ({ page }) => {
+test("chat planner proposes an outline; confirmation drives ghost hints", async ({ page }) => {
   await openNewEssay(page, "Planned essay");
 
-  await page.getByTestId("open-planner").click();
-  await expect(page.getByTestId("outline-planner-dialog")).toBeVisible();
-  await page.getByTestId("outline-viewpoint").fill("Public transport should be free.");
-  await page.getByTestId("generate-outline").click();
+  // 左侧是对话面板；旧版 Plan 按钮与文档大纲树已移除（ADR-024）。
+  await expect(page.getByTestId("planner-chat-panel")).toBeVisible();
+  await expect(page.getByTestId("open-planner")).toHaveCount(0);
+  await expect(page.getByTestId("outline-tree")).toHaveCount(0);
 
-  const draft = page.getByTestId("outline-draft");
-  await expect(draft).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId("outline-tree-plan")).toContainText("·");
-  await page.getByTestId("confirm-outline").click();
-  await expect(page.getByTestId("outline-planner-dialog")).toBeHidden({ timeout: 15_000 });
+  await page.getByTestId("planner-input").fill("我同意大城市公共交通应该免费。");
+  await page.getByTestId("planner-send").click();
 
-  // Confirmed plan appears in the left panel.
-  await expect(page.getByTestId("confirmed-plan")).toBeVisible({ timeout: 15_000 });
+  // mock 确定性返回 propose：助手消息 + 大纲卡片。
+  await expect(page.getByTestId("planner-message-assistant").first()).toBeVisible({ timeout: 20_000 });
+  const card = page.getByTestId("planner-outline-card").first();
+  await expect(card).toBeVisible({ timeout: 20_000 });
+  await page.getByTestId("confirm-outline").first().click();
+  await expect(card).toContainText("已确认", { timeout: 15_000 });
 
-  // Ghost text is a hint only; insertion happens on explicit click.
-  const hint = page.getByTestId("ghost-text-hint");
-  await expect(hint).toBeVisible();
-  const ideaText = (await hint.innerText()).replace("Next idea from your plan: ", "").trim();
-  await page.getByTestId("insert-ghost-text").click();
-  await expect(page.getByTestId("editor-content")).toContainText(ideaText.slice(0, 30));
+  // 光标进入空段落 → 灰色指引 widget 出现（不写入正文）。
+  await page.getByTestId("editor-content").click();
+  const hint = page.getByTestId("ghost-hint");
+  await expect(hint).toBeVisible({ timeout: 15_000 });
+  await expect(hint).toContainText("mock");
+  // 指引只是 DOM widget：字数保持 0，绝不进入文档。
+  await expect(page.getByTestId("word-count")).toHaveText("0 词");
+  // 点击关闭指引；正文仍为空（AI 不代写）。
+  await hint.click();
+  await expect(page.getByTestId("ghost-hint")).toHaveCount(0);
+  await expect(page.getByTestId("editor-content")).toHaveText("");
+  await expect(page.getByTestId("word-count")).toHaveText("0 词");
 });
 
 test("study planner workflow confirms suggestions", async ({ page }) => {
@@ -62,13 +68,13 @@ test("study planner workflow confirms suggestions", async ({ page }) => {
   await page.goto("/learning");
   await expect(page.getByTestId("study-planner")).toBeVisible();
 
-  await page.getByTestId("planner-goal").fill("Reach band 7");
+  await page.getByTestId("planner-goal").fill("三个月达到 7 分");
   await page.getByTestId("generate-plan").click();
   await expect(page.getByTestId("plan-suggestions")).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId("plan-status")).toContainText("awaiting_confirmation");
+  await expect(page.getByTestId("plan-status")).toContainText("等待确认");
 
   await page.getByTestId("confirm-plan").click();
-  await expect(page.getByTestId("plan-done")).toContainText("Plan confirmed", { timeout: 15_000 });
+  await expect(page.getByTestId("plan-done")).toContainText("计划已确认", { timeout: 15_000 });
 });
 
 test("study planner can be rejected", async ({ page }) => {
@@ -77,5 +83,5 @@ test("study planner can be rejected", async ({ page }) => {
   await page.getByTestId("generate-plan").click();
   await expect(page.getByTestId("plan-suggestions")).toBeVisible({ timeout: 20_000 });
   await page.getByTestId("reject-plan").click();
-  await expect(page.getByTestId("plan-done")).toContainText("Plan rejected", { timeout: 15_000 });
+  await expect(page.getByTestId("plan-done")).toContainText("计划已拒绝", { timeout: 15_000 });
 });

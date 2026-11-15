@@ -118,12 +118,12 @@ export function useAutosave({
       if (error instanceof ApiClientError && error.status === 409) {
         setStatus("conflict");
         setErrorMessage(
-          "This essay was changed elsewhere. Your edits are kept here, but saving is paused.",
+          "这篇作文在其他地方被修改了。你的编辑仍保留在这里，但保存已暂停。",
         );
       } else {
         setStatus("error");
         setErrorMessage(
-          error instanceof ApiClientError ? error.message : "Autosave failed. Check your connection.",
+          error instanceof ApiClientError ? error.message : "自动保存失败，请检查网络连接。",
         );
       }
     } finally {

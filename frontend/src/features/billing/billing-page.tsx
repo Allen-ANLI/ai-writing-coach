@@ -22,8 +22,20 @@ import {
 import type { CheckoutData } from "@/types/api";
 
 function quotaLabel(value: number | null): string {
-  return value === null ? "Unlimited" : String(value);
+  return value === null ? "不限" : String(value);
 }
+
+const STATUS_LABELS: Record<string, string> = {
+  active: "生效中",
+  cancelled: "已取消",
+  expired: "已过期",
+  past_due: "逾期",
+  pending: "待支付",
+  succeeded: "已完成",
+  completed: "已完成",
+  failed: "失败",
+  refunded: "已退款",
+};
 
 export function BillingPage() {
   const queryClient = useQueryClient();
@@ -62,7 +74,7 @@ export function BillingPage() {
       setPendingCheckout(response.data);
       setError(null);
     },
-    onError: (err) => setError(errorMessage(err, "Checkout failed.")),
+    onError: (err) => setError(errorMessage(err, "下单失败。")),
   });
 
   const confirm = useMutation({
@@ -72,7 +84,7 @@ export function BillingPage() {
       setError(null);
       refresh();
     },
-    onError: (err) => setError(errorMessage(err, "Payment confirmation failed.")),
+    onError: (err) => setError(errorMessage(err, "支付确认失败。")),
   });
 
   const cancel = useMutation({
@@ -81,7 +93,7 @@ export function BillingPage() {
       setError(null);
       refresh();
     },
-    onError: (err) => setError(errorMessage(err, "Cancellation failed.")),
+    onError: (err) => setError(errorMessage(err, "取消订阅失败。")),
   });
 
   const subscription = subscriptionQuery.data;
@@ -90,10 +102,10 @@ export function BillingPage() {
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10" data-testid="billing-page">
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-        Billing & subscription
+        订阅与用量
       </h1>
       <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-        Payments are in sandbox mode — no real charges. Quotas reset monthly.
+        支付处于沙箱模式 — 不会产生真实扣费。额度每月重置。
       </p>
 
       {subscription && (
@@ -102,11 +114,11 @@ export function BillingPage() {
           data-testid="current-subscription"
         >
           <p className="text-sm text-zinc-700 dark:text-zinc-300">
-            Current plan: <strong>{subscription.plan_name}</strong> · {subscription.status}
-            {subscription.cancelled_at && " (access until period end)"}
+            当前套餐：<strong>{subscription.plan_name}</strong> · {STATUS_LABELS[subscription.status] ?? subscription.status}
+            {subscription.cancelled_at && "（可用至本周期结束）"}
           </p>
           <p className="mt-1 text-xs text-zinc-500">
-            Period: {new Date(subscription.current_period_start).toLocaleDateString()} –{" "}
+            周期：{new Date(subscription.current_period_start).toLocaleDateString()} –{" "}
             {new Date(subscription.current_period_end).toLocaleDateString()}
           </p>
           {subscription.plan_code !== "free" && subscription.status === "active" && (
@@ -117,7 +129,7 @@ export function BillingPage() {
               onClick={() => cancel.mutate()}
               className="mt-3 rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
-              Cancel subscription
+              取消订阅
             </button>
           )}
         </section>
@@ -126,10 +138,10 @@ export function BillingPage() {
       {usage && (
         <section className="mt-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800" data-testid="quota-usage">
           <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
-            This month&apos;s usage
+            本月用量
           </p>
           <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
-            AI calls: {usage.ai_calls} / {quotaLabel(usage.quota_ai_calls_monthly)} · Evaluations:{" "}
+            AI 调用：{usage.ai_calls} / {quotaLabel(usage.quota_ai_calls_monthly)} · 评分：{" "}
             {usage.evaluations} / {quotaLabel(usage.quota_evaluations_monthly)}
           </p>
         </section>
@@ -145,8 +157,8 @@ export function BillingPage() {
           data-testid="sandbox-checkout"
         >
           <p className="text-sm text-amber-900 dark:text-amber-200">
-            Sandbox checkout: {pendingCheckout.plan_code} — {pendingCheckout.currency}{" "}
-            {pendingCheckout.amount}. Confirm to simulate the payment callback.
+            沙箱下单：{pendingCheckout.plan_code} — {pendingCheckout.currency}{" "}
+            {pendingCheckout.amount}。点击确认以模拟支付回调。
           </p>
           <div className="mt-3 flex gap-3">
             <button
@@ -156,7 +168,7 @@ export function BillingPage() {
               onClick={() => confirm.mutate()}
               className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
             >
-              {confirm.isPending ? "Confirming…" : "Confirm sandbox payment"}
+              {confirm.isPending ? "确认中…" : "确认沙箱支付"}
             </button>
             <button
               type="button"
@@ -164,14 +176,14 @@ export function BillingPage() {
               onClick={() => setPendingCheckout(null)}
               className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
-              Dismiss
+              关闭
             </button>
           </div>
         </section>
       )}
 
-      <section className="mt-8" aria-label="Plans">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">Plans</h2>
+      <section className="mt-8" aria-label="套餐">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">套餐</h2>
         <div className="mt-3 grid gap-4 sm:grid-cols-3" data-testid="plan-list">
           {plansQuery.data?.map((plan) => (
             <div
@@ -186,15 +198,15 @@ export function BillingPage() {
               <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{plan.name}</p>
               <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
                 ${plan.price_monthly}
-                <span className="text-xs font-normal text-zinc-500">/month</span>
+                <span className="text-xs font-normal text-zinc-500">/月</span>
               </p>
               <p className="mt-2 text-xs text-zinc-500">
-                {quotaLabel(plan.quota_ai_calls_monthly)} AI calls ·{" "}
-                {quotaLabel(plan.quota_evaluations_monthly)} evaluations
+                {quotaLabel(plan.quota_ai_calls_monthly)} 次 AI 调用 ·{" "}
+                {quotaLabel(plan.quota_evaluations_monthly)} 次评分
               </p>
               {subscription?.plan_code === plan.code ? (
                 <p className="mt-3 text-xs font-medium text-emerald-600 dark:text-emerald-400" data-testid="current-plan-badge">
-                  Current plan
+                  当前套餐
                 </p>
               ) : (
                 plan.code !== "free" && (
@@ -205,7 +217,7 @@ export function BillingPage() {
                     onClick={() => startCheckout.mutate(plan.code)}
                     className="mt-3 rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
                   >
-                    Upgrade (sandbox)
+                    升级（沙箱）
                   </button>
                 )
               )}
@@ -214,13 +226,13 @@ export function BillingPage() {
         </div>
       </section>
 
-      <section className="mt-8" aria-label="Billing history">
+      <section className="mt-8" aria-label="账单历史">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
-          Billing history
+          账单历史
         </h2>
         {historyQuery.data && historyQuery.data.length === 0 && (
           <p className="mt-3 text-sm text-zinc-500" data-testid="no-history">
-            No transactions yet.
+            还没有交易记录。
           </p>
         )}
         <ul className="mt-3 space-y-2" data-testid="history-list">
@@ -234,7 +246,7 @@ export function BillingPage() {
                 {transaction.kind} · {transaction.provider}
               </span>
               <span className="text-xs text-zinc-500">
-                {transaction.currency} {transaction.amount} · {transaction.status} ·{" "}
+                {transaction.currency} {transaction.amount} · {STATUS_LABELS[transaction.status] ?? transaction.status} ·{" "}
                 {new Date(transaction.created_at).toLocaleDateString()}
               </span>
             </li>

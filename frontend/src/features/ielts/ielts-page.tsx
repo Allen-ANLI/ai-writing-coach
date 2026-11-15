@@ -23,20 +23,26 @@ import {
 import type { IeltsQuestionDetail, IeltsQuestionSummary } from "@/types/api";
 
 const QUESTION_TYPE_LABELS: Record<string, string> = {
-  line_graph: "Line graph",
-  bar_chart: "Bar chart",
-  pie_chart: "Pie chart",
-  table: "Table",
-  process: "Process",
-  map: "Map",
-  letter_formal: "Formal letter",
-  letter_semi_formal: "Semi-formal letter",
-  letter_informal: "Informal letter",
-  opinion: "Opinion",
-  discussion: "Discussion",
-  advantages_disadvantages: "Advantages / disadvantages",
-  problem_solution: "Problem / solution",
-  two_part: "Two-part question",
+  line_graph: "线图",
+  bar_chart: "柱状图",
+  pie_chart: "饼图",
+  table: "表格",
+  process: "流程图",
+  map: "地图",
+  letter_formal: "正式书信",
+  letter_semi_formal: "半正式书信",
+  letter_informal: "非正式书信",
+  opinion: "观点类",
+  discussion: "讨论类",
+  advantages_disadvantages: "利弊分析",
+  problem_solution: "问题与解决",
+  two_part: "双问题",
+};
+
+const DIFFICULTY_LABELS: Record<string, string> = {
+  easy: "简单",
+  medium: "中等",
+  hard: "困难",
 };
 
 const TASK1_TYPES = [
@@ -59,7 +65,7 @@ const TASK2_TYPES = [
 ];
 
 function typeLabel(questionType: string | null): string {
-  if (!questionType) return "Question";
+  if (!questionType) return "题目";
   return QUESTION_TYPE_LABELS[questionType] ?? questionType;
 }
 
@@ -111,7 +117,7 @@ export function IeltsPage() {
         setSelected({ ...selected, is_favorited: !selected.is_favorited });
       }
     },
-    onError: (err) => setActionError(err instanceof Error ? err.message : "Favorite failed."),
+    onError: (err) => setActionError(err instanceof Error ? err.message : "收藏操作失败。"),
   });
 
   const randomMutation = useMutation({
@@ -120,7 +126,7 @@ export function IeltsPage() {
       setSelected(question);
       setActionError(null);
     },
-    onError: (err) => setActionError(err instanceof Error ? err.message : "No question available."),
+    onError: (err) => setActionError(err instanceof Error ? err.message : "没有可用题目。"),
   });
 
   const startWritingMutation = useMutation({
@@ -135,7 +141,7 @@ export function IeltsPage() {
     onSuccess: (essay) => {
       router.push(`/essays/${essay.id}`);
     },
-    onError: (err) => setActionError(err instanceof Error ? err.message : "Could not start writing."),
+    onError: (err) => setActionError(err instanceof Error ? err.message : "无法开始写作。"),
   });
 
   const items = questionsQuery.data?.pages.flatMap((page) => page.items) ?? [];
@@ -153,7 +159,7 @@ export function IeltsPage() {
           : "border-zinc-300 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
       }`}
     >
-      {question.is_favorited ? "★ Favorited" : "☆ Favorite"}
+      {question.is_favorited ? "★ 已收藏" : "☆ 收藏"}
     </button>
   );
 
@@ -166,7 +172,7 @@ export function IeltsPage() {
           onClick={() => setSelected(null)}
           className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
         >
-          ← Back to question bank
+          ← 返回题库
         </button>
 
         <div className="mt-4 rounded-lg border border-zinc-200 p-5 dark:border-zinc-800" data-testid="question-detail">
@@ -178,8 +184,8 @@ export function IeltsPage() {
               {typeLabel(selected.question_type)}
             </span>
             {selected.difficulty && (
-              <span className="rounded-full border border-zinc-300 px-2.5 py-1 capitalize text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
-                {selected.difficulty}
+              <span className="rounded-full border border-zinc-300 px-2.5 py-1 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
+                {DIFFICULTY_LABELS[selected.difficulty] ?? selected.difficulty}
               </span>
             )}
           </div>
@@ -206,7 +212,7 @@ export function IeltsPage() {
           </div>
 
           <p className="mt-4 text-xs text-zinc-400">
-            {selected.source_title ?? "Original practice question"} · license: {selected.license_status}
+            {selected.source_title ?? "原创练习题"} · 授权状态：{selected.license_status}
           </p>
 
           {actionError && (
@@ -221,7 +227,7 @@ export function IeltsPage() {
               onClick={() => startWritingMutation.mutate(selected)}
               className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
             >
-              {startWritingMutation.isPending ? "Creating essay…" : "Start writing"}
+              {startWritingMutation.isPending ? "创建作文中…" : "开始写作"}
             </button>
             {favoriteButton(selected, "favorite-toggle")}
           </div>
@@ -233,16 +239,16 @@ export function IeltsPage() {
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10" data-testid="ielts-page">
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-        IELTS Practice
+        IELTS 题库
       </h1>
       <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-        Original practice questions covering every Task 1 and Task 2 type. Pick a question,
-        then write — grammar help and evaluation follow the finalized editor flow.
+        覆盖全部 Task 1 / Task 2 题型的原创练习题。选一道题开始写作，
+        语法辅助与评分在编辑器中进行。
       </p>
 
       <div className="mt-6 flex flex-wrap items-end gap-3">
         <label className="text-sm">
-          <span className="text-xs font-medium text-zinc-500">Task</span>
+          <span className="text-xs font-medium text-zinc-500">任务</span>
           <select
             data-testid="filter-task-type"
             value={taskType}
@@ -252,21 +258,21 @@ export function IeltsPage() {
             }}
             className="mt-1 block rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           >
-            <option value="">All tasks</option>
+            <option value="">全部任务</option>
             <option value="task1">Task 1</option>
             <option value="task2">Task 2</option>
           </select>
         </label>
 
         <label className="text-sm">
-          <span className="text-xs font-medium text-zinc-500">Topic</span>
+          <span className="text-xs font-medium text-zinc-500">话题</span>
           <select
             data-testid="filter-topic"
             value={topic}
             onChange={(event) => setTopic(event.target.value)}
             className="mt-1 block rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           >
-            <option value="">All topics</option>
+            <option value="">全部话题</option>
             {tagsQuery.data?.map((tag) => (
               <option key={tag.id} value={tag.slug}>
                 {tag.name} ({tag.question_count})
@@ -276,14 +282,14 @@ export function IeltsPage() {
         </label>
 
         <label className="text-sm">
-          <span className="text-xs font-medium text-zinc-500">Question type</span>
+          <span className="text-xs font-medium text-zinc-500">题型</span>
           <select
             data-testid="filter-question-type"
             value={questionType}
             onChange={(event) => setQuestionType(event.target.value)}
             className="mt-1 block rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           >
-            <option value="">All types</option>
+            <option value="">全部题型</option>
             {typeOptions.map((value) => (
               <option key={value} value={value}>
                 {typeLabel(value)}
@@ -299,7 +305,7 @@ export function IeltsPage() {
           onClick={() => randomMutation.mutate()}
           className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
         >
-          {randomMutation.isPending ? "Picking…" : "Random question"}
+          {randomMutation.isPending ? "抽取中…" : "随机一题"}
         </button>
       </div>
 
@@ -308,12 +314,12 @@ export function IeltsPage() {
       )}
 
       {questionsQuery.isPending && (
-        <p className="mt-6 text-sm text-zinc-500">Loading questions…</p>
+        <p className="mt-6 text-sm text-zinc-500">题目加载中…</p>
       )}
 
       {!questionsQuery.isPending && items.length === 0 && (
         <p data-testid="ielts-empty" className="mt-6 text-sm text-zinc-500 dark:text-zinc-400">
-          No questions match these filters. Try a different combination.
+          没有符合筛选条件的题目，换个组合试试。
         </p>
       )}
 
@@ -332,8 +338,8 @@ export function IeltsPage() {
                 {typeLabel(question.question_type)}
               </span>
               {question.difficulty && (
-                <span className="rounded-full border border-zinc-300 px-2.5 py-1 capitalize text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
-                  {question.difficulty}
+                <span className="rounded-full border border-zinc-300 px-2.5 py-1 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
+                  {DIFFICULTY_LABELS[question.difficulty] ?? question.difficulty}
                 </span>
               )}
               <span className="ml-auto flex gap-1.5">
@@ -358,12 +364,12 @@ export function IeltsPage() {
                       setActionError(null);
                     })
                     .catch((err: unknown) =>
-                      setActionError(err instanceof Error ? err.message : "Could not load question."),
+                      setActionError(err instanceof Error ? err.message : "无法加载题目。"),
                     );
                 }}
                 className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
               >
-                View question
+                查看题目
               </button>
               {favoriteButton(question, "favorite-toggle")}
             </div>
@@ -379,7 +385,7 @@ export function IeltsPage() {
           onClick={() => questionsQuery.fetchNextPage()}
           className="mt-6 rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
         >
-          {questionsQuery.isFetchingNextPage ? "Loading…" : "Load more"}
+          {questionsQuery.isFetchingNextPage ? "加载中…" : "加载更多"}
         </button>
       )}
     </main>

@@ -10,7 +10,7 @@ export default function EssayEditorPage() {
         fallback={
           <main className="flex flex-1 items-center justify-center">
             <p role="status" className="text-sm text-zinc-500 dark:text-zinc-400">
-              Loading editor…
+              编辑器加载中…
             </p>
           </main>
         }

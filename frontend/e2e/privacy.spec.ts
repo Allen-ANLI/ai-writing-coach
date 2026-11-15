@@ -15,9 +15,9 @@ function uniqueEmail(): string {
 async function register(page: Page): Promise<string> {
   const email = uniqueEmail();
   await page.goto("/register");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("邮箱").fill(email);
+  await page.getByLabel("密码", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "注册账号" }).click();
   await expect(page).toHaveURL(/\/profile/);
   return email;
 }
@@ -76,7 +76,7 @@ test("account deletion is confirmed and irreversible", async ({ page }) => {
   // The deleted account can no longer sign in.
   await page.locator("#login-email").fill(email);
   await page.locator("#login-password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "登录" }).click();
   await expect(page.getByRole("alert")).toBeVisible({ timeout: 10_000 });
   await expect(page).toHaveURL(/\/login/);
 });

@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "AI Writing Coach",
-  description: "English writing training application.",
+  description: "英语写作训练应用 — 行内语法反馈、情境化讲解与个人表达知识库。",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -1,12 +1,9 @@
 /**
- * Grammar feedback extension (finalized UX, user decision 2026-11-15 §2).
- *
- * - Inline decorations underline issue ranges (color by category). No
- *   always-visible hint blocks: feedback floats on hover (React layer).
- * - Hover events are bridged via DOM CustomEvents; the React layer subscribes
- *   in effects (render-phase pure).
- * - Decorations are never part of the persisted document or word count.
- * - Issue ranges map through transactions; unreliable mappings are dropped.
+ * 语法反馈扩展（ADR-024）：
+ * - 内联装饰按类别给错误范围加下划线；反馈悬浮显示（React 层）。
+ * - 悬浮事件经 DOM CustomEvent 桥接；点击错误只放置光标，不触发讲解
+ *   （详细讲解在悬浮卡片内自动加载）。
+ * - 装饰不进入持久化正文与字数；不可靠的位置映射直接丢弃。
  */
 
 import { Extension } from "@tiptap/core";
@@ -30,7 +27,6 @@ interface GrammarPluginState {
 export const GRAMMAR_EVENTS = {
   reveal: "awc-grammar:reveal",
   ignore: "awc-grammar:ignore",
-  teach: "awc-grammar:teach",
   hover: "awc-grammar:hover",
   hoverEnd: "awc-grammar:hover-end",
 } as const;
@@ -140,19 +136,6 @@ export function createGrammarExtension() {
                 }
                 return false;
               },
-            },
-            handleClickOn(view, pos, _node, _nodePos, event) {
-              const pluginState = grammarPluginKey.getState(view.state);
-              const target = event.target as HTMLElement | null;
-              if (target?.closest?.(".awc-hint-card")) {
-                return false; // let the floating card handle its own clicks
-              }
-              const hit = pluginState?.issues.find((item) => pos >= item.from && pos <= item.to);
-              if (hit) {
-                emit(GRAMMAR_EVENTS.teach, { issueId: hit.issue.id });
-                return true;
-              }
-              return false;
             },
           },
         }),

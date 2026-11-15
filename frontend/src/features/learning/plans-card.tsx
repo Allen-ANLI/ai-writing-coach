@@ -38,7 +38,7 @@ export function PlansCard() {
       setError(null);
       invalidate();
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "Could not create the plan."),
+    onError: (err) => setError(err instanceof Error ? err.message : "无法创建计划。"),
   });
 
   const toggleTask = useMutation({
@@ -55,7 +55,7 @@ export function PlansCard() {
     },
     onSuccess: () => setError(null),
     onError: (err, _task, context) => {
-      setError(err instanceof Error ? err.message : "Could not update the task.");
+      setError(err instanceof Error ? err.message : "无法更新任务。");
       if (context?.previous) {
         queryClient.setQueryData(["learning-tasks"], context.previous);
       }
@@ -66,9 +66,9 @@ export function PlansCard() {
   const tasks = tasksQuery.data ?? [];
 
   return (
-    <section className="mt-8" aria-label="Study plans" data-testid="plans-card">
+    <section className="mt-8" aria-label="学习计划" data-testid="plans-card">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
-        Study plans & tasks
+        学习计划与任务
       </h2>
 
       <form
@@ -81,13 +81,13 @@ export function PlansCard() {
         }}
       >
         <label className="text-sm">
-          <span className="text-xs font-medium text-zinc-500">New plan</span>
+          <span className="text-xs font-medium text-zinc-500">新计划</span>
           <input
             data-testid="plan-title"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             maxLength={255}
-            placeholder="e.g. March writing sprint"
+            placeholder="例如：三月写作冲刺"
             className="mt-1 block w-64 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           />
         </label>
@@ -97,7 +97,7 @@ export function PlansCard() {
           disabled={addPlan.isPending || title.trim() === ""}
           className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
         >
-          Add plan
+          添加计划
         </button>
       </form>
 
@@ -107,7 +107,7 @@ export function PlansCard() {
 
       {plansQuery.data && plansQuery.data.length === 0 && (
         <p className="mt-3 text-sm text-zinc-500" data-testid="no-plans">
-          No plans yet — add one above or confirm a study plan from the planner.
+          还没有计划 — 在上方添加，或确认学习规划生成的计划。
         </p>
       )}
 
@@ -120,9 +120,9 @@ export function PlansCard() {
           >
             <p className="font-medium text-zinc-800 dark:text-zinc-200">{plan.title}</p>
             <p className="text-xs text-zinc-500">
-              {plan.status}
+              {plan.status === "active" ? "进行中" : plan.status === "completed" ? "已完成" : plan.status}
               {plan.goal ? ` · ${plan.goal}` : ""}
-              {plan.daily_target_minutes ? ` · ${plan.daily_target_minutes} min/day` : ""}
+              {plan.daily_target_minutes ? ` · 每天 ${plan.daily_target_minutes} 分钟` : ""}
             </p>
           </li>
         ))}
@@ -142,7 +142,7 @@ export function PlansCard() {
                 checked={task.status === "completed"}
                 onChange={() => toggleTask.mutate(task)}
                 className="mt-1 h-4 w-4"
-                aria-label={`Mark ${task.title} ${task.status === "completed" ? "pending" : "completed"}`}
+                aria-label={`将 ${task.title} 标记为${task.status === "completed" ? "未完成" : "已完成"}`}
               />
               <div className="min-w-0">
                 <p
@@ -152,7 +152,7 @@ export function PlansCard() {
                       : "text-zinc-800 dark:text-zinc-200"
                   }`}
                 >
-                  [{task.task_type}] {task.title}
+                  [{task.task_type === "review" ? "复习" : task.task_type === "practice" ? "练习" : task.task_type === "writing" ? "写作" : task.task_type}] {task.title}
                 </p>
                 {task.description && (
                   <p className="text-xs text-zinc-500 dark:text-zinc-400">{task.description}</p>

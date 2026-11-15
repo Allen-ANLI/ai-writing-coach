@@ -714,6 +714,32 @@ fixed gaps and committed):
 real email provider, real payment activation, production secrets + TLS,
 public deployment approval.
 
+## 3s. ADR-024 — 对话式构思 + 悬浮直显反馈 + 中文界面 (2026-11-15)
+
+**Status: DONE, verified, committed. User-directed interaction overhaul.**
+
+诊断（用户报告"语法检查失效/详解连不上大模型/Tab 用不了"）：
+- 语法检查前后端均要求活动写作会话；用户未手动启动会话 → 检查从未触发，
+  teaching 请求也从未发出（ai_usage_logs 无 teaching 记录）。LLM 本身正常
+  （同日 outline_generate/general_evaluate 均 success）。
+- Tab 仅在点击模糊答案 pin 后生效，交互不可发现。
+
+交付：
+- 打开编辑器自动创建辅助会话（显式取消后不重建；提交后继续写作会重建）。
+- 悬浮卡直显推荐修改 + 内嵌情境讲解（reveal/teaching 并行拉取，服务端缓存）；
+  Tab 卡片可见即接受；移除模糊/点击揭示/教学图标/点击错误触发讲解。
+- 左侧对话式构思：POST/GET /essays/{id}/planner/chat|messages（契约 1.5.0，
+  101 操作），outline_chat_messages（迁移 0018），planner_chat v1 +
+  outline_generate v2（中文指引、英文 thesis）；确认归档旧计划；移除 Plan
+  按钮与文档大纲树。
+- 光标处灰色中文 inline 指引（ProseMirror widget，不持久化/不计字数/不代写）。
+- 全站简体中文 UI（作文正文/题目/IELTS 题干保留英文）。
+- 测试：backend 369 passed（+7 planner chat +1 依赖守卫），Playwright 66，
+  vitest 21，tsc/ESLint/build/ruff clean。mock planner 确定性 propose 供 E2E。
+- 文档：ADR-024、AGENTS.md §4 Editor UX 修订、TRACEABILITY_MATRIX 变更日志。
+
+环境事件：E2E 期间 Docker Desktop 崩溃，`docker desktop restart` 恢复后重跑。
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

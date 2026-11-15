@@ -1,9 +1,8 @@
 "use client";
 
 /**
- * Version history drawer: list immutable snapshots, view content, create
- * checkpoints, restore with confirmation. Restore and checkpoint require a
- * clean save state so base_revision/source_revision are exact.
+ * 历史版本抽屉：列出不可变快照、查看内容、创建存档点、确认后恢复。
+ * 恢复与存档要求干净的保存状态，保证 base_revision/source_revision 精确。
  */
 
 import { useState } from "react";
@@ -17,11 +16,11 @@ import type { TipTapDocument, VersionData, VersionDetailData } from "@/types/api
 import type { SaveStatus } from "@/features/editor/use-autosave";
 
 const VERSION_TYPE_LABELS: Record<string, string> = {
-  original: "Original",
-  checkpoint: "Checkpoint",
-  assisted: "Assisted",
-  final: "Final",
-  ai_rewrite: "AI rewrite",
+  original: "原始版本",
+  checkpoint: "存档点",
+  assisted: "辅助写作",
+  final: "最终提交",
+  ai_rewrite: "AI 改写",
 };
 
 export function VersionHistory({
@@ -69,7 +68,7 @@ export function VersionHistory({
     },
     onError: (error) => {
       setActionError(
-        error instanceof ApiClientError ? error.message : "Could not create the checkpoint.",
+        error instanceof ApiClientError ? error.message : "无法创建存档点。",
       );
     },
   });
@@ -77,7 +76,7 @@ export function VersionHistory({
   const viewMutation = useMutation({
     mutationFn: async (versionId: string) => (await getVersion(essayId, versionId)).data,
     onSuccess: (data) => setViewing(data),
-    onError: () => setActionError("Could not load this version."),
+    onError: () => setActionError("无法加载该版本。"),
   });
 
   const restoreMutation = useMutation({
@@ -100,8 +99,8 @@ export function VersionHistory({
       setConfirming(null);
       setActionError(
         error instanceof ApiClientError && error.status === 409
-          ? "The document changed since you opened history. Close history, save, and try again."
-          : "Could not restore this version.",
+          ? "打开历史后文档发生了变化。请关闭历史、保存后再试。"
+          : "无法恢复该版本。",
       );
     },
   });
@@ -109,11 +108,11 @@ export function VersionHistory({
   const clean = saveStatus === "saved";
 
   return (
-    <Dialog title="Version history" onClose={onClose}>
+    <Dialog title="历史版本" onClose={onClose}>
       <div className="space-y-4">
-        <section aria-label="Create checkpoint" className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+        <section aria-label="创建存档点" className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
           <label htmlFor="checkpoint-label" className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-            Save a checkpoint of the current text
+            为当前文本创建存档点
           </label>
           <div className="mt-2 flex gap-2">
             <input
@@ -121,7 +120,7 @@ export function VersionHistory({
               type="text"
               value={label}
               maxLength={255}
-              placeholder="Optional label"
+              placeholder="备注（可选）"
               onChange={(event) => setLabel(event.target.value)}
               className="min-w-0 flex-1 rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
@@ -132,12 +131,12 @@ export function VersionHistory({
               onClick={() => checkpointMutation.mutate()}
               className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
             >
-              {checkpointMutation.isPending ? "Saving…" : "Checkpoint"}
+              {checkpointMutation.isPending ? "保存中…" : "创建存档点"}
             </button>
           </div>
           {!clean && (
             <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-              Save your edits first — checkpoints capture the saved revision.
+              请先保存修改 — 存档点捕获的是已保存的修订。
             </p>
           )}
         </section>
@@ -148,14 +147,14 @@ export function VersionHistory({
           </p>
         )}
 
-        {versionsQuery.isPending && <p className="text-sm text-zinc-500">Loading versions…</p>}
+        {versionsQuery.isPending && <p className="text-sm text-zinc-500">版本加载中…</p>}
         {versionsQuery.isError && (
           <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-            Could not load version history.
+            无法加载历史版本。
           </p>
         )}
 
-        <ul className="max-h-72 space-y-2 overflow-y-auto" data-testid="version-list">
+        <ul className="awc-scroll max-h-72 space-y-2 overflow-y-auto" data-testid="version-list">
           {versionsQuery.data?.items.map((version) => (
             <li
               key={version.id}
@@ -167,7 +166,7 @@ export function VersionHistory({
                   {version.label ? ` — ${version.label}` : ""}
                 </p>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  {version.word_count} words · {new Date(version.created_at).toLocaleString()}
+                  {version.word_count} 词 · {new Date(version.created_at).toLocaleString()}
                 </p>
               </div>
               <div className="flex shrink-0 gap-1">
@@ -176,7 +175,7 @@ export function VersionHistory({
                   onClick={() => viewMutation.mutate(version.id)}
                   className="rounded px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
                 >
-                  View
+                  查看
                 </button>
                 <button
                   type="button"
@@ -184,7 +183,7 @@ export function VersionHistory({
                   onClick={() => setExtractingVersionId(version.id)}
                   className="rounded px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
                 >
-                  Extract
+                  提取表达
                 </button>
                 <button
                   type="button"
@@ -193,7 +192,7 @@ export function VersionHistory({
                   onClick={() => setConfirming(version)}
                   className="rounded px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
                 >
-                  Restore
+                  恢复
                 </button>
               </div>
             </li>
@@ -202,21 +201,21 @@ export function VersionHistory({
       </div>
 
       {viewing && (
-        <Dialog title={`Version ${viewing.version_no} (read-only)`} onClose={() => setViewing(null)}>
+        <Dialog title={`版本 ${viewing.version_no}（只读）`} onClose={() => setViewing(null)}>
           <pre
             data-testid="version-content"
-            className="max-h-80 overflow-y-auto whitespace-pre-wrap rounded-lg bg-zinc-50 p-3 text-sm text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+            className="awc-scroll max-h-80 overflow-y-auto whitespace-pre-wrap rounded-lg bg-zinc-50 p-3 text-sm text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
           >
-            {viewing.plain_text || "(empty)"}
+            {viewing.plain_text || "（空）"}
           </pre>
         </Dialog>
       )}
 
       {confirming && (
-        <Dialog title="Restore this version?" onClose={() => setConfirming(null)}>
+        <Dialog title="恢复该版本？" onClose={() => setConfirming(null)}>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Version {confirming.version_no} will replace your current working text. The version
-            itself stays unchanged, and your current text remains in history if you checkpointed it.
+            版本 {confirming.version_no} 将替换当前工作文本。版本本身保持不变；
+            如果当前文本已创建存档点，仍可在历史中找回。
           </p>
           <div className="mt-4 flex justify-end gap-2">
             <button
@@ -224,7 +223,7 @@ export function VersionHistory({
               onClick={() => setConfirming(null)}
               className="rounded-md px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
-              Cancel
+              取消
             </button>
             <button
               type="button"
@@ -232,7 +231,7 @@ export function VersionHistory({
               onClick={() => restoreMutation.mutate(confirming)}
               className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
             >
-              Restore
+              恢复
             </button>
           </div>
         </Dialog>

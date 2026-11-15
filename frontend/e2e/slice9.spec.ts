@@ -13,9 +13,9 @@ function uniqueEmail(): string {
 
 async function register(page: Page): Promise<void> {
   await page.goto("/register");
-  await page.getByLabel("Email").fill(uniqueEmail());
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("邮箱").fill(uniqueEmail());
+  await page.getByLabel("密码", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "注册账号" }).click();
   await expect(page).toHaveURL(/\/profile/);
 }
 
@@ -42,7 +42,7 @@ test("planner confirmation creates a plan with completable tasks", async ({ page
   await page.getByTestId("generate-plan").click();
   await expect(page.getByTestId("plan-suggestions")).toBeVisible({ timeout: 20_000 });
   await page.getByTestId("confirm-plan").click();
-  await expect(page.getByTestId("plan-done")).toContainText("Plan confirmed", { timeout: 15_000 });
+  await expect(page.getByTestId("plan-done")).toContainText("计划已确认", { timeout: 15_000 });
 
   await expect(page.getByTestId("plan-item")).toHaveCount(1, { timeout: 10_000 });
   const tasks = page.getByTestId("task-item");

@@ -1,105 +1,150 @@
 "use client";
 
 /**
- * Floating grammar feedback card (user decision 2026-11-15 §2.4–2.6).
- *
- * Appears on hover over an underlined error; slightly transparent surface
- * floating above content. The correction stays blurred until the user clicks
- * it directly (no reveal button). After reveal, Tab replaces the original
- * text — only while this correction interaction is active. A small teaching
- * icon opens the contextual teaching card.
+ * 语法反馈悬浮卡（ADR-024，取代 ADR-016 的模糊/点击揭示交互）：
+ * 悬浮错误即直接显示推荐修改与备选；详细讲解（LLM）在卡片内自动加载。
+ * Tab 在卡片可见时接受推荐修改；不再需要点击揭示，也没有独立教学卡。
  */
 
-import type { RevealedSuggestion } from "@/types/api";
+import type { RevealedSuggestion, TeachingData } from "@/types/api";
 
 export interface HoverCardState {
   issueId: string;
   top: number;
   left: number;
   explanation: string | null;
-  revealed: RevealedSuggestion[] | null;
-  pinned: boolean;
+  suggestions: RevealedSuggestion[] | null;
+  suggestionsLoading: boolean;
+  teaching: TeachingData | null;
+  teachingLoading: boolean;
+  teachingError: string | null;
 }
 
 export function GrammarHoverCard({
   state,
-  onRevealAnswer,
-  onTeach,
+  onAccept,
+  onIgnore,
+  onRetryTeaching,
   onMouseEnter,
   onMouseLeave,
 }: {
   state: HoverCardState;
-  onRevealAnswer: () => void;
-  onTeach: () => void;
+  onAccept: () => void;
+  onIgnore: () => void;
+  onRetryTeaching: () => void;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }) {
   const recommended =
-    state.revealed?.find((s) => s.is_recommended) ?? state.revealed?.[0] ?? null;
+    state.suggestions?.find((s) => s.is_recommended) ?? state.suggestions?.[0] ?? null;
+  const alternatives = (state.suggestions ?? []).filter((s) => s !== recommended);
 
   return (
     <div
       data-testid="grammar-hover-card"
-      className="awc-hint-card fixed z-40 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-zinc-200/70 bg-white/90 p-3 shadow-lg backdrop-blur-sm dark:border-zinc-700/70 dark:bg-zinc-900/90"
+      className="awc-hint-card awc-scroll fixed z-40 max-h-[70vh] w-96 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-zinc-200/70 bg-white/95 p-3 shadow-lg backdrop-blur-sm dark:border-zinc-700/70 dark:bg-zinc-900/95"
       style={{
-        top: Math.min(state.top + 6, window.innerHeight - 160),
-        left: Math.max(8, Math.min(state.left, window.innerWidth - 340)),
+        top: Math.min(state.top + 6, window.innerHeight - 200),
+        left: Math.max(8, Math.min(state.left, window.innerWidth - 400)),
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
       <p className="text-xs leading-relaxed text-zinc-700 dark:text-zinc-300">
-        {state.explanation ?? ""}
+        {state.explanation ?? "此处可能存在问题。"}
       </p>
 
-      <div className="mt-2 flex items-center gap-2">
-        {recommended ? (
-          <span
-            data-testid="revealed-answer"
-            className="rounded bg-emerald-50 px-1.5 py-0.5 text-sm font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-          >
-            {recommended.suggested_text}
-          </span>
-        ) : (
-          <button
-            type="button"
-            data-testid="blurred-answer"
-            onClick={onRevealAnswer}
-            title="Click to see the suggested correction"
-            className="awc-blurred-answer rounded bg-zinc-100 px-1.5 py-0.5 text-sm font-semibold text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200"
-          >
-            ••••
-          </button>
+      <div className="mt-2">
+        {state.suggestionsLoading && (
+          <p className="text-xs text-zinc-400" data-testid="suggestions-loading">
+            正在加载修改建议…
+          </p>
         )}
-
-        <button
-          type="button"
-          aria-label="Explain this error"
-          data-testid="teaching-icon"
-          onClick={onTeach}
-          className="ml-auto flex h-6 w-6 items-center justify-center rounded-full border border-zinc-300 text-xs text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M12 2L1 7l11 5 9-4.09V17h2V7L12 2zM5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82z"
-              fill="currentColor"
-            />
-          </svg>
-        </button>
+        {recommended && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              data-testid="revealed-answer"
+              className="rounded bg-emerald-50 px-1.5 py-0.5 text-sm font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+            >
+              {recommended.suggested_text}
+            </span>
+            <button
+              type="button"
+              data-testid="accept-correction"
+              onClick={onAccept}
+              className="rounded-md bg-emerald-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-emerald-700"
+            >
+              接受修改
+            </button>
+            <button
+              type="button"
+              data-testid="ignore-issue"
+              onClick={onIgnore}
+              className="rounded-md border border-zinc-300 px-2 py-0.5 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+            >
+              忽略
+            </button>
+          </div>
+        )}
+        {alternatives.length > 0 && (
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            备选：{alternatives.map((s) => s.suggested_text).join(" / ")}
+          </p>
+        )}
+        {recommended && (
+          <p
+            data-testid="tab-instruction"
+            className="mt-1.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400"
+          >
+            按 <kbd className="rounded border border-zinc-300 px-1 dark:border-zinc-600">Tab</kbd>{" "}
+            替换原文 · Esc 关闭
+          </p>
+        )}
       </div>
 
-      {recommended && (
-        <p
-          data-testid="tab-instruction"
-          className="mt-2 text-[11px] font-medium text-zinc-500 dark:text-zinc-400"
-        >
-          Press <kbd className="rounded border border-zinc-300 px-1 dark:border-zinc-600">Tab</kbd>{" "}
-          to replace the original text.
-        </p>
-      )}
-      <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
-        Alt+I ignore · Alt+T teach · Esc close
-      </p>
+      <div className="mt-2 border-t border-zinc-100 pt-2 dark:border-zinc-800">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+          详细讲解
+        </h3>
+        {state.teachingLoading && (
+          <p className="mt-1 text-xs text-zinc-400" data-testid="teaching-loading">
+            正在结合你的句子生成讲解…
+          </p>
+        )}
+        {state.teachingError && (
+          <div className="mt-1" data-testid="teaching-error">
+            <p className="text-xs text-red-600 dark:text-red-400">{state.teachingError}</p>
+            <button
+              type="button"
+              data-testid="retry-teaching"
+              onClick={onRetryTeaching}
+              className="mt-1 rounded border border-zinc-300 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              重试
+            </button>
+          </div>
+        )}
+        {state.teaching && (
+          <div className="mt-1 space-y-1.5" data-testid="teaching-content">
+            <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+              {state.teaching.title}
+            </p>
+            <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
+              {state.teaching.why_wrong}
+            </p>
+            <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
+              <span className="font-medium text-zinc-700 dark:text-zinc-200">规则：</span>
+              {state.teaching.grammar_rule}
+            </p>
+            <p className="text-xs text-zinc-600 dark:text-zinc-300">
+              <span className="font-medium text-zinc-700 dark:text-zinc-200">推荐写法：</span>
+              <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                {state.teaching.recommended_correction}
+              </span>
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

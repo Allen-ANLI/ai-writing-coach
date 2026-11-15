@@ -28,7 +28,7 @@ export function RegisterForm() {
     event.preventDefault();
     setError(null);
     if (password.length < 10) {
-      setError("Password must be at least 10 characters.");
+      setError("密码至少需要 10 个字符。");
       return;
     }
     setPending(true);
@@ -39,15 +39,15 @@ export function RegisterForm() {
       if (caught instanceof ApiClientError) {
         setError(
           caught.code === "RESOURCE_ALREADY_EXISTS"
-            ? "This email is already registered. Try signing in."
+            ? "该邮箱已注册，请直接登录。"
             : caught.code === "VALIDATION_ERROR"
-              ? (caught.details[0]?.reason ?? "Please check the form fields.")
+              ? (caught.details[0]?.reason ?? "请检查表单填写内容。")
               : caught.code === "RATE_LIMIT_EXCEEDED"
-                ? "Too many attempts. Please try again later."
+                ? "尝试次数过多，请稍后再试。"
                 : caught.message,
         );
       } else {
-        setError("Cannot reach the server. Please try again.");
+        setError("无法连接服务器，请稍后重试。");
       }
     } finally {
       setPending(false);
@@ -58,7 +58,7 @@ export function RegisterForm() {
     <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
       <div>
         <label htmlFor="register-email" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Email
+          邮箱
         </label>
         <input
           id="register-email"
@@ -73,7 +73,7 @@ export function RegisterForm() {
       </div>
       <div>
         <label htmlFor="register-display-name" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Display name <span className="font-normal text-zinc-400">(optional)</span>
+          昵称 <span className="font-normal text-zinc-400">（可选）</span>
         </label>
         <input
           id="register-display-name"
@@ -88,7 +88,7 @@ export function RegisterForm() {
       </div>
       <div>
         <label htmlFor="register-password" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Password
+          密码
         </label>
         <input
           id="register-password"
@@ -103,7 +103,7 @@ export function RegisterForm() {
           aria-describedby="register-password-hint"
         />
         <p id="register-password-hint" className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          At least 10 characters.
+          至少 10 个字符。
         </p>
       </div>
       {error && (
@@ -116,7 +116,7 @@ export function RegisterForm() {
         disabled={pending}
         className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
       >
-        {pending ? "Creating account…" : "Create account"}
+        {pending ? "注册中…" : "注册账号"}
       </button>
     </form>
   );

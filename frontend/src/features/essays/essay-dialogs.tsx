@@ -16,17 +16,17 @@ const secondaryButtonClass =
   "rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900";
 
 export const WRITING_TYPE_LABELS: Record<WritingType, string> = {
-  free_writing: "Free writing",
+  free_writing: "自由写作",
   ielts_task1: "IELTS Task 1",
   ielts_task2: "IELTS Task 2",
-  other: "Other",
+  other: "其他",
 };
 
 function errorMessage(caught: unknown): string {
   if (caught instanceof ApiClientError) {
     return caught.message;
   }
-  return "Cannot reach the server. Please try again.";
+  return "无法连接服务器，请稍后重试。";
 }
 
 export function CreateEssayDialog({
@@ -63,11 +63,11 @@ export function CreateEssayDialog({
   }
 
   return (
-    <Dialog title="New essay" onClose={onClose}>
+    <Dialog title="新建作文" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4" data-testid="create-dialog">
         <div>
           <label htmlFor="essay-title" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Title <span className="font-normal text-zinc-400">(optional)</span>
+            标题 <span className="font-normal text-zinc-400">（可选）</span>
           </label>
           <input
             id="essay-title"
@@ -82,7 +82,7 @@ export function CreateEssayDialog({
         </div>
         <div>
           <label htmlFor="essay-type" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Writing type
+            写作类型
           </label>
           <select
             id="essay-type"
@@ -100,7 +100,7 @@ export function CreateEssayDialog({
         </div>
         <div>
           <label htmlFor="essay-question" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Question <span className="font-normal text-zinc-400">(optional — shown separately from your writing)</span>
+            题目 <span className="font-normal text-zinc-400">（可选 — 独立显示，不混入正文）</span>
           </label>
           <textarea
             id="essay-question"
@@ -110,7 +110,7 @@ export function CreateEssayDialog({
             value={questionPrompt}
             onChange={(event) => setQuestionPrompt(event.target.value)}
             className={inputClass}
-            placeholder="Paste the essay question or prompt here…"
+            placeholder="在此粘贴作文题目或写作要求…"
           />
         </div>
         {error && (
@@ -120,10 +120,10 @@ export function CreateEssayDialog({
         )}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className={secondaryButtonClass}>
-            Cancel
+            取消
           </button>
           <button type="submit" disabled={pending} className={primaryButtonClass} data-testid="submit-create">
-            {pending ? "Creating…" : "Create essay"}
+            {pending ? "创建中…" : "创建作文"}
           </button>
         </div>
       </form>
@@ -157,11 +157,11 @@ export function RenameEssayDialog({
   }
 
   return (
-    <Dialog title="Rename essay" onClose={onClose}>
+    <Dialog title="重命名作文" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4" data-testid="rename-dialog">
         <div>
           <label htmlFor="rename-title" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Title
+            标题
           </label>
           <input
             id="rename-title"
@@ -181,10 +181,10 @@ export function RenameEssayDialog({
         )}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className={secondaryButtonClass}>
-            Cancel
+            取消
           </button>
           <button type="submit" disabled={pending} className={primaryButtonClass} data-testid="save-rename">
-            {pending ? "Saving…" : "Save"}
+            {pending ? "保存中…" : "保存"}
           </button>
         </div>
       </form>
@@ -216,11 +216,11 @@ export function DeleteEssayDialog({
   }
 
   return (
-    <Dialog title="Delete essay" onClose={onClose}>
+    <Dialog title="删除作文" onClose={onClose}>
       <div className="space-y-4" data-testid="delete-dialog">
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Delete <span className="font-medium text-zinc-900 dark:text-zinc-100">{essay.title ?? "Untitled"}</span>?
-          The essay will be removed from your list.
+          确定删除 <span className="font-medium text-zinc-900 dark:text-zinc-100">{essay.title ?? "未命名作文"}</span>？
+          删除后将从列表中移除。
         </p>
         {error && (
           <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
@@ -229,7 +229,7 @@ export function DeleteEssayDialog({
         )}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className={secondaryButtonClass} data-testid="cancel-delete">
-            Cancel
+            取消
           </button>
           <button
             type="button"
@@ -238,7 +238,7 @@ export function DeleteEssayDialog({
             className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-500 disabled:opacity-50"
             data-testid="confirm-delete"
           >
-            {pending ? "Deleting…" : "Delete"}
+            {pending ? "删除中…" : "删除"}
           </button>
         </div>
       </div>

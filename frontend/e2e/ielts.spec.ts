@@ -14,9 +14,9 @@ function uniqueEmail(): string {
 
 async function register(page: Page): Promise<void> {
   await page.goto("/register");
-  await page.getByLabel("Email").fill(uniqueEmail());
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("邮箱").fill(uniqueEmail());
+  await page.getByLabel("密码", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "注册账号" }).click();
   await expect(page).toHaveURL(/\/profile/);
 }
 
@@ -35,7 +35,7 @@ test("browse and filter the question bank", async ({ page }) => {
   expect(count).toBe(7);
   for (let i = 0; i < count; i += 1) {
     await expect(cards.nth(i)).toContainText("Task 2");
-    await expect(cards.nth(i)).toContainText("Opinion");
+    await expect(cards.nth(i)).toContainText("观点类");
   }
 
   // Topic filter narrows further; unknown combination shows the empty state.
@@ -51,18 +51,18 @@ test("favorites persist across reload and can be removed", async ({ page }) => {
 
   const firstCard = page.getByTestId("question-card").first();
   await firstCard.getByTestId("favorite-toggle").click();
-  await expect(firstCard.getByTestId("favorite-toggle")).toHaveText("★ Favorited");
+  await expect(firstCard.getByTestId("favorite-toggle")).toHaveText("★ 已收藏");
 
   await page.reload();
   await expect(page.getByTestId("question-card").first()).toBeVisible({ timeout: 15_000 });
   // The bank ordering is stable (created_at, id), so the first card is the same.
   await expect(page.getByTestId("question-card").first().getByTestId("favorite-toggle")).toHaveText(
-    "★ Favorited",
+    "★ 已收藏",
   );
 
   await page.getByTestId("question-card").first().getByTestId("favorite-toggle").click();
   await expect(page.getByTestId("question-card").first().getByTestId("favorite-toggle")).toHaveText(
-    "☆ Favorite",
+    "☆ 收藏",
   );
 });
 

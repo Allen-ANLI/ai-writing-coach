@@ -13,7 +13,7 @@ export async function fetchHealth(): Promise<HealthResult> {
   } catch {
     return {
       state: "unreachable",
-      message: `Backend is not reachable at ${API_BASE_URL}.`,
+      message: `无法连接后端服务（${API_BASE_URL}）。`,
     };
   }
 

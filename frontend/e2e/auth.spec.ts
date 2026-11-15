@@ -25,10 +25,10 @@ async function registerViaApi(
 
 async function registerViaUi(page: Page, email: string): Promise<void> {
   await page.goto("/register");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel(/Display name/).fill("E2E User");
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("邮箱").fill(email);
+  await page.getByLabel(/昵称/).fill("E2E User");
+  await page.getByLabel("密码", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "注册账号" }).click();
   await expect(page).toHaveURL(/\/profile/);
 }
 
@@ -46,9 +46,9 @@ test("login with valid credentials reaches the protected profile", async ({ page
   await registerViaApi(request, email);
 
   await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByLabel("邮箱").fill(email);
+  await page.getByLabel("密码").fill(PASSWORD);
+  await page.getByRole("button", { name: "登录" }).click();
 
   await expect(page).toHaveURL(/\/profile/);
   await expect(page.getByTestId("profile-email")).toHaveText(email);
@@ -59,11 +59,11 @@ test("login with a wrong password shows an error and stays signed out", async ({
   await registerViaApi(request, email);
 
   await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill("WrongPassword123");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByLabel("邮箱").fill(email);
+  await page.getByLabel("密码").fill("WrongPassword123");
+  await page.getByRole("button", { name: "登录" }).click();
 
-  await expect(page.getByTestId("auth-error")).toHaveText("Invalid email or password.");
+  await expect(page.getByTestId("auth-error")).toHaveText("邮箱或密码错误。");
   await expect(page).toHaveURL(/\/login/);
 });
 
@@ -127,7 +127,7 @@ test("logout revokes the session so it cannot be restored", async ({ page }) => 
   const email = uniqueEmail();
   await registerViaUi(page, email);
 
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "退出登录" }).click();
   await expect(page).toHaveURL(/\/login/);
 
   // Neither a reload nor a direct visit may resurrect the session.
@@ -147,9 +147,9 @@ test("authenticated users can navigate directly to the protected profile", async
   await registerViaApi(request, email);
 
   await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByLabel("邮箱").fill(email);
+  await page.getByLabel("密码").fill(PASSWORD);
+  await page.getByRole("button", { name: "登录" }).click();
   await expect(page).toHaveURL(/\/profile/);
 
   await page.goto("/profile");

@@ -184,6 +184,17 @@ class OutlineGenerationResult(BaseModel):
     sections: list[OutlineSection] = Field(min_length=2, max_length=5)
 
 
+class PlannerChatResult(BaseModel):
+    """Conversational planner turn (ADR-024): chat reply plus an optional
+    proposed/revised outline. outline is only honored for propose/revise."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reply: str = Field(min_length=1, max_length=1000)
+    action: Literal["discuss", "propose", "revise"]
+    outline: OutlineGenerationResult | None = None
+
+
 class StudySuggestion(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -64,10 +64,10 @@ function DashboardContent() {
       <header className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Your essays
+            我的作文
           </h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Create an essay to start writing. The editor arrives in a later stage.
+            创建一篇作文，开始写作训练。
           </p>
         </div>
         <button
@@ -76,14 +76,14 @@ function DashboardContent() {
           onClick={() => setDialog({ kind: "create" })}
           className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
         >
-          New essay
+          新建作文
         </button>
       </header>
 
-      <section aria-label="Essay list" className="mt-8">
+      <section aria-label="作文列表" className="mt-8">
         {essaysQuery.isPending && (
           <p role="status" data-testid="essays-loading" className="text-sm text-zinc-500 dark:text-zinc-400">
-            Loading your essays…
+            作文加载中…
           </p>
         )}
 
@@ -93,13 +93,13 @@ function DashboardContent() {
             data-testid="essays-error"
             className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
           >
-            <p>Could not load your essays.</p>
+            <p>无法加载作文列表。</p>
             <button
               type="button"
               onClick={() => void essaysQuery.refetch()}
               className="mt-2 rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium hover:bg-red-100 dark:border-red-800 dark:hover:bg-red-900"
             >
-              Retry
+              重试
             </button>
           </div>
         )}
@@ -109,9 +109,9 @@ function DashboardContent() {
             data-testid="essays-empty"
             className="rounded-xl border border-dashed border-zinc-300 p-10 text-center dark:border-zinc-700"
           >
-            <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">No essays yet</p>
+            <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">还没有作文</p>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              Create your first essay to get started.
+              创建你的第一篇作文，开始训练。
             </p>
           </div>
         )}
@@ -129,10 +129,10 @@ function DashboardContent() {
                     data-testid="essay-title"
                     className="truncate font-medium text-zinc-900 hover:underline dark:text-zinc-100"
                   >
-                    {essay.title ?? "Untitled"}
+                    {essay.title ?? "未命名作文"}
                   </p>
                   <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                    {WRITING_TYPE_LABELS[essay.writing_type]} · Updated{" "}
+                    {WRITING_TYPE_LABELS[essay.writing_type]} · 更新于{" "}
                     {new Date(essay.updated_at).toLocaleString()}
                   </p>
                 </Link>
@@ -143,7 +143,7 @@ function DashboardContent() {
                     onClick={() => setDialog({ kind: "rename", essay })}
                     className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
                   >
-                    Rename
+                    改名
                   </button>
                   <button
                     type="button"
@@ -151,7 +151,7 @@ function DashboardContent() {
                     onClick={() => setDialog({ kind: "delete", essay })}
                     className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
                   >
-                    Delete
+                    删除
                   </button>
                 </div>
               </li>

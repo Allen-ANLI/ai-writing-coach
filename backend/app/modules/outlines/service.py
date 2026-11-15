@@ -101,6 +101,18 @@ def confirm_outline(db: Session, user: User, outline_id: uuid.UUID) -> WritingOu
         raise ApiError(409, "VALIDATION_ERROR", "Only draft outlines can be confirmed.")
     if not outline.nodes:
         raise ApiError(409, "VALIDATION_ERROR", "Cannot confirm an empty outline.")
+    # One current plan per essay: earlier confirmed versions become archived
+    # (ADR-024 — the chat planner can revise the structure mid-writing).
+    previous = db.execute(
+        select(WritingOutline).where(
+            WritingOutline.essay_id == outline.essay_id,
+            WritingOutline.status == "confirmed",
+            WritingOutline.id != outline.id,
+        )
+    ).scalars()
+    for older in previous:
+        older.status = "archived"
+        older.updated_at = utcnow()
     outline.status = "confirmed"
     outline.confirmed_at = utcnow()
     outline.updated_at = utcnow()
