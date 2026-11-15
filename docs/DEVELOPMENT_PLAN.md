@@ -543,6 +543,40 @@ Scope delivered:
 Out of scope (next): outlines/LangGraph (8), learning plans/tasks + analytics
 (9), billing (10), production readiness (11).
 
+## 3n. Slice 8 — Outlines & LangGraph workflows (2026-11-15)
+
+**Status: DONE, verified, committed.** Backend 322 pytest passed (9 outline +
+10 workflow + 1 contract new), Playwright **57 passed** (3 new), vitest 21,
+tsc/ESLint/build/ruff clean. Migration 0014 applied. Contract operations
+79/88. New dependency: langgraph 1.x (SD §9 requirement).
+
+Scope delivered:
+
+- Migration 0014: writing_outlines (status lifecycle, UNIQUE(essay, version),
+  same-owner composite FK, workflow link), outline_nodes (section→paragraph→
+  sentence_idea self-FK hierarchy, cascade), workflows (business status,
+  input/result JSON), workflow_events (append-only).
+- Outlines API (8 ops): 202 background generation with semantic recall of
+  learned expressions; draft-only thesis edit + node CRUD; confirmation lock;
+  ownership enforced everywhere.
+- LangGraph StateGraphs: writing_planner (retrieve→generate→quality-check
+  conditional loop), learning_extractor (extract→dedupe), study planner
+  (gather weakness/mastery context→plan). Durable pause/resume via PG
+  business state; confirm applies through business services (confirmed
+  outline / KB saves with duplicate skip); revise re-runs; cancel; events
+  never expose graph internals (ADR-020).
+- Ghost text (FR-10.4): confirmed-plan idea hint bar; insertion only on
+  explicit Insert click; Tab stays reserved for grammar acceptance.
+- Frontend: Plan toolbar button + planner dialog (viewpoint → generate →
+  review tree → edit thesis → confirm); confirmed plan rendered in the left
+  outline panel; study-planner card on /learning (goal → generate → confirm/
+  reject) exercising the workflow API.
+- Tests: 19 integration (hierarchy, lifecycle, ownership, cascade, failure,
+  workflow resume/reject/revise/cancel, extractor save, events) + 3 E2E.
+
+Out of scope (next): learning plans/tasks + analytics + preferences (9),
+billing (10), production readiness (11).
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

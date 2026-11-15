@@ -168,3 +168,23 @@ def test_evaluation_operations_implemented():
         ("/api/v1/rewrites/{rewrite_id}/accept", "post"),
     ]:
         assert method in generated[path], f"{method.upper()} {path} missing"
+
+
+def test_outline_and_workflow_operations_implemented():
+    generated = create_app().openapi()["paths"]
+    for path, method in [
+        ("/api/v1/essays/{essay_id}/outlines/generate", "post"),
+        ("/api/v1/essays/{essay_id}/outlines", "get"),
+        ("/api/v1/outlines/{outline_id}", "get"),
+        ("/api/v1/outlines/{outline_id}", "patch"),
+        ("/api/v1/outlines/{outline_id}/confirm", "post"),
+        ("/api/v1/outlines/{outline_id}/nodes", "post"),
+        ("/api/v1/outlines/{outline_id}/nodes/{node_id}", "patch"),
+        ("/api/v1/outlines/{outline_id}/nodes/{node_id}", "delete"),
+        ("/api/v1/workflows", "post"),
+        ("/api/v1/workflows/{workflow_id}", "get"),
+        ("/api/v1/workflows/{workflow_id}/resume", "post"),
+        ("/api/v1/workflows/{workflow_id}/cancel", "post"),
+        ("/api/v1/workflows/{workflow_id}/events", "get"),
+    ]:
+        assert method in generated[path], f"{method.upper()} {path} missing"

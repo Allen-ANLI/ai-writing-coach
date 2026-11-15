@@ -161,3 +161,39 @@ class RewriteResult(BaseModel):
 
     rewritten_text: str = Field(min_length=1, max_length=20000)
     change_summary: str = Field(min_length=1, max_length=2000)
+
+
+class OutlineParagraph(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=255)
+    sentence_ideas: list[str] = Field(min_length=1, max_length=4)
+
+
+class OutlineSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=255)
+    paragraphs: list[OutlineParagraph] = Field(min_length=1, max_length=4)
+
+
+class OutlineGenerationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    thesis_statement: str = Field(min_length=1, max_length=1000)
+    sections: list[OutlineSection] = Field(min_length=2, max_length=5)
+
+
+class StudySuggestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=255)
+    description: str = Field(min_length=1, max_length=1000)
+    task_type: Literal["review", "practice", "writing"]
+
+
+class StudyPlanResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    focus_areas: list[str] = Field(min_length=1, max_length=5)
+    suggestions: list[StudySuggestion] = Field(min_length=2, max_length=6)

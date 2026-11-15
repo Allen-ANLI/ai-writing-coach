@@ -66,10 +66,10 @@ authoritative starting references; resolutions below are the adopted engineering
 | FR-08 IELTS question bank | IELTS | ielts_questions, question_tags, ielts_question_tags, user_favorite_questions | GET questions/{id}/random/tags, POST/DELETE favorite | **IV** 2026-11-15 (Slice 6: 60 original licensed-safe questions covering all Task 1/2 types + 18 topics; published+license gate; essays.question_id FK attached; migration 0012) | **IV** 2026-11-15 (/ielts browse/filter/favorite/random → start writing) | 18 IELTS integration tests + contract test; 4 IELTS E2E |
 | FR-09 IELTS evaluation (4 criteria, estimates) | Evaluations | essay_evaluations | POST/GET /essays/{id}/evaluations, GET/DELETE /evaluations/{id} | **IV** 2026-11-15 (Slice 7: immutable-version binding via composite FK, 202 queued + background processing, Task1/Task2/general schemas, server-computed overall band, is_estimate always true, usage logging; migration 0013) | **IV** 2026-11-15 (Evaluate dialog: band + criteria + Chinese feedback, estimate badge, history/delete) | 19 evaluation integration tests; 3 evaluation E2E |
 | FR-09.3 rewrite levels 1–4 + accept | Evaluations | essay_rewrites | POST rewrite, GET /rewrites/{id}, POST accept | **IV** 2026-11-15 (Slice 7: levels 1–4, server-stored results, atomic accept with revision check + ai_rewrite version + edit event, duplicate/conflict 409, Original preserved) | **IV** 2026-11-15 (level picker, preview, explicit accept) | acceptance/conflict/duplicate/ownership integration tests; rewrite E2E |
-| FR-10 writing planner / outline | Workflows | writing_outlines, outline_nodes | POST outlines/generate, GET/PATCH outlines, confirm, nodes CRUD | **NI** | **NI** | — |
-| FR-10.4 Ghost Text | Editor | — | (outline-driven) | n/a | **NI** | — |
+| FR-10 writing planner / outline | Workflows | writing_outlines, outline_nodes | POST outlines/generate, GET/PATCH outlines, confirm, nodes CRUD | **IV** 2026-11-15 (Slice 8: background generation with semantic recall of learned expressions, section→paragraph→idea hierarchy, draft-only editing, confirmation lock, same-owner FK; migration 0014) | **IV** 2026-11-15 (Plan dialog, confirmed plan in left panel) | 9 outline integration tests; outline E2E |
+| FR-10.4 Ghost Text | Editor | — | (outline-driven) | n/a | **IV** 2026-11-15 (plan-idea hint bar; inserts only on explicit user click, never auto-writes — ADR-020) | ghost-insert E2E |
 | FR-12 personalized learning plans | Learning | learning_plans, learning_tasks | POST/GET plans, GET tasks, PATCH tasks/{id}, GET /learning/summary | **NI** | **NI** | — |
-| SD §9 LangGraph workflows (planner/extractor/study planner) | Workflows | (workflow state tables — to add) | POST /workflows, GET/{id}, resume, cancel, events | **NI** | **NI** | — |
+| SD §9 LangGraph workflows (planner/extractor/study planner) | Workflows | workflows, workflow_events | POST /workflows, GET/{id}, resume, cancel, events | **IV** 2026-11-15 (Slice 8: langgraph StateGraphs with conditional quality-check loop, business-state pause/resume in PG, confirm applies via business services, append-only events; ADR-020) | **IV** 2026-11-15 (study planner card on /learning; planner dialog uses outlines API) | 10 workflow integration tests; 2 planner E2E |
 | SD §12.4 AI cost logging | Analytics | ai_usage_logs | GET /analytics/ai-usage, by-feature, trends | **NI** | **NI** | — |
 | G5 / Directive H subscriptions, quotas, billing | (new module) | (R8 gap — to add) | (R8 gap — to add) | **NI** | **NI** | — |
 | Directive I production readiness (deploy, backup, monitoring, CI/CD, privacy) | Infrastructure | — | (R9 gap partially) | **NI** (Docker Compose dev stack exists) | **NI** | — |
@@ -78,11 +78,11 @@ authoritative starting references; resolutions below are the adopted engineering
 ## 3. Contract operation inventory (88 operations)
 
 Verified 2026-11-15 by script comparing `contracts/openapi.yaml` paths against the
-FastAPI-generated OpenAPI: **66 implemented, 22 missing, 0 out-of-contract routes**
-(15 baseline; +6 2B; +5 2D; +7 3; +1 accept 3UX; +10 Slice 4; +1 extract 5A; +8 Slice 5B learning; +6 Slice 6 IELTS; +7 Slice 7 evaluations/rewrites).
+FastAPI-generated OpenAPI: **79 implemented, 9 missing, 0 out-of-contract routes**
+(15 baseline; +6 2B; +5 2D; +7 3; +1 accept 3UX; +10 Slice 4; +1 extract 5A; +8 Slice 5B learning; +6 Slice 6 IELTS; +7 Slice 7 evaluations/rewrites; +8 outlines +5 workflows Slice 8).
 Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`.
 
-### Implemented (66) — all IV
+### Implemented (79) — all IV
 
 | Method | Path | Slice |
 |---|---|---|
@@ -152,19 +152,30 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 | POST | /evaluations/{evaluation_id}/rewrite | 7 |
 | GET | /rewrites/{rewrite_id} | 7 |
 | POST | /rewrites/{rewrite_id}/accept | 7 |
+| POST | /essays/{essay_id}/outlines/generate | 8 |
+| GET | /essays/{essay_id}/outlines | 8 |
+| GET | /outlines/{outline_id} | 8 |
+| PATCH | /outlines/{outline_id} | 8 |
+| POST | /outlines/{outline_id}/confirm | 8 |
+| POST | /outlines/{outline_id}/nodes | 8 |
+| PATCH | /outlines/{outline_id}/nodes/{node_id} | 8 |
+| DELETE | /outlines/{outline_id}/nodes/{node_id} | 8 |
+| POST | /workflows | 8 |
+| GET | /workflows/{workflow_id} | 8 |
+| POST | /workflows/{workflow_id}/resume | 8 |
+| POST | /workflows/{workflow_id}/cancel | 8 |
+| GET | /workflows/{workflow_id}/events | 8 |
 
-### Missing (22) — grouped by planned slice
+### Missing (9) — grouped by planned slice
 
 | Slice | Operations |
 |---|---|
 | 9 Learning plans/tasks | POST/GET /learning/plans; GET /learning/tasks; PATCH /learning/tasks/{id} (4) |
-| 8 Outlines | POST generate; GET essay outlines; GET/PATCH /outlines/{id}; POST confirm; POST nodes; PATCH/DELETE nodes/{id} (8) |
-| 9 Workflows | POST /workflows; GET/{id}; POST resume; POST cancel; GET events (5) |
 | 10 Analytics | GET ai-usage; GET by-feature; GET trends (3) |
 | 1 Users preferences | GET/PATCH /users/me/preferences (2) |
 | Later additive (R7/R8/R9) | password reset, billing/quotas, account deletion/export — not yet in contract |
 
-(4 plans/tasks + 8 outlines + 5 workflows + 3 analytics + 2 preferences = 22.)
+(4 plans/tasks + 3 analytics + 2 preferences = 9.)
 
 ## 4. ERD entity inventory (29 entities)
 
@@ -194,8 +205,8 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 | question_tags | 0012 | **IV** |
 | ielts_question_tags | 0012 | **IV** |
 | user_favorite_questions | 0012 | **IV** |
-| writing_outlines | phase C | **NI** |
-| outline_nodes | phase C | **NI** |
+| writing_outlines | 0014 | **IV** (generation lifecycle, confirmation lock, same-owner FK) |
+| outline_nodes | 0014 | **IV** (section→paragraph→idea hierarchy, cascade) |
 | learning_plans | phase C | **NI** |
 | learning_tasks | phase C | **NI** |
 | ai_usage_logs | 0006 | **IV** (every LLM call logged: provider/model/prompt/tokens/latency/cost/status) |
@@ -223,6 +234,7 @@ Enforced permanently by `tests/test_contract.py::test_no_out_of_contract_routes`
 
 | Date | Change |
 |---|---|
+| 2026-11-15 (Slice 8) | Outlines + LangGraph workflows implemented + verified: outline generation (202 background, semantic recall of learned expressions, section→paragraph→sentence_idea hierarchy), draft-only editing + node CRUD, confirmation lock, ghost-text hint bar with explicit Insert (never auto-writes). LangGraph 1.x StateGraphs for writing_planner (retrieve→generate→quality-check conditional loop), learning_extractor (extract→dedupe), personalized_study_planner (gather context→plan); business-state pause/resume persisted in PostgreSQL (workflows + append-only workflow_events), confirm applies results through business services (confirmed outline / KB save), revise re-runs, cancel supported; graph internals never exposed. Migration 0014 (4 tables, same-owner composite FK). Frontend: Plan dialog, confirmed plan in left outline panel, ghost-text insertion, study-planner card on /learning. ADR-020. Verification: backend **322 passed** (19 new + 1 contract), Playwright **57 passed** (3 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 79/88. |
 | 2026-11-15 (Slice 7) | Evaluations + rewrites implemented + verified as POST-WRITING actions (ADR-016): 202 queued evaluations bound to immutable versions (composite FK same-essay), in-process background processing via app session factory (test-isolated), Task 1 / Task 2 / general LLM schemas with versioned prompts, half-band normalization + server-computed overall band, is_estimate always true, full usage logging incl. failures. Rewrites level_1–4 preserve meaning, results stored server-side; atomic accept applies only stored text with revision check, creates ai_rewrite version + accept_rewrite edit event, 409 on conflict/duplicate; Original never overwritten. Migration 0013 (essay_evaluations, essay_rewrites with source-matches-evaluation composite FK, edit-event rewrite_id + event enum extension; cascade delete keeps versions). Idempotency-Key on queue/rewrite/accept. Frontend: Evaluate dialog (snapshot→evaluate→poll, band/criteria/Chinese feedback, estimate badge, history/delete, rewrite preview + explicit accept). ADR-019. Verification: backend **302 passed** (19 new + 1 contract), Playwright **54 passed** (3 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 66/88. |
 | 2026-11-15 (Slice 6) | IELTS question bank implemented + verified: 60 original licensed-safe practice questions (18 Task 1 Academic across 6 chart types, 9 GT letters across 3 registers, 33 Task 2 across 5 question types; 18 topic tags; Chinese translations; text-based data so the bank is self-contained). Published+license gate in the repository layer; keyset pagination; task/topic/type filters; tags with counts; random; idempotent user-scoped favorites. essays.question_id FK attached with existence + task-type consistency validation and question_prompt autofill. Migration 0012 (4 tables + FK + idempotent uuid5 seed; offline --sql safe). E2E DB prep re-seeds after pytest truncation. Frontend: /ielts page (filters, favorites, random, detail with translation, start-writing → editor question section). ADR-018. Verification: backend **282 passed** (18 new + 1 contract), Playwright **51 passed** (4 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 59/88 (header total corrected: the 3UX accept operation made it 88, previously miscounted as 87). |
 | 2026-11-15 (Slice 5B) | Learning implemented + verified: deterministic SM-2 spaced repetition (unit-tested invariants), translation reviews with rule-first exact match + LLM semantic judging (any natural correct answer accepted), due prompts without answer leakage, progress/summary, weakness aggregation on issue detection, volume-adjusted weekly trends (errors per 1000 words), LLM practice generation. Migration 0011 (expression_progress with same-owner composite FK, expression_reviews, user_weaknesses). Frontend: /learning Center (review flow, summary, weaknesses). Verification: backend **262 passed** (17 new), Playwright **47 passed** (3 new), vitest 21, tsc/ESLint/build/ruff clean. Contract 53/87. |

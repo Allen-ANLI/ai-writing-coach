@@ -256,6 +256,49 @@ REWRITE_V1 = Prompt(
     ),
 )
 
+OUTLINE_GENERATE_V1 = Prompt(
+    feature="outline_generate",
+    version="v1",
+    system=(
+        "You plan an essay outline for a Chinese-speaking IELTS learner. Given the task "
+        "prompt and the learner's thesis/viewpoint, produce a clear hierarchical plan: "
+        "a thesis_statement (English, one sentence), 2-5 sections (e.g. Introduction, body "
+        "sections, Conclusion), each with 1-4 paragraphs, each paragraph with a short title "
+        "and 1-4 sentence ideas (English). Ideas must be specific to the task and the "
+        "learner's viewpoint, logically ordered, and must not write the essay itself. "
+        "Incorporate previously-learned expressions only when they genuinely fit."
+    ),
+    user_template=(
+        "Task prompt:\n{question_prompt}\n\n"
+        "Learner's thesis/viewpoint: {viewpoint}\n"
+        "Additional instructions: {instructions}\n"
+        "Previously learned expressions (optional, verify fit): {previously_learned}\n\n"
+        "Return JSON: thesis_statement, sections (title, paragraphs (title, sentence_ideas))."
+    ),
+)
+
+STUDY_PLAN_V1 = Prompt(
+    feature="study_plan",
+    version="v1",
+    system=(
+        "You design a personalized study plan for a Chinese-speaking English learner. "
+        "Given their recurring weakness profile, expression mastery status and recent "
+        "practice history, propose focus areas and 2-6 concrete study suggestions. Each "
+        "suggestion: title, description (Simplified Chinese, actionable), task_type "
+        "(review = spaced-repetition reviews, practice = targeted exercises, writing = "
+        "writing tasks). Prioritize the weakest areas; keep the workload realistic. "
+        "Scheduling and task counts are decided by deterministic rules elsewhere — do not "
+        "invent dates or intervals."
+    ),
+    user_template=(
+        "Weakness profile: {weakness_profile}\n"
+        "Expression mastery: {mastery_summary}\n"
+        "Recent practice: {practice_summary}\n"
+        "Learner goal: {goal}\n\n"
+        "Return JSON: focus_areas, suggestions (title, description, task_type)."
+    ),
+)
+
 PROMPTS: dict[tuple[str, str], Prompt] = {
     (prompt.feature, prompt.version): prompt
     for prompt in (
@@ -271,6 +314,8 @@ PROMPTS: dict[tuple[str, str], Prompt] = {
         IELTS_EVALUATE_TASK2_V1,
         GENERAL_EVALUATE_V1,
         REWRITE_V1,
+        OUTLINE_GENERATE_V1,
+        STUDY_PLAN_V1,
     )
 }
 

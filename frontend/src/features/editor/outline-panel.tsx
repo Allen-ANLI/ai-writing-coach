@@ -9,8 +9,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Editor } from "@tiptap/react";
+import { useQuery } from "@tanstack/react-query";
 
 import { splitSentences } from "@/lib/document-text";
+import { getOutline, listOutlines } from "@/services/outlines";
+import type { OutlineNodeData } from "@/types/api";
 
 interface OutlineNode {
   id: string;
@@ -144,17 +147,62 @@ function OutlineItem({
   );
 }
 
+function PlanBranch({ nodes, parentId }: { nodes: OutlineNodeData[]; parentId: string | null }) {
+  const children = nodes
+    .filter((node) => node.parent_id === parentId)
+    .sort((a, b) => a.sort_order - b.sort_order);
+  if (children.length === 0) {
+    return null;
+  }
+  return (
+    <ul className={parentId !== null ? "ml-3 border-l border-zinc-100 pl-2 dark:border-zinc-800" : "mt-2"}>
+      {children.map((node) => (
+        <li key={node.id} className="mt-1">
+          <p
+            className={
+              node.node_type === "section"
+                ? "text-xs font-medium text-zinc-800 dark:text-zinc-200"
+                : node.node_type === "paragraph"
+                  ? "text-xs text-zinc-600 dark:text-zinc-400"
+                  : "text-xs text-zinc-500 dark:text-zinc-500"
+            }
+            title={node.title}
+          >
+            {node.node_type === "sentence_idea" ? "· " : ""}
+            {node.title}
+          </p>
+          <PlanBranch nodes={nodes} parentId={node.id} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function OutlinePanel({
   editor,
+  essayId,
   essayTitle,
   writingTypeLabel,
 }: {
   editor: Editor | null;
+  essayId: string;
   essayTitle: string;
   writingTypeLabel: string;
 }) {
   const [version, setVersion] = useState(0);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const outlinesQuery = useQuery({
+    queryKey: ["outlines", essayId],
+    queryFn: async () => (await listOutlines(essayId)).data.items,
+  });
+  const confirmedPlan = outlinesQuery.data?.find((item) => item.status === "confirmed") ?? null;
+  const planQuery = useQuery({
+    queryKey: ["outline", confirmedPlan?.id],
+    queryFn: async () => (await getOutline(confirmedPlan?.id as string)).data,
+    enabled: confirmedPlan !== null,
+  });
+  const planNodes = planQuery.data?.nodes ?? [];
 
   useEffect(() => {
     if (!editor) {
@@ -202,6 +250,20 @@ export function OutlinePanel({
         <p className="mt-1 text-sm font-medium text-zinc-900 dark:text-zinc-100">{essayTitle}</p>
         <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{writingTypeLabel}</p>
       </section>
+
+      {confirmedPlan && (
+        <section aria-label="Confirmed writing plan" data-testid="confirmed-plan">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+            Writing plan
+          </h2>
+          {confirmedPlan.thesis_statement && (
+            <p className="mt-1 text-xs italic text-zinc-600 dark:text-zinc-400">
+              {confirmedPlan.thesis_statement}
+            </p>
+          )}
+          <PlanBranch nodes={planNodes} parentId={null} />
+        </section>
+      )}
 
       <section aria-label="Document outline" className="flex-1" data-testid="outline-tree">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">

@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { WRITING_TYPE_LABELS } from "@/features/essays/essay-dialogs";
 import { EvaluationDialog } from "@/features/editor/evaluation-dialog";
@@ -21,14 +21,16 @@ import { GrammarHoverCard } from "@/features/editor/grammar/grammar-hover-card";
 import { TeachingCard } from "@/features/editor/grammar/teaching-card";
 import { useGrammar } from "@/features/editor/grammar/use-grammar";
 import { OutlinePanel } from "@/features/editor/outline-panel";
+import { OutlinePlannerDialog } from "@/features/editor/outline-planner-dialog";
 import { SessionControls } from "@/features/editor/session-controls";
 import { useAutosave, type AutosaveApi, type SaveStatus } from "@/features/editor/use-autosave";
 import { VersionHistory } from "@/features/editor/version-history";
 import { BLOCK_SEPARATOR, countWords } from "@/lib/document-text";
 import { getEssay } from "@/services/essays";
 import { getWorkingDocument } from "@/services/documents";
+import { getOutline, listOutlines } from "@/services/outlines";
 import { listSessions } from "@/services/sessions";
-import type { TipTapDocument } from "@/types/api";
+import type { OutlineNodeData, TipTapDocument } from "@/types/api";
 
 const SAVE_STATUS_LABELS: Record<SaveStatus, string> = {
   saved: "Saved",
@@ -41,8 +43,10 @@ const SAVE_STATUS_LABELS: Record<SaveStatus, string> = {
 export function WritingEditor({ essayId }: { essayId: string }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [evaluationOpen, setEvaluationOpen] = useState(false);
+  const [plannerOpen, setPlannerOpen] = useState(false);
   const [mobileOutlineOpen, setMobileOutlineOpen] = useState(false);
   const [, setTick] = useState(0);
+  const queryClient = useQueryClient();
 
   const essayQuery = useQuery({
     queryKey: ["essay", essayId],
@@ -58,6 +62,31 @@ export function WritingEditor({ essayId }: { essayId: string }) {
   });
   const activeSession =
     sessionsQuery.data?.find((session) => session.status === "active") ?? null;
+
+  const outlinesQuery = useQuery({
+    queryKey: ["outlines", essayId],
+    queryFn: async () => (await listOutlines(essayId)).data.items,
+  });
+  const confirmedPlan = outlinesQuery.data?.find((item) => item.status === "confirmed") ?? null;
+  const planQuery = useQuery({
+    queryKey: ["outline", confirmedPlan?.id],
+    queryFn: async () => (await getOutline(confirmedPlan?.id as string)).data,
+    enabled: confirmedPlan !== null,
+  });
+  const planIdeas = useMemo(() => {
+    const nodes = planQuery.data?.nodes ?? [];
+    const byParent = (parentId: string | null) =>
+      nodes
+        .filter((node) => node.parent_id === parentId)
+        .sort((a, b) => a.sort_order - b.sort_order);
+    const ideas: OutlineNodeData[] = [];
+    for (const section of byParent(null)) {
+      for (const paragraph of byParent(section.id)) {
+        ideas.push(...byParent(paragraph.id));
+      }
+    }
+    return ideas;
+  }, [planQuery.data]);
 
   const suppressUpdateRef = useRef(false);
   const initializedRef = useRef(false);
@@ -272,6 +301,14 @@ export function WritingEditor({ essayId }: { essayId: string }) {
         >
           Evaluate
         </button>
+        <button
+          type="button"
+          data-testid="open-planner"
+          onClick={() => setPlannerOpen(true)}
+          className={toolbarButton}
+        >
+          Plan
+        </button>
       </header>
 
       <SessionControls essayId={essayId} />
@@ -324,6 +361,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
         <aside className="hidden w-64 shrink-0 border-r border-zinc-200 dark:border-zinc-800 lg:block">
           <OutlinePanel
             editor={editor}
+            essayId={essayId}
             essayTitle={essay.title ?? "Untitled"}
             writingTypeLabel={WRITING_TYPE_LABELS[essay.writing_type]}
           />
@@ -334,6 +372,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
             <div className="h-full w-72 max-w-[85%] bg-white shadow-xl dark:bg-zinc-950" onClick={(event) => event.stopPropagation()}>
               <OutlinePanel
                 editor={editor}
+                essayId={essayId}
                 essayTitle={essay.title ?? "Untitled"}
                 writingTypeLabel={WRITING_TYPE_LABELS[essay.writing_type]}
               />
@@ -357,6 +396,37 @@ export function WritingEditor({ essayId }: { essayId: string }) {
                   {essay.question_prompt}
                 </p>
               </section>
+            )}
+            {confirmedPlan && planIdeas.length > 0 && editor && editor.state.doc.childCount < planIdeas.length && (
+              <div
+                data-testid="ghost-text-hint"
+                className="mb-4 flex items-center gap-3 rounded-lg border border-dashed border-zinc-300 bg-zinc-50/60 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/60"
+              >
+                <p className="min-w-0 flex-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
+                  Next idea from your plan: {planIdeas[editor.state.doc.childCount].title}
+                </p>
+                <button
+                  type="button"
+                  data-testid="insert-ghost-text"
+                  onClick={() => {
+                    const idea = planIdeas[editor.state.doc.childCount];
+                    if (!idea) {
+                      return;
+                    }
+                    editor
+                      .chain()
+                      .focus()
+                      .insertContent({
+                        type: "paragraph",
+                        content: [{ type: "text", text: idea.title }],
+                      })
+                      .run();
+                  }}
+                  className="shrink-0 rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  Insert
+                </button>
+              </div>
             )}
             <div className="mb-4 flex flex-wrap items-center gap-1 border-b border-zinc-100 pb-2 dark:border-zinc-900">
               <button type="button" aria-label="Undo" data-testid="undo" disabled={!canUndo} onClick={() => { ensureFocus(); editor?.chain().undo().run(); }} className={toolbarButton}>
@@ -433,6 +503,17 @@ export function WritingEditor({ essayId }: { essayId: string }) {
           saveStatus={autosave.status}
           onClose={() => setEvaluationOpen(false)}
           onRewriteAccepted={handleRewriteAccepted}
+        />
+      )}
+
+      {plannerOpen && (
+        <OutlinePlannerDialog
+          essayId={essayId}
+          onClose={() => setPlannerOpen(false)}
+          onConfirmed={() => {
+            void queryClient.invalidateQueries({ queryKey: ["outlines", essayId] });
+            setPlannerOpen(false);
+          }}
         />
       )}
 

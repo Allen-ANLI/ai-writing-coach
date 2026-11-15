@@ -19,6 +19,7 @@ dependencies = [
     "PyJWT>=2.8",
     "email-validator>=2.0",
     "pgvector>=0.3",
+    "langgraph>=0.2",
 ]
 
 [project.optional-dependencies]

@@ -10,13 +10,17 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { dueReviews, learningSummary, submitReview, weaknesses } from "@/services/learning";
-import type { ReviewPrompt, ReviewResultData } from "@/types/api";
+import { createWorkflow, getWorkflow, resumeWorkflow } from "@/services/workflows";
+import type { ReviewPrompt, ReviewResultData, StudyPlanResult } from "@/types/api";
 
 export function LearningPage() {
   const queryClient = useQueryClient();
   const [answer, setAnswer] = useState("");
   const [result, setResult] = useState<ReviewResultData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [plannerGoal, setPlannerGoal] = useState("");
+  const [plannerWorkflowId, setPlannerWorkflowId] = useState<string | null>(null);
+  const [plannerError, setPlannerError] = useState<string | null>(null);
 
   const summaryQuery = useQuery({
     queryKey: ["learning-summary"],
@@ -30,6 +34,39 @@ export function LearningPage() {
     queryKey: ["weaknesses"],
     queryFn: async () => (await weaknesses()).data.items,
   });
+
+  const plannerQuery = useQuery({
+    queryKey: ["study-planner-workflow", plannerWorkflowId],
+    queryFn: async () => (await getWorkflow(plannerWorkflowId as string)).data,
+    enabled: plannerWorkflowId !== null,
+    refetchInterval: (query) => (query.state.data?.status === "running" ? 1500 : false),
+  });
+
+  const startPlanner = useMutation({
+    mutationFn: async () =>
+      createWorkflow({
+        workflow_type: "personalized_study_planner",
+        input: { goal: plannerGoal.trim() === "" ? null : plannerGoal.trim() },
+      }),
+    onSuccess: (response) => {
+      setPlannerWorkflowId(response.data.workflow_id);
+      setPlannerError(null);
+    },
+    onError: (err) => setPlannerError(err instanceof Error ? err.message : "Could not start planner."),
+  });
+
+  const resumePlanner = useMutation({
+    mutationFn: async (action: "confirm" | "reject") =>
+      resumeWorkflow(plannerWorkflowId as string, action),
+    onSuccess: () => {
+      setPlannerError(null);
+      void queryClient.invalidateQueries({ queryKey: ["study-planner-workflow", plannerWorkflowId] });
+    },
+    onError: (err) => setPlannerError(err instanceof Error ? err.message : "Action failed."),
+  });
+
+  const planner = plannerQuery.data ?? null;
+  const studyPlan = (planner?.result_json?.plan ?? null) as StudyPlanResult | null;
 
   const current: ReviewPrompt | null = dueQuery.data?.items[0] ?? null;
 
@@ -203,6 +240,100 @@ export function LearningPage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="mt-8" aria-label="Study planner" data-testid="study-planner">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
+          Personalized study planner
+        </h2>
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          An AI workflow combines your weakness profile and mastery status into study
+          suggestions. Nothing is saved until you confirm.
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="text-sm">
+            <span className="text-xs font-medium text-zinc-500">Goal (optional)</span>
+            <input
+              data-testid="planner-goal"
+              value={plannerGoal}
+              onChange={(event) => setPlannerGoal(event.target.value)}
+              maxLength={200}
+              placeholder="e.g. Reach band 7 in three months"
+              className="mt-1 block w-64 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+            />
+          </label>
+          <button
+            type="button"
+            data-testid="generate-plan"
+            disabled={startPlanner.isPending || planner?.status === "running"}
+            onClick={() => startPlanner.mutate()}
+            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          >
+            {startPlanner.isPending || planner?.status === "running" ? "Planning…" : "Generate study plan"}
+          </button>
+        </div>
+
+        {plannerError && (
+          <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">{plannerError}</p>
+        )}
+
+        {planner && (
+          <p className="mt-2 text-xs text-zinc-400" data-testid="plan-status">
+            Status: {planner.status}
+            {planner.current_step ? ` · step: ${planner.current_step}` : ""}
+          </p>
+        )}
+        {planner?.status === "failed" && (
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{planner.error_message}</p>
+        )}
+
+        {planner?.status === "awaiting_confirmation" && studyPlan && (
+          <div className="mt-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+            <p className="text-xs font-medium text-zinc-500">
+              Focus: {studyPlan.focus_areas.join(", ")}
+            </p>
+            <ul className="mt-2 space-y-2" data-testid="plan-suggestions">
+              {studyPlan.suggestions.map((suggestion, index) => (
+                <li key={`${suggestion.title}-${index}`} className="text-sm">
+                  <p className="font-medium text-zinc-800 dark:text-zinc-200">
+                    [{suggestion.task_type}] {suggestion.title}
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{suggestion.description}</p>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-3 flex gap-3">
+              <button
+                type="button"
+                data-testid="confirm-plan"
+                disabled={resumePlanner.isPending}
+                onClick={() => resumePlanner.mutate("confirm")}
+                className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+              >
+                Confirm plan
+              </button>
+              <button
+                type="button"
+                data-testid="reject-plan"
+                disabled={resumePlanner.isPending}
+                onClick={() => resumePlanner.mutate("reject")}
+                className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+        )}
+
+        {planner?.status === "completed" && (
+          <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400" data-testid="plan-done">
+            {planner.result_json?.outcome &&
+            (planner.result_json.outcome as Record<string, unknown>).rejected
+              ? "Plan rejected."
+              : "Plan confirmed — follow the suggestions in your practice."}
+          </p>
+        )}
       </section>
     </main>
   );

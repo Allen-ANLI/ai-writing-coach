@@ -836,3 +836,110 @@ export interface AcceptRewriteResponse {
   };
   meta?: RequestMeta;
 }
+
+// Outlines (Slice 8, API Spec §14)
+
+export type OutlineStatus = "generating" | "draft" | "confirmed" | "archived" | "failed";
+export type OutlineNodeType = "section" | "paragraph" | "sentence_idea";
+
+export interface OutlineNodeData {
+  id: string;
+  parent_id: string | null;
+  node_type: OutlineNodeType;
+  title: string;
+  content: string | null;
+  sort_order: number;
+}
+
+export interface OutlineData {
+  id: string;
+  essay_id: string;
+  version_no: number;
+  status: OutlineStatus;
+  thesis_statement: string | null;
+  source_context: Record<string, unknown>;
+  workflow_id: string | null;
+  created_at: string;
+  confirmed_at: string | null;
+}
+
+export interface OutlineDetailData extends OutlineData {
+  nodes: OutlineNodeData[];
+}
+
+export interface OutlineQueuedResponse {
+  data: { outline_id: string; status: OutlineStatus };
+  meta?: RequestMeta;
+}
+
+export interface OutlineListResponse {
+  data: { items: OutlineData[] };
+  meta?: RequestMeta;
+}
+
+export interface OutlineResponse {
+  data: OutlineDetailData;
+  meta?: RequestMeta;
+}
+
+export interface OutlineNodeResponse {
+  data: OutlineNodeData;
+  meta?: RequestMeta;
+}
+
+// Workflows (Slice 8, API Spec §15)
+
+export type WorkflowType = "writing_planner" | "learning_extractor" | "personalized_study_planner";
+export type WorkflowStatus =
+  | "running"
+  | "awaiting_confirmation"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type WorkflowAction = "confirm" | "reject" | "revise" | "continue";
+
+export interface WorkflowData {
+  id: string;
+  workflow_type: WorkflowType;
+  essay_id: string | null;
+  status: WorkflowStatus;
+  current_step: string | null;
+  result_json: Record<string, unknown> | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowQueuedResponse {
+  data: { workflow_id: string; status: WorkflowStatus };
+  meta?: RequestMeta;
+}
+
+export interface WorkflowResponse {
+  data: WorkflowData;
+  meta?: RequestMeta;
+}
+
+export interface WorkflowEventData {
+  id: string;
+  step: string;
+  event_type: string;
+  payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface WorkflowEventListResponse {
+  data: { items: WorkflowEventData[] };
+  meta?: RequestMeta;
+}
+
+export interface StudySuggestion {
+  title: string;
+  description: string;
+  task_type: "review" | "practice" | "writing";
+}
+
+export interface StudyPlanResult {
+  focus_areas: string[];
+  suggestions: StudySuggestion[];
+}

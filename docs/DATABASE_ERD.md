@@ -63,6 +63,16 @@
    evaluation 删除级联删除其 rewrites。`essay_edit_events` 增加
    `rewrite_id UUID NULL FK → essay_rewrites.id (SET NULL)`，event_type
    枚举扩展 `accept_rewrite`；已生成的 ai_rewrite 版本与事件不随删除丢失。
+6. 大纲与工作流域（迁移 0014，§12 落地 + SD §9 持久化）：
+   `writing_outlines.status ∈ {generating, draft, confirmed, archived,
+   failed}`，UNIQUE(essay_id, version_no)，复合外键 (essay_id, user_id) →
+   essays(id, user_id) 保证同归属；`workflow_id UUID NULL FK → workflows.id
+   (SET NULL)`。`outline_nodes` 自引用 parent_id（CASCADE）构成
+   section→paragraph→sentence_idea 层级，metadata JSONB。新增 `workflows`
+   （workflow_type/status CHECK，input_json/result_json，业务状态持久化，
+   不暴露图内部状态）与 `workflow_events`（追加式事件，CASCADE）；
+   图级 checkpoint 为进程内 MemorySaver，暂停/恢复以 PostgreSQL 业务状态
+   为准（ADR-020）。
 
 ## 1. V1.2 变更摘要
 
