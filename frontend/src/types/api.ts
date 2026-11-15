@@ -558,6 +558,7 @@ export interface TranslationRequest {
   chinese_text: string;
   sentence_context: string;
   paragraph_context?: string | null;
+  exclude?: string[];
 }
 
 export interface SuggestionItemData {

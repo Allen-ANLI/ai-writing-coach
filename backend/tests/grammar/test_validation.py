@@ -153,21 +153,51 @@ def test_validate_foreign_issue_not_found(client):
     assert response.status_code == 404
 
 
-def test_other_old_revision_issues_marked_stale(client):
+def test_other_issues_survive_validation_of_one(client):
+    """ADR-027: fixing one issue keeps the others detected, re-anchored to the
+    new revision with shifted offsets (the edit lengthened the text by 2)."""
     headers = auth_headers(client)
-    text = "He go to school. She like apples."
+    text = "He go to school. He run fast."
     essay, session = setup_essay_with_text(client, headers, text=text)
     issues = all_issues(client, headers, essay["id"], session["id"], text)
-    assert len(issues) >= 2
-    first = issues[0]
+    rule_issues = [i for i in issues if i["source"] == "rule_engine"]
+    assert len(rule_issues) >= 2
+    first = rule_issues[0]
+    other = rule_issues[1]
 
     response = _validate(
-        client, headers, essay["id"], first["id"], "He goes to school. She like apples."
+        client, headers, essay["id"], first["id"], "He goes to school. He run fast."
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["validation_status"] == "correct"
+
+    detail = client.get(
+        f"/api/v1/essays/{essay['id']}/issues/{other['id']}", headers=headers
+    ).json()["data"]
+    assert detail["status"] == "detected"
+    assert detail["source_server_revision"] == 3
+    assert detail["anchor_text"] == other["anchor_text"]
+    assert detail["start_offset"] == other["start_offset"] + 2
+    assert detail["end_offset"] == other["end_offset"] + 2
+
+
+def test_validation_stales_only_issues_whose_anchor_disappeared(client):
+    headers = auth_headers(client)
+    text = "He go to school. He run fast."
+    essay, session = setup_essay_with_text(client, headers, text=text)
+    issues = all_issues(client, headers, essay["id"], session["id"], text)
+    rule_issues = [i for i in issues if i["source"] == "rule_engine"]
+    assert len(rule_issues) >= 2
+    first = rule_issues[0]
+    other = rule_issues[1]
+
+    # The second sentence's anchor ("run") is rewritten by the user.
+    response = _validate(
+        client, headers, essay["id"], first["id"], "He goes to school. He walks fast."
     )
     assert response.status_code == 200
 
-    listing = client.get(f"/api/v1/essays/{essay['id']}/issues", headers=headers).json()["data"][
-        "items"
-    ]
-    others = [i for i in listing if i["id"] != first["id"]]
-    assert all(i["status"] == "stale" for i in others)
+    detail = client.get(
+        f"/api/v1/essays/{essay['id']}/issues/{other['id']}", headers=headers
+    ).json()["data"]
+    assert detail["status"] == "stale"

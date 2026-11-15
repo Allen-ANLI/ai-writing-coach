@@ -108,6 +108,41 @@ def test_translation_independent_mode_rejected(client):
     assert response.status_code == 403
 
 
+def test_translation_uses_prompt_v2(client, db):
+    headers, essay, session = _setup(client)
+    assert _translate(client, headers, essay, session).status_code == 200
+    logs = list(db.execute(select(AiUsageLog)).scalars())
+    assert logs[0].feature == "translation"
+    assert logs[0].prompt_version == "v2"
+
+
+def test_translation_exclude_paginates_with_distinct_candidates(client):
+    """ADR-027: the assist card's 查看更多 pages via exclude; the next page
+    must not repeat any already-shown expression."""
+    headers, essay, session = _setup(client)
+    first_page = _translate(client, headers, essay, session).json()["data"]
+    exclude = [item["english_text"] for item in first_page["items"]]
+
+    response = client.post(
+        f"/api/v1/essays/{essay['id']}/translations",
+        json={
+            "session_id": session["id"],
+            "server_revision": 2,
+            "client_revision": 1,
+            "chinese_text": "提高公众环保意识",
+            "sentence_context": "This policy can raise public awareness.",
+            "paragraph_context": "This policy can raise public awareness.",
+            "exclude": exclude,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    second_page = response.json()["data"]
+    assert len(second_page["items"]) >= 2
+    assert all(item["english_text"] not in exclude for item in second_page["items"])
+    assert any("[mock:alt_expression]" in item["english_text"] for item in second_page["items"])
+
+
 def _accept(client, headers, essay, suggestion, item, *, base_revision=2, text=None):
     new_text = text if text is not None else f"I want to {item['english_text']} in this field."
     return client.post(

@@ -289,12 +289,13 @@ def translate_chinese(
     learned = _previously_learned_context(db, user, payload.sentence_context)
     db.commit()  # no transaction held during the LLM call
 
-    prompt = get_prompt("translation", "v1")
+    prompt = get_prompt("translation", "v2")
     user_prompt = prompt.user_template.format(
         chinese_text=payload.chinese_text,
         sentence_context=payload.sentence_context,
         paragraph_context=payload.paragraph_context or payload.sentence_context,
         previously_learned=learned,
+        exclude="; ".join(payload.exclude) or "(none)",
     )
     billing_service.guard_ai_call(db, user.id)
     result, usage = llm.call_llm(

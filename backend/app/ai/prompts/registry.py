@@ -253,6 +253,31 @@ CHINESE_TO_ENGLISH_V1 = Prompt(
     ),
 )
 
+CHINESE_TO_ENGLISH_V2 = Prompt(
+    feature="translation",
+    version="v2",
+    system=(
+        "You help a Chinese-speaking learner express an idea in English inside their "
+        "current essay. The Chinese input is REPLACED IN PLACE by the chosen english_text, "
+        "so every candidate must be a drop-in fragment that fits the sentence "
+        "grammatically: correct part of speech, tense and collocation with the surrounding "
+        "words. Generate 3 natural, distinct alternatives (minimum 2 only when fewer "
+        "genuinely exist). For each: english_text, chinese_meaning, usage_note (nuance "
+        "differences), formality (formal/neutral/informal). If the Chinese input ends with "
+        "sentence punctuation, end english_text with the matching English punctuation. "
+        "Never repeat any excluded expression. Prefer expressions the learner has already "
+        "studied when they genuinely fit; never force them."
+    ),
+    user_template=(
+        "Chinese input: {chinese_text}\n"
+        "Sentence context: {sentence_context}\n"
+        "Paragraph context: {paragraph_context}\n"
+        "Previously learned expressions (verify suitability): {previously_learned}\n"
+        "Excluded expressions (do not repeat): {exclude}\n"
+        "Return JSON with a 'candidates' array."
+    ),
+)
+
 GRAMMAR_VALIDATE_V1 = Prompt(
     feature="grammar_validate",
     version="v1",
@@ -520,6 +545,7 @@ PROMPTS: dict[tuple[str, str], Prompt] = {
         CONTEXTUAL_TEACHING_V1,
         EXPRESSION_POLISH_V1,
         CHINESE_TO_ENGLISH_V1,
+        CHINESE_TO_ENGLISH_V2,
         GRAMMAR_VALIDATE_V1,
         LEARNING_EXTRACT_V1,
         REVIEW_JUDGE_V1,

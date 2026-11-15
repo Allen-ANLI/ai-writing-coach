@@ -107,6 +107,7 @@ class TranslationRequest(BaseModel):
     chinese_text: str = Field(min_length=1, max_length=1000)
     sentence_context: str = Field(min_length=1, max_length=5000)
     paragraph_context: str | None = Field(default=None, max_length=10000)
+    exclude: list[str] = Field(default_factory=list, max_length=30)
 
 
 class SuggestionItemData(BaseModel):

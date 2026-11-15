@@ -777,6 +777,33 @@ public deployment approval.
 - 契约 1.7.0（104 操作）；ADR-026、AGENTS §4、矩阵、清单更新。
 - 测试：backend 391、Playwright 69、vitest 26（+5 word-diff）、tsc/ESLint/build/ruff。
 
+## 3v. ADR-027 — 接受保留其余高亮 + 检测提速 + 中文输入即推荐 (2026-11-16)
+
+**Status: DONE, verified, committed.**
+
+- 根因修复（接受一处修改后其余下划线消失）：前端 applyContent 原为整篇
+  setContent，ProseMirror 将所有装饰位置映射进替换范围而全部塌缩；改为
+  最小差异 replaceWith（本地实现 findDiffStart/findDiffEnd，安装包未导出），
+  其余高亮与光标随事务映射保留。后端 accept/validate 原将同 revision 其余
+  issue 全部置 stale；改为范围化 reconciliation：相交锚点置 stale、其后锚点
+  平移 delta、幸存者 bump source_server_revision 支持顺序接受；validate 按
+  锚点文本就近重定位，规则复检限定在被修改句内（同规则在他句不再误判）。
+- 跨 revision 接受：写下一句会 bump revision，旧句 issue 原被 409 拒绝
+  （E2E 暴露）；改为锚点完整即可接受、偏移漂移就近重定位、锚点消失才 409。
+  前端 409 自愈：关卡片并重新检查/扫描。
+- 提速：autosave 1500→600ms；语法 saved-effect 300→100ms、防抖 900→350ms
+  （句点完成快路径 120ms）；润色 400→120ms、1200→400ms（快路径 150ms）；
+  扫描进行中的新完成句入队不丢弃。
+- 中译英自动辅助：光标处中文片段（CJK+中文标点）输入即检测，250ms 防抖
+  （IME 提交 80ms）自动结合整句请求 translations，无需选区/悬浮/按钮；
+  选项卡与润色一致（点选、Tab/点击替换、查看更多翻页、加入知识库、Esc、
+  失败重试、客户端缓存即时重显）。translation v2 提示词要求上下文嵌入式
+  候选并支持 exclude；每页独立 suggestion id（润色翻页接受同修）。
+- 契约 1.8.0（104 操作，translations 增加 exclude）；ADR-027、矩阵、清单更新。
+- 测试：backend 397、vitest 41（+6 apply-content、+9 chinese-run）、
+  Playwright 71（+3：语法顺序接受、润色高亮保留、中文自动卡）、
+  tsc/ESLint/build/ruff 干净。
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

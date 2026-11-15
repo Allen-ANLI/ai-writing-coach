@@ -139,6 +139,33 @@ test("multiple sentences keep their own underlines (ADR-025)", async ({ page }) 
   await expect(page.locator(".awc-issue")).toHaveCount(2, { timeout: 30_000 });
 });
 
+test("accepting one correction keeps the other sentence's underline (ADR-027)", async ({ page }) => {
+  await openEditor(page);
+  await typeAndWaitSaved(page, "He go to school.");
+  await waitForFirstIssue(page);
+  await page.keyboard.type(" He run fast.");
+  await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
+  await expect(page.locator(".awc-issue")).toHaveCount(2, { timeout: 30_000 });
+
+  // 接受第一句的修改：第二句的下划线必须保留。
+  await page.locator(".awc-issue").first().hover();
+  await expect(page.getByTestId("grammar-hover-card")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("revealed-answer")).toBeVisible({ timeout: 15_000 });
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("editor-content")).toContainText(/He (went|goes) to school\./, {
+    timeout: 15_000,
+  });
+  await expect(page.locator(".awc-issue")).toHaveCount(1, { timeout: 15_000 });
+
+  // 保留的问题可以接着被接受（偏移已随替换平移）。
+  await page.locator(".awc-issue").first().hover();
+  await expect(page.getByTestId("grammar-hover-card")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("revealed-answer")).toBeVisible({ timeout: 15_000 });
+  await page.keyboard.press("Tab");
+  await expect(page.locator(".awc-issue")).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId("editor-content")).toContainText(/He (runs|ran) fast\./);
+});
+
 test("correct self-edit clears the highlight automatically", async ({ page }) => {
   await openEditor(page);
   await typeAndWaitSaved(page, BAD_TEXT);

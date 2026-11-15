@@ -110,17 +110,58 @@ def _mock_polish(user: str):
     )
 
 
+def _mock_translation(user: str):
+    """Deterministic translation for E2E: with a non-empty exclude list the
+    second page returns distinct candidates; otherwise the generic builder
+    supplies the standard labeled candidates."""
+    from app.ai.schemas import TranslationCandidate, TranslationResult
+
+    chinese = ""
+    excluded = ""
+    for line in user.splitlines():
+        if line.startswith("Chinese input: "):
+            chinese = line[len("Chinese input: ") :]
+        elif line.startswith("Excluded expressions (do not repeat): "):
+            excluded = line[len("Excluded expressions (do not repeat): ") :]
+    if not excluded or excluded == "(none)":
+        return build_mock_instance(TranslationResult, user)
+    excerpt = chinese.strip()[:30]
+    return TranslationResult(
+        candidates=[
+            TranslationCandidate(
+                english_text=f"[mock:alt_expression] {excerpt}",
+                chinese_meaning=f"[mock:chinese_meaning] {excerpt}",
+                usage_note="[mock] 第二页候选表达",
+                formality="neutral",
+            ),
+            TranslationCandidate(
+                english_text=f"[mock:alt_expression_b] {excerpt}",
+                chinese_meaning=f"[mock:chinese_meaning] {excerpt}",
+                usage_note="[mock] 第二页候选表达（另一种语气）",
+                formality="formal",
+            ),
+        ]
+    )
+
+
 class MockProvider:
     def complete_json(
         self, *, system: str, user: str, response_model: type[BaseModel]
     ) -> LlmResult:
         started = time.monotonic()
-        from app.ai.schemas import PlannerChatResult, PolishSentenceResult, SentenceCheckResult
+        from app.ai.schemas import (
+            PlannerChatResult,
+            PolishSentenceResult,
+            SentenceCheckResult,
+            TranslationResult,
+        )
 
         # PolishSentenceResult needs exactly 3 options per fragment; the
         # generic builder only makes 2, so handle it before generic build.
         if response_model is PolishSentenceResult:
             instance = _mock_polish(user)
+        elif response_model is TranslationResult:
+            instance = _mock_translation(user)
         else:
             instance = build_mock_instance(response_model, user)
             # Deterministic planner-chat special case: the generic builder

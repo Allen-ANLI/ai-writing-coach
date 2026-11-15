@@ -42,6 +42,10 @@ export type GrammarMeta =
   // ADR-025: replace only issues inside the checked sentence range; other
   // sentences' findings survive (multi-sentence underlines coexist).
   | { type: "merge"; start: number; end: number; issues: GrammarIssueState[] }
+  // ADR-027: after an acceptance, mirror the server's range-scoped
+  // reconciliation: drop the accepted issue and any issue intersecting the
+  // replaced code-point range (staled server-side), shift the rest.
+  | { type: "accept-shift"; startCp: number; endCp: number; delta: number; removedIssueId: string }
   | { type: "reveal"; issueId: string; suggestions: RevealedSuggestion[] }
   | { type: "remove"; issueId: string }
   | { type: "update"; issueId: string; state: GrammarIssueState };
@@ -95,6 +99,27 @@ export function createGrammarExtension() {
                       ...issues.filter((item) => item.to <= meta.start || item.from >= meta.end),
                       ...meta.issues,
                     ];
+                    break;
+                  case "accept-shift":
+                    issues = issues
+                      .filter((item) => item.issue.id !== meta.removedIssueId)
+                      .map((item) => {
+                        if (item.issue.end_offset <= meta.startCp) {
+                          return item;
+                        }
+                        if (item.issue.start_offset >= meta.endCp) {
+                          return {
+                            ...item,
+                            issue: {
+                              ...item.issue,
+                              start_offset: item.issue.start_offset + meta.delta,
+                              end_offset: item.issue.end_offset + meta.delta,
+                            },
+                          };
+                        }
+                        return null; // intersected the replacement: staled server-side
+                      })
+                      .filter((item): item is GrammarIssueState => item !== null);
                     break;
                   case "reveal":
                     issues = issues.map((item) =>

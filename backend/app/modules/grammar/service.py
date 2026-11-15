@@ -439,9 +439,26 @@ def accept_issue_suggestion(
             409, "WORKING_DOCUMENT_CONFLICT", "The working document changed; reload and retry."
         )
     if issue.source_server_revision != document.server_revision:
-        raise ApiError(
-            409, "STALE_AI_RESULT", "This issue belongs to an older revision; re-check first."
-        )
+        # ADR-027: writing another sentence bumps the revision but leaves
+        # earlier findings untouched. An older-revision issue stays acceptable
+        # while its anchor is verbatim in the document; drifted offsets are
+        # re-anchored to the nearest occurrence. Only a disappeared anchor is
+        # truly stale.
+        text = document.plain_text
+        anchor = issue.anchor_text or ""
+        start, end = issue.start_offset, issue.end_offset
+        if not anchor or text[start:end] != anchor:
+            found = _nearest_occurrence(text, anchor, start) if anchor else None
+            if found is None:
+                raise ApiError(
+                    409,
+                    "STALE_AI_RESULT",
+                    "This issue belongs to an older revision; re-check first.",
+                )
+            issue.start_offset = found
+            issue.end_offset = found + len(anchor)
+        issue.source_server_revision = document.server_revision
+        issue.updated_at = utcnow()
 
     suggestion = None
     if payload.suggestion_id is not None:
@@ -483,7 +500,12 @@ def accept_issue_suggestion(
         if other.id != suggestion.id and other.status == "pending":
             other.status = "dismissed"
 
-    stale_others = db.execute(
+    # ADR-027: accepting one correction must not wipe the other findings.
+    # Only issues whose anchor intersects the replaced range go stale; the
+    # rest survive with shifted offsets and the new source revision so they
+    # can be revealed/accepted in sequence.
+    delta = len(suggestion.suggested_text) - (rep_end - rep_start)
+    others = db.execute(
         select(WritingIssue).where(
             WritingIssue.essay_id == essay_id,
             WritingIssue.status == "detected",
@@ -491,8 +513,14 @@ def accept_issue_suggestion(
             WritingIssue.id != issue.id,
         )
     ).scalars()
-    for other in stale_others:
-        other.status = "stale"
+    for other in others:
+        if other.start_offset < rep_end and other.end_offset > rep_start:
+            other.status = "stale"
+        else:
+            if other.start_offset >= rep_end:
+                other.start_offset += delta
+                other.end_offset += delta
+            other.source_server_revision = document.server_revision
         other.updated_at = now
 
     db.add(
@@ -570,6 +598,18 @@ def _sentence_around(text: str, offset: int) -> tuple[str, int]:
     return text[start:end], start
 
 
+def _nearest_occurrence(text: str, anchor: str, expected: int) -> int | None:
+    """Closest occurrence of anchor to the expected codepoint offset."""
+    if not anchor:
+        return None
+    forward = text.find(anchor, expected)
+    backward = text.rfind(anchor, 0, expected + len(anchor))
+    candidates = [i for i in (forward, backward) if i >= 0]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda i: abs(i - expected))
+
+
 def validate_issue(
     db: Session, user: User, essay_id: uuid.UUID, payload: IssueValidationRequest
 ) -> dict:
@@ -592,19 +632,29 @@ def validate_issue(
     tiptap.check_client_values(payload.plain_text, payload.word_count, new_text, word_count)
 
     # Rule-first validation: re-check the corrected text. If the same rule
-    # still fires anywhere, the issue is unresolved — regardless of where the
-    # user edited. Any contextually valid alternative passes (no equality with
-    # a single reference answer).
+    # still fires inside the corrected sentence, the issue is unresolved.
+    # Any contextually valid alternative passes (no equality with a single
+    # reference answer).
     re_detected, _lt_ok = _run_rule_engine(new_text)
     expected_start = issue.start_offset
     if payload.modified_range.end <= issue.start_offset:
         expected_start += len(new_text) - len(old_text)
     expected_start = max(0, min(expected_start, max(0, len(new_text) - 1)))
+    corrected_sentence, sentence_start = _sentence_around(new_text, expected_start)
+    sentence_end = sentence_start + len(corrected_sentence)
+    # ADR-027: only matches INSIDE the corrected sentence keep the issue
+    # unresolved. The same rule firing in another sentence belongs to that
+    # sentence's own issue and must not re-anchor this one across the text.
     still_present = sorted(
-        (d for d in re_detected if d.rule_id == issue.rule_id),
+        (
+            d
+            for d in re_detected
+            if d.rule_id == issue.rule_id
+            and d.start_offset >= sentence_start
+            and d.end_offset <= sentence_end
+        ),
         key=lambda d: abs(d.start_offset - expected_start),
     )
-    corrected_sentence, _ = _sentence_around(new_text, expected_start)
     if issue.source == "rule_engine":
         status = "incorrect" if still_present else "correct"
         judgement_usage = None
@@ -653,8 +703,12 @@ def validate_issue(
         issue.short_explanation = match.short_explanation
     issue.updated_at = now
 
-    # Other detected issues from the old revision are stale after the edit.
-    stale_others = db.execute(
+    # ADR-027: validating one self-correction keeps the other findings alive.
+    # Re-anchor each surviving issue by its anchor text near the expected
+    # position (shifted when the edit happened before it); only issues whose
+    # anchor no longer exists become stale.
+    delta = len(new_text) - len(old_text)
+    others = db.execute(
         select(WritingIssue).where(
             WritingIssue.essay_id == essay_id,
             WritingIssue.status == "detected",
@@ -662,8 +716,23 @@ def validate_issue(
             WritingIssue.id != issue.id,
         )
     ).scalars()
-    for other in stale_others:
-        other.status = "stale"
+    for other in others:
+        anchor = other.anchor_text or ""
+        expected = other.start_offset
+        if payload.modified_range.end <= other.start_offset:
+            expected += delta
+        expected = max(0, min(expected, max(0, len(new_text) - len(anchor))))
+        found = None
+        if anchor and new_text[expected : expected + len(anchor)] == anchor:
+            found = expected
+        elif anchor:
+            found = _nearest_occurrence(new_text, anchor, expected)
+        if found is None:
+            other.status = "stale"
+        else:
+            other.start_offset = found
+            other.end_offset = found + len(anchor)
+            other.source_server_revision = new_revision
         other.updated_at = now
 
     db.add(

@@ -13,6 +13,7 @@ import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { applyServerContent } from "@/features/editor/apply-content";
 import { EvaluationDialog } from "@/features/editor/evaluation-dialog";
 import { ExpressionAssist } from "@/features/editor/expression-assist";
 import { createExpressionExtension } from "@/features/editor/expression-extension";
@@ -150,13 +151,15 @@ export function WritingEditor({ essayId }: { essayId: string }) {
   const ghostExtension = useMemo(() => createGhostHintExtension(), []);
   const expressionExtension = useMemo(() => createExpressionExtension(), []);
 
+  // ADR-027: minimal-diff replacement — a full setContent would collapse
+  // every grammar/polish decoration position and wipe all other highlights.
   const applyContent = useCallback((content: TipTapDocument) => {
     const currentEditor = editorRef.current;
     if (!currentEditor) {
       return;
     }
     suppressUpdateRef.current = true;
-    currentEditor.commands.setContent(content);
+    applyServerContent(currentEditor, content);
     queueMicrotask(() => {
       suppressUpdateRef.current = false;
     });

@@ -5,11 +5,11 @@ release. The product launches once, complete and verified. Items marked
 🔒 require explicit user approval; nothing here auto-activates paid services
 or deploys publicly.
 
-## Engineering (complete — re-verified 2026-11-15, takeover session)
+## Engineering (complete — re-verified 2026-11-16, ADR-027)
 - [x] All PRD loops implemented (Writing / Learning / Improvement).
-- [x] Full API contract implemented — 104/104 operations (1.7.0).
+- [x] Full API contract implemented — 104/104 operations (1.8.0).
 - [x] Reconciliations R1–R12 resolved and documented.
-- [x] Backend 391 tests, Playwright 69 E2E, vitest 26 — all green (ADR-026).
+- [x] Backend 397 tests, Playwright 71 E2E, vitest 41 — all green (ADR-027).
 - [x] tsc / ESLint / production build (13 routes) / ruff (197 files) clean.
 - [x] Migrations 0001–0019 additive; backup/restore round-trip re-verified
       (40 tables, identical row counts; re-verify after 0019 at next drill).

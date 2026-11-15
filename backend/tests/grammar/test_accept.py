@@ -5,8 +5,8 @@ issue resolution, suggestion acceptance, Edit Event, conflict safety.
 """
 
 import pytest
-from essay_helpers import auth_headers
-from grammar_helpers import first_issue, setup_essay_with_text
+from essay_helpers import auth_headers, save_document
+from grammar_helpers import all_issues, first_issue, setup_essay_with_text
 from sqlalchemy import select
 
 from app.infrastructure.language_tool import client as language_tool
@@ -126,3 +126,75 @@ def test_accept_preserves_surrounding_structure(client):
     assert new_text.startswith("First paragraph stays. ")
     assert new_text.endswith(" Last part stays.")
     assert " go " not in new_text
+
+
+def test_accept_preserves_other_issues_for_sequential_accept(client):
+    """ADR-027: accepting one correction keeps the other findings detected,
+    shifts their offsets past the replacement and lets them be accepted next."""
+    headers = auth_headers(client)
+    text = "He go to school. He run fast."
+    essay, session = setup_essay_with_text(client, headers, text=text)
+    issues = all_issues(client, headers, essay["id"], session["id"], text)
+    # Rule-engine issues carry real LT suggestions; mock deep-check issues
+    # carry labeled placeholder text and are not suitable for acceptance.
+    rule_issues = [i for i in issues if i["source"] == "rule_engine"]
+    assert len(rule_issues) >= 2
+    first = rule_issues[0]
+    other = rule_issues[1]
+
+    response = _accept(client, headers, essay["id"], first["id"])
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    delta = len(data["applied_text"]) - (first["end_offset"] - first["start_offset"])
+
+    detail = client.get(
+        f"/api/v1/essays/{essay['id']}/issues/{other['id']}", headers=headers
+    ).json()["data"]
+    assert detail["status"] == "detected"
+    assert detail["source_server_revision"] == 3
+    assert detail["start_offset"] == other["start_offset"] + delta
+    assert detail["end_offset"] == other["end_offset"] + delta
+
+    second = _accept(client, headers, essay["id"], other["id"], base_revision=3)
+    assert second.status_code == 200, second.text
+    final = second.json()["data"]["plain_text"]
+    assert " go " not in final
+    assert " run " not in final
+
+
+def test_accept_older_revision_issue_with_intact_anchor(client):
+    """ADR-027: writing another sentence bumps the revision; the earlier
+    finding stays acceptable while its anchor is untouched."""
+    headers = auth_headers(client)
+    text = "He go to school."
+    essay, session = setup_essay_with_text(client, headers, text=text)
+    issue = first_issue(client, headers, essay["id"], session["id"], text)
+
+    longer = "He go to school. He run fast."
+    saved = save_document(client, headers, essay["id"], base_revision=2, paragraphs=(longer,))
+    assert saved.status_code == 200
+
+    response = _accept(client, headers, essay["id"], issue["id"], base_revision=3)
+    assert response.status_code == 200, response.text
+    new_text = response.json()["data"]["plain_text"]
+    assert new_text.startswith(("He went to school.", "He goes to school."))
+    assert new_text.endswith(" He run fast.")
+
+
+def test_accept_older_revision_issue_disappeared_anchor_rejected(client):
+    headers = auth_headers(client)
+    text = "He go to school."
+    essay, session = setup_essay_with_text(client, headers, text=text)
+    issue = first_issue(client, headers, essay["id"], session["id"], text)
+
+    # The user already fixed the anchor themselves.
+    assert (
+        save_document(
+            client, headers, essay["id"], base_revision=2, paragraphs=("He went to school.",)
+        ).status_code
+        == 200
+    )
+
+    response = _accept(client, headers, essay["id"], issue["id"], base_revision=3)
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "STALE_AI_RESULT"

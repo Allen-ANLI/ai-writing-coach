@@ -1,46 +1,65 @@
 "use client";
 
 /**
- * Expression assistance (PRD FR-02.8/FR-03/FR-06, API Spec §8).
- *
- * Inline-first: selecting text offers "Improve expression"; selecting Chinese
- * text offers "Translate to English". Candidates appear in a floating card
- * near the selection. Acceptance is server-authoritative: the replacement
- * document is submitted to the accept endpoint (atomic), then applied — no
- * local edit races with autosave. Previously-learned candidates are labeled.
- * After acceptance the user can save the expression to the knowledge base.
+ * 中译英表达辅助（ADR-027，取代选区+按钮式辅助）：
+ * 光标处输入中文即自动结合整句推荐可直接替换的英文表达，无需选区、
+ * 悬浮或点击请求；选项卡与表达润色一致（点选、Tab/点击替换、查看更多
+ * 翻页、加入知识库）。接受走服务端原子替换，最小差异应用保留其余高亮。
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import {
+  ChineseAssistCard,
+  type AssistCardState,
+  type AssistPage,
+} from "@/features/editor/chinese-assist-card";
 import type { AutosaveApi } from "@/features/editor/use-autosave";
 import { ApiClientError } from "@/lib/api-client";
+import { findChineseRunAt } from "@/lib/chinese-run";
 import { BLOCK_SEPARATOR, countWords, sentenceAround } from "@/lib/document-text";
 import { codepointToUtf16, pmRangeToCodepoints } from "@/lib/text-positions";
 import {
   acceptExpressionSuggestion,
   createExpression,
-  polishExpression,
   translateChinese,
 } from "@/services/expressions";
-import type { SessionData, SuggestionData, SuggestionItemData, TipTapDocument } from "@/types/api";
+import type { SessionData, TipTapDocument } from "@/types/api";
 
-const CJK_RE = /[\u4e00-\u9fff]/;
+const REQUEST_DEBOUNCE_MS = 250;
 
-interface AssistState {
-  mode: "polish" | "translation";
-  top: number;
-  left: number;
+interface DetectedRun {
   from: number;
   to: number;
-  selectedText: string;
-  loading: boolean;
-  error: string | null;
-  suggestion: SuggestionData | null;
-  acceptedItem: SuggestionItemData | null;
-  savedToKb: boolean;
+  text: string;
+  key: string;
+}
+
+/** Chinese run touching the caret, in ProseMirror positions. */
+function detectRun(editor: Editor): DetectedRun | null {
+  const selection = editor.state.selection;
+  if (!selection.empty) {
+    return null;
+  }
+  const $from = selection.$from;
+  if (!$from.parent.isTextblock) {
+    return null;
+  }
+  const run = findChineseRunAt($from.parent.textContent, $from.parentOffset);
+  if (!run || run.text.trim() === "") {
+    return null;
+  }
+  const base = $from.start();
+  const from = base + run.start;
+  const to = base + run.end;
+  return { from, to, text: run.text, key: `${from}:${to}:${run.text}` };
+}
+
+function positionFor(editor: Editor, to: number): { top: number; left: number } {
+  const coords = editor.view.coordsAtPos(to);
+  return { top: coords.bottom + 6, left: Math.max(8, coords.left) };
 }
 
 export function ExpressionAssist({
@@ -57,319 +76,476 @@ export function ExpressionAssist({
   applyContent: (content: TipTapDocument) => void;
 }) {
   const queryClient = useQueryClient();
-  const [assist, setAssist] = useState<AssistState | null>(null);
-  const assistRef = useRef<AssistState | null>(null);
-  const autosaveRef = useRef(autosave);
+  const enabled = Boolean(session?.enabled_features.chinese_to_english);
+  const [card, setCard] = useState<AssistCardState | null>(null);
+
+  const cardRef = useRef<AssistCardState | null>(card);
+  const editorRef = useRef<Editor | null>(editor);
   const sessionRef = useRef(session);
+  const autosaveRef = useRef(autosave);
   const applyContentRef = useRef(applyContent);
+  const enabledRef = useRef(enabled);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const lastRequestedKeyRef = useRef<string | null>(null);
+  const dismissedKeyRef = useRef<string | null>(null);
+  const requestingRef = useRef(false);
+  // Re-entering an unchanged run re-shows cached options instantly (no spend).
+  const cacheRef = useRef<Map<string, AssistPage[]>>(new Map());
+
   useEffect(() => {
-    assistRef.current = assist;
-    autosaveRef.current = autosave;
+    cardRef.current = card;
+    editorRef.current = editor;
     sessionRef.current = session;
+    autosaveRef.current = autosave;
     applyContentRef.current = applyContent;
+    enabledRef.current = enabled;
   });
 
-  const enabled = Boolean(
-    session &&
-      (session.enabled_features.expression_recommendations ||
-        session.enabled_features.chinese_to_english),
-  );
-  const enabledRef = useRef(enabled);
-  useEffect(() => {
-    enabledRef.current = enabled;
-  }, [enabled]);
+  const setCardState = useCallback((next: AssistCardState | null) => {
+    cardRef.current = next;
+    setCard(next);
+  }, []);
 
-  // Offer assistance when the user selects text (or Chinese text at caret).
+  const patchCard = useCallback(
+    (runKey: string, patch: Partial<AssistCardState>) => {
+      const current = cardRef.current;
+      if (!current || current.runKey !== runKey) {
+        return;
+      }
+      setCardState({ ...current, ...patch });
+    },
+    [setCardState],
+  );
+
+  const sentenceContextFor = useCallback((current: Editor, pmPos: number): string => {
+    const plainText = current.getText({ blockSeparator: BLOCK_SEPARATOR });
+    const cp = pmRangeToCodepoints(current.state.doc, pmPos, pmPos).start;
+    const [sentence] = sentenceAround(plainText, codepointToUtf16(plainText, cp));
+    return sentence.trim();
+  }, []);
+
+  // --- Automatic request -----------------------------------------------------
+
+  const requestRun = useCallback(
+    async (run: DetectedRun) => {
+      const current = editorRef.current;
+      const currentSession = sessionRef.current;
+      const save = autosaveRef.current;
+      if (!current || !currentSession || !enabledRef.current || save.status !== "saved") {
+        return;
+      }
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      lastRequestedKeyRef.current = run.key;
+      requestingRef.current = true;
+      setCardState({
+        runKey: run.key,
+        from: run.from,
+        to: run.to,
+        chineseText: run.text,
+        ...positionFor(current, run.to),
+        pages: [],
+        pageIndex: 0,
+        selectedItemId: null,
+        loading: true,
+        loadingMore: false,
+        error: null,
+        moreError: null,
+        savedToKb: false,
+      });
+      const sentence = sentenceContextFor(current, run.from) || run.text;
+      try {
+        const response = await translateChinese(
+          essayId,
+          {
+            session_id: currentSession.id,
+            server_revision: save.serverRevision,
+            client_revision: save.clientRevision,
+            chinese_text: run.text,
+            sentence_context: sentence,
+            paragraph_context: sentence,
+          },
+          controller.signal,
+        );
+        if (controller.signal.aborted) {
+          return;
+        }
+        const latest = editorRef.current;
+        const active = cardRef.current;
+        if (!latest || !active || active.runKey !== run.key) {
+          return; // a newer run took over while the request was in flight
+        }
+        if (latest.state.doc.textBetween(run.from, run.to) !== run.text) {
+          return; // run edited meanwhile; the newer schedule re-requests
+        }
+        const items = response.data.items;
+        const pages: AssistPage[] = [{ suggestionId: response.data.id, items }];
+        if (cacheRef.current.size > 20) {
+          cacheRef.current.clear();
+        }
+        cacheRef.current.set(run.key, pages);
+        patchCard(run.key, {
+          pages,
+          pageIndex: 0,
+          selectedItemId: items[0]?.id ?? null,
+          loading: false,
+        });
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        patchCard(run.key, {
+          loading: false,
+          error:
+            error instanceof ApiClientError ? error.message : "表达推荐暂时不可用，请重试。",
+        });
+      } finally {
+        requestingRef.current = false;
+      }
+    },
+    [essayId, patchCard, sentenceContextFor, setCardState],
+  );
+
+  const scheduleAssist = useCallback(
+    (delay = REQUEST_DEBOUNCE_MS) => {
+      const current = editorRef.current;
+      if (!current || !enabledRef.current) {
+        return;
+      }
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+      timerRef.current = setTimeout(() => {
+        const latest = editorRef.current;
+        if (!latest || !enabledRef.current) {
+          return;
+        }
+        const run = detectRun(latest);
+        if (!run) {
+          lastRequestedKeyRef.current = null;
+          if (cardRef.current) {
+            setCardState(null);
+          }
+          return;
+        }
+        if (dismissedKeyRef.current === run.key) {
+          return; // user pressed Esc on this exact run
+        }
+        const active = cardRef.current;
+        if (active && active.runKey === run.key) {
+          const pos = positionFor(latest, run.to);
+          if (active.top !== pos.top || active.left !== pos.left) {
+            patchCard(run.key, pos);
+          }
+          return;
+        }
+        if (lastRequestedKeyRef.current === run.key && requestingRef.current) {
+          return;
+        }
+        if (autosaveRef.current.status !== "saved") {
+          return; // the saved-effect re-triggers once the revision is ready
+        }
+        const cached = cacheRef.current.get(run.key);
+        if (cached && cached.length > 0) {
+          lastRequestedKeyRef.current = run.key;
+          setCardState({
+            runKey: run.key,
+            from: run.from,
+            to: run.to,
+            chineseText: run.text,
+            ...positionFor(latest, run.to),
+            pages: cached,
+            pageIndex: 0,
+            selectedItemId: cached[0].items[0]?.id ?? null,
+            loading: false,
+            loadingMore: false,
+            error: null,
+            moreError: null,
+            savedToKb: false,
+          });
+          return;
+        }
+        void requestRun(run);
+      }, delay);
+    },
+    [patchCard, requestRun, setCardState],
+  );
+
+  // Typing / IME commit / caret moves / completed saves all re-evaluate.
   useEffect(() => {
     if (!editor) {
       return;
     }
+    const onUpdate = ({ transaction }: { transaction: import("@tiptap/pm/state").Transaction }) => {
+      if (!transaction.docChanged || !enabledRef.current) {
+        return;
+      }
+      const current = editorRef.current;
+      if (!current || current.view.composing) {
+        return; // IME: wait for compositionend
+      }
+      scheduleAssist();
+    };
     const onSelection = () => {
-      if (!enabledRef.current) {
+      const current = editorRef.current;
+      if (!current || !enabledRef.current) {
         return;
       }
-      const { from, to } = editor.state.selection;
-      if (from === to) {
-        return;
+      const active = cardRef.current;
+      const run = detectRun(current);
+      if (active && (!run || run.from !== active.from)) {
+        // Caret left the run (or jumped to another one): close; re-entry
+        // re-shows from cache without a new request.
+        setCardState(null);
+        lastRequestedKeyRef.current = null;
       }
-      const selectedText = editor.state.doc.textBetween(from, to, " ");
-      if (selectedText.trim() === "") {
-        return;
-      }
-      const coords = editor.view.coordsAtPos(to);
-      const isChinese = CJK_RE.test(selectedText);
-      const currentSession = sessionRef.current;
-      // ADR-026: 英文润色改为句点自动触发（use-polish），选区辅助只保留中译英。
-      if (!isChinese) {
-        return;
-      }
-      if (!currentSession?.enabled_features.chinese_to_english) {
-        return;
-      }
-      setAssist((previous) =>
-        previous && !previous.loading && previous.suggestion
-          ? previous // keep an open suggestion card until dismissed
-          : {
-              mode: isChinese ? "translation" : "polish",
-              top: coords.bottom + 6,
-              left: Math.max(8, coords.left),
-              from,
-              to,
-              selectedText,
-              loading: false,
-              error: null,
-              suggestion: null,
-              acceptedItem: null,
-              savedToKb: false,
-            },
-      );
+      scheduleAssist(120);
     };
+    const onCompositionEnd = () => scheduleAssist(80);
+    editor.on("update", onUpdate);
     editor.on("selectionUpdate", onSelection);
+    editor.view.dom.addEventListener("compositionend", onCompositionEnd);
     return () => {
+      editor.off("update", onUpdate);
       editor.off("selectionUpdate", onSelection);
+      editor.view.dom.removeEventListener("compositionend", onCompositionEnd);
     };
-  }, [editor]);
+  }, [editor, scheduleAssist, setCardState]);
 
-  const requestSuggestions = useCallback(async () => {
-    const current = assistRef.current;
-    const currentEditor = editor;
-    const currentSession = sessionRef.current;
-    const save = autosaveRef.current;
-    if (!current || !currentEditor || !currentSession || save.status !== "saved") {
+  useEffect(() => {
+    if (!enabled || autosave.status !== "saved") {
       return;
     }
-    setAssist({ ...current, loading: true, error: null });
-    const plainText = currentEditor.getText({ blockSeparator: BLOCK_SEPARATOR });
-    const cp = pmRangeToCodepoints(currentEditor.state.doc, current.from, current.from).start;
-    const [sentence] = sentenceAround(plainText, codepointToUtf16(plainText, cp));
-    try {
-      const response =
-        current.mode === "polish"
-          ? await polishExpression(essayId, {
-              session_id: currentSession.id,
-              server_revision: save.serverRevision,
-              client_revision: save.clientRevision,
-              selected_text: current.selectedText,
-              sentence,
-              paragraph_context: sentence,
-              max_suggestions: 3,
-            })
-          : await translateChinese(essayId, {
-              session_id: currentSession.id,
-              server_revision: save.serverRevision,
-              client_revision: save.clientRevision,
-              chinese_text: current.selectedText,
-              sentence_context: sentence,
-              paragraph_context: sentence,
-            });
-      setAssist((previous) =>
-        previous ? { ...previous, loading: false, suggestion: response.data } : previous,
-      );
-    } catch (error) {
-      setAssist((previous) =>
-        previous
-          ? {
-              ...previous,
-              loading: false,
-              error:
-                error instanceof ApiClientError ? error.message : "表达辅助暂时不可用。",
-            }
-          : previous,
-      );
-    }
-  }, [essayId, editor]);
+    const timer = setTimeout(() => scheduleAssist(100), 100);
+    return () => clearTimeout(timer);
+  }, [enabled, autosave.status, autosave.serverRevision, scheduleAssist]);
 
-  const acceptItem = useCallback(
-    async (item: SuggestionItemData) => {
-      const current = assistRef.current;
-      const currentEditor = editor;
-      const save = autosaveRef.current;
-      if (!current || !currentEditor || save.status !== "saved") {
-        return;
-      }
-      // Build the replacement document without touching the live editor:
-      // acceptance is server-authoritative and avoids autosave races.
-      const tr = currentEditor.state.tr.insertText(item.english_text, current.from, current.to);
-      const newDoc = tr.doc;
-      const contentJson = newDoc.toJSON() as TipTapDocument;
-      const plainText = newDoc.textBetween(0, newDoc.content.size, BLOCK_SEPARATOR);
-      const range = pmRangeToCodepoints(currentEditor.state.doc, current.from, current.to);
-      try {
-        const response = await acceptExpressionSuggestion(essayId, current.suggestion!.id, {
-          item_id: item.id,
-          base_revision: save.serverRevision,
-          client_revision: save.clientRevision,
-          content_json: contentJson,
-          plain_text: plainText,
-          word_count: countWords(plainText),
-          modified_range: { ...range, offset_unit: "unicode_codepoint" },
-        });
-        applyContentRef.current(response.data.content_json);
-        autosaveRef.current.setServerRevision(response.data.server_revision);
-        void queryClient.invalidateQueries({ queryKey: ["essay", essayId] });
-        setAssist((previous) =>
-          previous ? { ...previous, acceptedItem: item, suggestion: null } : previous,
-        );
-      } catch (error) {
-        setAssist((previous) =>
-          previous
-            ? {
-                ...previous,
-                error:
-                  error instanceof ApiClientError
-                    ? error.message
-                    : "无法应用该表达。",
-              }
-            : previous,
-        );
+  useEffect(() => () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    abortRef.current?.abort();
+  }, []);
+
+  // --- Selection / accept ------------------------------------------------------
+
+  const selectItem = useCallback(
+    (itemId: string) => {
+      const current = cardRef.current;
+      if (current) {
+        patchCard(current.runKey, { selectedItemId: itemId, savedToKb: false });
       }
     },
-    [editor, essayId, queryClient],
+    [patchCard],
   );
 
-  const saveToKnowledgeBase = useCallback(async () => {
-    const current = assistRef.current;
-    if (!current?.acceptedItem) {
+  const acceptSelected = useCallback(() => {
+    const current = editorRef.current;
+    const state = cardRef.current;
+    const save = autosaveRef.current;
+    if (!current || !state || !state.selectedItemId || save.status !== "saved") {
       return;
     }
-    const item = current.acceptedItem;
-    try {
-      await createExpression({
-        english_text: item.english_text,
-        chinese_meaning: item.chinese_meaning,
-        usage_context: item.usage_note,
-        register: item.register,
-        source_type: current.mode === "translation" ? "translation" : "suggestion",
-        essay_id: essayId,
-        source_context: current.selectedText,
-      });
-      setAssist((previous) => (previous ? { ...previous, savedToKb: true } : previous));
-      void queryClient.invalidateQueries({ queryKey: ["expressions"] });
-    } catch (error) {
-      setAssist((previous) =>
-        previous
-          ? {
-              ...previous,
-              error:
-                error instanceof ApiClientError
-                  ? error.message
-                  : "无法保存到知识库。",
-            }
-          : previous,
-      );
+    const page = state.pages[state.pageIndex];
+    const item = page?.items.find((option) => option.id === state.selectedItemId);
+    if (!page || !item) {
+      return;
     }
-  }, [essayId, queryClient]);
+    const run = detectRun(current);
+    if (!run || run.text !== state.chineseText) {
+      return; // options are stale for the edited run; refresh is pending
+    }
+    const tr = current.state.tr.insertText(item.english_text, run.from, run.to);
+    const newDoc = tr.doc;
+    const contentJson = newDoc.toJSON() as TipTapDocument;
+    const plainText = newDoc.textBetween(0, newDoc.content.size, BLOCK_SEPARATOR);
+    const range = pmRangeToCodepoints(current.state.doc, run.from, run.to);
+    void acceptExpressionSuggestion(essayId, page.suggestionId, {
+      item_id: item.id,
+      base_revision: save.serverRevision,
+      client_revision: save.clientRevision,
+      content_json: contentJson,
+      plain_text: plainText,
+      word_count: countWords(plainText),
+      modified_range: { ...range, offset_unit: "unicode_codepoint" },
+    })
+      .then((response) => {
+        applyContentRef.current(response.data.content_json);
+        autosaveRef.current.setServerRevision(response.data.server_revision);
+        cacheRef.current.delete(state.runKey);
+        lastRequestedKeyRef.current = null;
+        dismissedKeyRef.current = null;
+        setCardState(null);
+        void queryClient.invalidateQueries({ queryKey: ["essay", essayId] });
+      })
+      .catch((error) => {
+        patchCard(state.runKey, {
+          error: error instanceof ApiClientError ? error.message : "无法应用该表达，请重试。",
+        });
+      });
+  }, [essayId, patchCard, queryClient, setCardState]);
 
-  if (!assist || !enabled) {
+  // Tab replaces the selected option; Esc dismisses this run.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const state = cardRef.current;
+      if (!state) {
+        return;
+      }
+      if (event.key === "Tab" && state.selectedItemId && !state.loading) {
+        event.preventDefault();
+        event.stopPropagation();
+        acceptSelected();
+      } else if (event.key === "Escape") {
+        dismissedKeyRef.current = state.runKey;
+        setCardState(null);
+      }
+    };
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [acceptSelected, setCardState]);
+
+  // --- Pagination ----------------------------------------------------------------
+
+  const nextPage = useCallback(() => {
+    const state = cardRef.current;
+    const currentSession = sessionRef.current;
+    const save = autosaveRef.current;
+    const current = editorRef.current;
+    if (!state || !currentSession || !current || save.status !== "saved") {
+      return;
+    }
+    if (state.pageIndex < state.pages.length - 1) {
+      const target = state.pages[state.pageIndex + 1];
+      patchCard(state.runKey, {
+        pageIndex: state.pageIndex + 1,
+        selectedItemId: target.items[0]?.id ?? null,
+        savedToKb: false,
+        moreError: null,
+      });
+      return;
+    }
+    if (state.loadingMore) {
+      return;
+    }
+    patchCard(state.runKey, { loadingMore: true, moreError: null });
+    const exclude = state.pages.flatMap((p) => p.items.map((option) => option.english_text));
+    const sentence = sentenceContextFor(current, state.from) || state.chineseText;
+    void translateChinese(essayId, {
+      session_id: currentSession.id,
+      server_revision: save.serverRevision,
+      client_revision: save.clientRevision,
+      chinese_text: state.chineseText,
+      sentence_context: sentence,
+      paragraph_context: sentence,
+      exclude,
+    })
+      .then((response) => {
+        const fresh = response.data.items.filter(
+          (option) => !exclude.includes(option.english_text),
+        );
+        const latest = cardRef.current;
+        if (!latest || latest.runKey !== state.runKey) {
+          return;
+        }
+        if (fresh.length > 0) {
+          const pages = [...latest.pages, { suggestionId: response.data.id, items: fresh }];
+          cacheRef.current.set(state.runKey, pages);
+          patchCard(state.runKey, {
+            pages,
+            pageIndex: latest.pages.length,
+            selectedItemId: fresh[0].id,
+            loadingMore: false,
+          });
+        } else {
+          patchCard(state.runKey, { loadingMore: false, moreError: "没有更多不同的表达了。" });
+        }
+      })
+      .catch(() => {
+        patchCard(state.runKey, { loadingMore: false, moreError: "获取更多表达失败。" });
+      });
+  }, [essayId, patchCard, sentenceContextFor]);
+
+  const prevPage = useCallback(() => {
+    const state = cardRef.current;
+    if (state && state.pageIndex > 0) {
+      const target = state.pages[state.pageIndex - 1];
+      patchCard(state.runKey, {
+        pageIndex: state.pageIndex - 1,
+        selectedItemId: target.items[0]?.id ?? null,
+        savedToKb: false,
+        moreError: null,
+      });
+    }
+  }, [patchCard]);
+
+  // --- Knowledge base --------------------------------------------------------------
+
+  const addSelectedToKb = useCallback(() => {
+    const state = cardRef.current;
+    if (!state || !state.selectedItemId) {
+      return;
+    }
+    const item = state.pages
+      .flatMap((p) => p.items)
+      .find((option) => option.id === state.selectedItemId);
+    if (!item) {
+      return;
+    }
+    void createExpression({
+      english_text: item.english_text,
+      chinese_meaning: item.chinese_meaning,
+      usage_context: item.usage_note,
+      register: item.register,
+      source_type: "translation",
+      essay_id: essayId,
+      source_context: state.chineseText,
+    })
+      .then(() => {
+        patchCard(state.runKey, { savedToKb: true });
+        void queryClient.invalidateQueries({ queryKey: ["expressions"] });
+      })
+      .catch(() => {
+        patchCard(state.runKey, { moreError: "加入知识库失败（可能已存在）。" });
+      });
+  }, [essayId, patchCard, queryClient]);
+
+  const closeCard = useCallback(() => {
+    const state = cardRef.current;
+    if (state) {
+      dismissedKeyRef.current = state.runKey;
+    }
+    setCardState(null);
+  }, [setCardState]);
+
+  const retry = useCallback(() => {
+    const current = editorRef.current;
+    if (!current) {
+      return;
+    }
+    const run = detectRun(current);
+    if (run) {
+      dismissedKeyRef.current = null;
+      void requestRun(run);
+    }
+  }, [requestRun]);
+
+  if (!card || !enabled) {
     return null;
   }
 
   return (
-    <div
-      data-testid="expression-assist"
-      className="fixed z-40 w-96 max-w-[calc(100vw-2rem)] rounded-lg border border-zinc-200/70 bg-white/95 p-3 shadow-lg backdrop-blur-sm dark:border-zinc-700/70 dark:bg-zinc-900/95"
-      style={{
-        top: Math.min(assist.top, window.innerHeight - 260),
-        left: Math.max(8, Math.min(assist.left, window.innerWidth - 400)),
-      }}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-          {assist.mode === "polish" ? "表达润色" : "中译英"}
-        </p>
-        <button
-          type="button"
-          aria-label="关闭表达辅助"
-          data-testid="close-expression-assist"
-          onClick={() => setAssist(null)}
-          className="rounded px-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
-        >
-          ×
-        </button>
-      </div>
-
-      {!assist.suggestion && !assist.acceptedItem && (
-        <button
-          type="button"
-          data-testid="request-suggestions"
-          disabled={assist.loading}
-          onClick={() => void requestSuggestions()}
-          className="mt-2 w-full rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-        >
-          {assist.loading
-            ? "思考中…"
-            : assist.mode === "polish"
-              ? `为“${assist.selectedText.slice(0, 40)}”推荐更地道的写法`
-              : `翻译“${assist.selectedText.slice(0, 40)}”`}
-        </button>
-      )}
-
-      {assist.error && (
-        <p role="alert" className="mt-2 text-xs text-red-600 dark:text-red-400">
-          {assist.error}
-        </p>
-      )}
-
-      {assist.suggestion && (
-        <ul className="mt-2 space-y-2" data-testid="expression-candidates">
-          {assist.suggestion.items.map((item) => (
-            <li key={item.id}>
-              <button
-                type="button"
-                data-testid={`expression-item-${item.id}`}
-                onClick={() => void acceptItem(item)}
-                className="w-full rounded-md border border-zinc-200 p-2 text-left hover:border-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:border-zinc-500 dark:hover:bg-zinc-800"
-              >
-                <span className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                    {item.english_text}
-                  </span>
-                  {item.previously_learned && (
-                    <span
-                      data-testid="previously-learned-badge"
-                      className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:bg-sky-950 dark:text-sky-300"
-                    >
-                      曾学过
-                    </span>
-                  )}
-                </span>
-                {item.chinese_meaning && (
-                  <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-400">
-                    {item.chinese_meaning}
-                  </span>
-                )}
-                {item.usage_note && (
-                  <span className="mt-0.5 block text-xs text-zinc-400 dark:text-zinc-500">
-                    {item.usage_note}
-                  </span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {assist.acceptedItem && (
-        <div className="mt-2" data-testid="expression-accepted">
-          <p className="text-xs text-emerald-700 dark:text-emerald-400">
-            已应用：<strong>{assist.acceptedItem.english_text}</strong>
-          </p>
-          {assist.savedToKb ? (
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              已保存到知识库。
-            </p>
-          ) : (
-            <button
-              type="button"
-              data-testid="save-to-kb"
-              onClick={() => void saveToKnowledgeBase()}
-              className="mt-2 rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            >
-              加入知识库
-            </button>
-          )}
-        </div>
-      )}
-    </div>
+    <ChineseAssistCard
+      state={card}
+      onSelect={selectItem}
+      onAccept={acceptSelected}
+      onNextPage={nextPage}
+      onPrevPage={prevPage}
+      onAddToKb={addSelectedToKb}
+      onClose={closeCard}
+      onRetry={retry}
+    />
   );
 }

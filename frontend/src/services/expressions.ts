@@ -115,10 +115,12 @@ export function polishExpression(
 export function translateChinese(
   essayId: string,
   payload: TranslationRequest,
+  signal?: AbortSignal,
 ): Promise<SuggestionResponse> {
   return apiFetch<SuggestionResponse>(`/essays/${essayId}/translations`, {
     method: "POST",
     body: payload,
+    signal,
   });
 }
 

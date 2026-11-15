@@ -26,6 +26,7 @@ import { ApiClientError } from "@/lib/api-client";
 import { BLOCK_SEPARATOR, splitSentences } from "@/lib/document-text";
 import {
   codepointRangeToPm,
+  codepointToUtf16,
   pmRangeToCodepoints,
 } from "@/lib/text-positions";
 import {
@@ -227,6 +228,16 @@ export function useGrammar({
     if (checkTimerRef.current) {
       clearTimeout(checkTimerRef.current);
     }
+    // ADR-027: a just-typed sentence terminator fast-tracks the check;
+    // other edits use a short debounce. Latency floor is the autosave.
+    const plainNow = current.getText({ blockSeparator: BLOCK_SEPARATOR });
+    const cursorNow = pmRangeToCodepoints(
+      current.state.doc,
+      current.state.selection.from,
+      current.state.selection.from,
+    ).start;
+    const beforeCursor = plainNow.slice(0, codepointToUtf16(plainNow, cursorNow));
+    const justCompleted = /[.!?]["')\u201d\u2019]*[ \t]*$/.test(beforeCursor);
     checkTimerRef.current = setTimeout(() => {
       const save = autosaveRef.current;
       if (save.status !== "saved") {
@@ -258,7 +269,7 @@ export function useGrammar({
       }
       lastCheckedRef.current = key;
       void runCheck(span);
-    }, 900);
+    }, justCompleted ? 120 : 350);
   }, [runCheck]);
 
   // --- Self-correction validation -------------------------------------------
@@ -321,7 +332,7 @@ export function useGrammar({
     }
     const timer = setTimeout(() => {
       void runValidations().then(() => scheduleCheckForEdit());
-    }, 300);
+    }, 100);
     return () => clearTimeout(timer);
   }, [enabled, autosave.status, autosave.serverRevision, runValidations, scheduleCheckForEdit]);
 
@@ -518,11 +529,18 @@ export function useGrammar({
   const acceptCorrection = useCallback(() => {
     const current = editorRef.current;
     const card = hoverRef.current;
-    if (!current || !card || !card.suggestions || card.suggestions.length === 0) {
+    const save = autosaveRef.current;
+    if (
+      !current ||
+      !card ||
+      !card.suggestions ||
+      card.suggestions.length === 0 ||
+      save.status !== "saved"
+    ) {
       return;
     }
-    const save = autosaveRef.current;
     const recommended = card.suggestions.find((s) => s.is_recommended) ?? card.suggestions[0];
+    const oldPlain = current.getText({ blockSeparator: BLOCK_SEPARATOR });
     void acceptIssue(essayId, card.issueId, {
       base_revision: save.serverRevision,
       client_revision: save.clientRevision,
@@ -531,13 +549,44 @@ export function useGrammar({
       .then((response) => {
         applyContentRef.current(response.data.content_json);
         autosaveRef.current.setServerRevision(response.data.server_revision);
-        dispatchMeta(current, { type: "remove", issueId: card.issueId });
+        // ADR-027: mirror the server's range-scoped reconciliation locally so
+        // the other underlines survive with consistent offsets.
+        const oldCps = Array.from(oldPlain);
+        const newCps = Array.from(response.data.plain_text);
+        let prefix = 0;
+        while (prefix < oldCps.length && prefix < newCps.length && oldCps[prefix] === newCps[prefix]) {
+          prefix += 1;
+        }
+        let suffix = 0;
+        while (
+          suffix < oldCps.length - prefix &&
+          suffix < newCps.length - prefix &&
+          oldCps[oldCps.length - 1 - suffix] === newCps[newCps.length - 1 - suffix]
+        ) {
+          suffix += 1;
+        }
+        const startCp = prefix;
+        const endCp = oldCps.length - suffix;
+        dispatchMeta(current, {
+          type: "accept-shift",
+          startCp,
+          endCp,
+          delta: newCps.length - suffix - endCp,
+          removedIssueId: card.issueId,
+        });
         setHover(null);
         syncCount();
         void queryClient.invalidateQueries({ queryKey: ["essay", essayId] });
       })
-      .catch(() => undefined);
-  }, [essayId, setHover, syncCount, queryClient]);
+      .catch((error) => {
+        // ADR-027: a genuinely stale finding self-heals — close the card and
+        // re-check the sentence instead of failing silently.
+        if (error instanceof ApiClientError && error.status === 409) {
+          setHover(null);
+          scheduleCheckForEdit();
+        }
+      });
+  }, [essayId, setHover, syncCount, queryClient, scheduleCheckForEdit]);
 
   const ignore = useCallback(
     (issueId: string) => {

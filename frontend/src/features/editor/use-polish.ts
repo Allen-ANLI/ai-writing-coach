@@ -18,8 +18,9 @@ import {
   type PolishMeta,
 } from "@/features/editor/expression-extension";
 import type { AutosaveApi } from "@/features/editor/use-autosave";
+import { ApiClientError } from "@/lib/api-client";
 import { BLOCK_SEPARATOR, countWords, splitSentences } from "@/lib/document-text";
-import { codepointRangeToPm, pmRangeToCodepoints } from "@/lib/text-positions";
+import { codepointRangeToPm, codepointToUtf16, pmRangeToCodepoints } from "@/lib/text-positions";
 import {
   acceptExpressionSuggestion,
   createExpression,
@@ -38,6 +39,9 @@ export interface PolishCardState {
   left: number;
   fragment: PolishSentenceFragment;
   pages: PolishSentenceItem[][];
+  // ADR-027: each fetched page belongs to its own server suggestion; an
+  // acceptance must target the selected page's suggestion, not page 1's.
+  pageSuggestionIds: string[];
   pageIndex: number;
   selectedItemId: string | null;
   loadingMore: boolean;
@@ -87,6 +91,10 @@ export function usePolish({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastScanRef = useRef<string | null>(null);
   const scanningRef = useRef(false);
+  // ADR-027: a sentence completed while a scan is in flight must not be
+  // dropped — queue the latest span and run it when the scan finishes.
+  const pendingScanRef = useRef<{ start: number; end: number; text: string } | null>(null);
+  const runScanRef = useRef<((span: { start: number; end: number; text: string }) => Promise<void>) | null>(null);
 
   useEffect(() => {
     editorRef.current = editor;
@@ -124,6 +132,7 @@ export function usePolish({
         return;
       }
       if (scanningRef.current) {
+        pendingScanRef.current = span;
         return;
       }
       scanningRef.current = true;
@@ -171,10 +180,19 @@ export function usePolish({
         // network / 403 / 409 / quota: editor stays usable, no underline
       } finally {
         scanningRef.current = false;
+        const pending = pendingScanRef.current;
+        pendingScanRef.current = null;
+        if (pending) {
+          void runScanRef.current?.(pending);
+        }
       }
     },
     [essayId],
   );
+
+  useEffect(() => {
+    runScanRef.current = runScan;
+  }, [runScan]);
 
   const scheduleScan = useCallback(() => {
     const current = editorRef.current;
@@ -184,6 +202,15 @@ export function usePolish({
     if (timerRef.current) {
       clearTimeout(timerRef.current);
     }
+    // ADR-027: sentence-completion fast path; short debounce otherwise.
+    const plainNow = current.getText({ blockSeparator: BLOCK_SEPARATOR });
+    const cursorNow = pmRangeToCodepoints(
+      current.state.doc,
+      current.state.selection.from,
+      current.state.selection.from,
+    ).start;
+    const beforeCursor = plainNow.slice(0, codepointToUtf16(plainNow, cursorNow));
+    const justCompleted = /[.!?]["')\u201d\u2019]*[ \t]*$/.test(beforeCursor);
     timerRef.current = setTimeout(() => {
       const save = autosaveRef.current;
       if (save.status !== "saved") {
@@ -210,14 +237,14 @@ export function usePolish({
       }
       lastScanRef.current = key;
       void runScan(span);
-    }, 1200);
+    }, justCompleted ? 150 : 400);
   }, [runScan]);
 
   useEffect(() => {
     if (!enabled || autosave.status !== "saved") {
       return;
     }
-    const timer = setTimeout(() => scheduleScan(), 400);
+    const timer = setTimeout(() => scheduleScan(), 120);
     return () => clearTimeout(timer);
   }, [enabled, autosave.status, autosave.serverRevision, scheduleScan]);
 
@@ -289,6 +316,7 @@ export function usePolish({
         left: detail.left,
         fragment: item.fragment,
         pages: [item.fragment.items],
+        pageSuggestionIds: [item.fragment.suggestion_id],
         pageIndex: 0,
         selectedItemId: item.fragment.items[0]?.id ?? null,
         loadingMore: false,
@@ -355,7 +383,8 @@ export function usePolish({
     const contentJson = newDoc.toJSON() as TipTapDocument;
     const plainText = newDoc.textBetween(0, newDoc.content.size, BLOCK_SEPARATOR);
     const range = pmRangeToCodepoints(current.state.doc, fragmentState.from, fragmentState.to);
-    void acceptExpressionSuggestion(essayId, state.suggestionId, {
+    const suggestionId = state.pageSuggestionIds[state.pageIndex] ?? state.suggestionId;
+    void acceptExpressionSuggestion(essayId, suggestionId, {
       item_id: item.id,
       base_revision: save.serverRevision,
       client_revision: save.clientRevision,
@@ -375,8 +404,15 @@ export function usePolish({
         lastScanRef.current = null;
         void queryClient.invalidateQueries({ queryKey: ["essay", essayId] });
       })
-      .catch(() => undefined);
-  }, [essayId, setCardState, queryClient]);
+      .catch((error) => {
+        // ADR-027: stale/conflicted acceptance self-heals via a fresh scan.
+        if (error instanceof ApiClientError && error.status === 409) {
+          setCardState(null);
+          lastScanRef.current = null;
+          scheduleScan();
+        }
+      });
+  }, [essayId, setCardState, queryClient, scheduleScan]);
 
   // Tab accepts the selected option while the card is open; Esc closes.
   useEffect(() => {
@@ -450,6 +486,7 @@ export function usePolish({
         if (match && match.items.length > 0) {
           patchCard(state.suggestionId, {
             pages: [...latest.pages, match.items],
+            pageSuggestionIds: [...latest.pageSuggestionIds, match.suggestion_id],
             pageIndex: latest.pages.length,
             selectedItemId: match.items[0].id,
             loadingMore: false,

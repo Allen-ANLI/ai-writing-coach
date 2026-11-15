@@ -118,7 +118,7 @@ test("polish: natural sentence gets no underline (ADR-026)", async ({ page }) =>
   await expect(page.locator(".awc-expression")).toHaveCount(0);
 });
 
-test("translation: Chinese text gets English candidates and can be applied", async ({ page }) => {
+test("translation: typing Chinese auto-shows the expression card; Tab replaces (ADR-027)", async ({ page }) => {
   await register(page);
   await openEditorWithSession(page, "assisted");
 
@@ -126,22 +126,57 @@ test("translation: Chinese text gets English candidates and can be applied", asy
   await page.keyboard.type("提高公众环保意识");
   await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
 
-  await page.keyboard.press("Control+a");
+  // 无选区、无悬浮、无请求按钮：输入中文即自动出现选项卡。
   const assist = page.getByTestId("expression-assist");
-  await expect(assist).toBeVisible({ timeout: 10_000 });
+  await expect(assist).toBeVisible({ timeout: 15_000 });
   await expect(assist).toContainText("中译英");
-
-  await page.getByTestId("request-suggestions").click();
+  await expect(page.getByTestId("request-suggestions")).toHaveCount(0);
   await expect(page.getByTestId("expression-candidates")).toBeVisible({ timeout: 15_000 });
-  const firstItem = page.locator("[data-testid^='expression-item-']").first();
-  await firstItem.click();
-  await expect(page.getByTestId("expression-accepted")).toBeVisible({ timeout: 15_000 });
 
-  // The Chinese text was replaced by the accepted candidate (the mock
-  // provider's output is labeled [mock:english_text]).
-  await expect(page.getByTestId("editor-content")).toContainText("[mock:english_text]", {
+  // 查看更多 → 第 2 页（不同候选）；上一页返回。
+  await page.getByTestId("assist-next-page").click();
+  await expect(assist).toContainText("第 2 页", { timeout: 15_000 });
+  await expect(assist).toContainText("[mock:alt_expression]");
+  await page.getByTestId("assist-prev-page").click();
+  await expect(assist).toContainText("第 1 页");
+
+  // 选中项加入知识库。
+  await page.getByTestId("assist-add-kb").click();
+  await expect(page.getByTestId("assist-add-kb")).toContainText("已加入知识库", {
     timeout: 10_000,
   });
+
+  // Tab 一键替换中文片段（mock 输出带 [mock:english_text] 标签）。
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("editor-content")).toContainText("[mock:english_text]", {
+    timeout: 15_000,
+  });
+  await expect(page.getByTestId("expression-assist")).toHaveCount(0, { timeout: 10_000 });
+
+  await page.goto("/knowledge");
+  await expect(page.getByTestId("kb-item")).toHaveCount(1, { timeout: 10_000 });
+});
+
+test("polish: accepting one fragment keeps the other sentence's underline (ADR-027)", async ({ page }) => {
+  await register(page);
+  await openEditorWithSession(page, "assisted");
+
+  await page.getByTestId("editor-content").click();
+  await page.keyboard.type("I very like this book.");
+  await expect(page.locator(".awc-expression")).toHaveCount(1, { timeout: 30_000 });
+  await page.keyboard.type(" She very like music.");
+  await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
+  await expect(page.locator(".awc-expression")).toHaveCount(2, { timeout: 30_000 });
+
+  await page.locator(".awc-expression").first().hover();
+  await expect(page.getByTestId("polish-card")).toBeVisible({ timeout: 10_000 });
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("editor-content")).toContainText("I really like this book.", {
+    timeout: 15_000,
+  });
+  // 其余片段的高亮必须保留，且仍指向原句。
+  await expect(page.locator(".awc-expression")).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.getByTestId("editor-content")).toContainText("She very like music.");
 });
 
 test("independent mode: no expression assistance", async ({ page }) => {

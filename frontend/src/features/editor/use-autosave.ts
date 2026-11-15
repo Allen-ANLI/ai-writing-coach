@@ -22,7 +22,9 @@ import type { TipTapDocument, WorkingDocumentData } from "@/types/api";
 
 export type SaveStatus = "saved" | "dirty" | "saving" | "conflict" | "error";
 
-const DEBOUNCE_MS = 1500;
+// ADR-027: checks are gated on a completed save, so this debounce is the
+// floor of the underline latency; 600ms keeps writes cheap but responsive.
+const DEBOUNCE_MS = 600;
 
 export interface AutosaveApi {
   status: SaveStatus;
