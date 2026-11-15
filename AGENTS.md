@@ -149,9 +149,12 @@ document is missing, do not invent its contents; report the missing dependency.
    document-outline tree in the editor. Confirmed outlines drive inline hints.
 3. Grammar checking is automatic on sentence completion (debounce +
    cancellation); no manual check button, no numbered errors. Incomplete
-   input is never checked prematurely. Rule-first still applies. Opening the
-   editor auto-creates an assisted session (unless the user explicitly
-   cancelled one), so feedback works without manual setup.
+   input is never checked prematurely. The checked sentence is the completed
+   sentence at/before the cursor; findings merge per range so multi-sentence
+   underlines coexist (ADR-025). Rule-first still applies, plus a
+   whole-sentence LLM scan for errors rules miss (offsets validated, quota
+   metered). Opening the editor auto-creates an assisted session (unless the
+   user explicitly cancelled one), so feedback works without manual setup.
 4. Hovering an underlined error floats a card (slightly transparent surface)
    that shows the short explanation, the **correction directly (no blur, no
    reveal click)**, alternatives, and the contextual detailed explanation
@@ -160,9 +163,13 @@ document is missing, do not invent its contents; report the missing dependency.
    suggestion; otherwise Tab is normal. Acceptance applies the server-stored
    suggestion atomically. Esc closes; Alt+I ignores. Clicking an error only
    places the caret — no click-to-teach.
-6. Gray **Chinese** inline ghost hints show the next sentence idea from the
-   confirmed outline at the caret (empty/unfinished paragraph). Guidance only:
-   never persisted, never counted, never auto-inserted into the essay.
+6. Gray **Chinese** inline ghost hints guide sentence-by-sentence through the
+   flattened confirmed outline (ADR-025): the current idea persists at the
+   caret while the sentence is unfinished; on completion the planner/progress
+   endpoint judges fulfillment — fulfilled advances to the next idea, otherwise
+   the hint stays. The on/off switch lives in the planner panel
+   (preferences.ghost_hints_enabled). Guidance only: never persisted, never
+   counted, never auto-inserted into the essay.
 7. No Submit Essay button during writing; evaluation/assessment/rewrites are
    post-writing actions. The session submit API remains for that flow.
 8. The UI language is Simplified Chinese (mainland-China users); essay content,

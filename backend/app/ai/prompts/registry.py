@@ -38,6 +38,47 @@ GRAMMAR_DEEP_CHECK_V1 = Prompt(
     ),
 )
 
+GRAMMAR_SENTENCE_CHECK_V1 = Prompt(
+    feature="grammar_sentence_check",
+    version="v1",
+    system=(
+        "You are an English writing coach for Chinese-speaking learners. Analyze ONE "
+        "completed sentence for real errors a rule engine may miss: tense/aspect, word "
+        "order (Chinglish such as 'very like'), verb patterns ('suggest me to go'), "
+        "prepositions, articles, conjunction duplication ('although...but'), "
+        "collocations and naturalness. Report only genuine errors in THIS sentence, "
+        "never style preferences. For each issue give: category "
+        "(grammar/spelling/vocabulary/collocation/naturalness/style), sub_category, "
+        "severity, confidence, a one-sentence Simplified Chinese explanation, 1-3 "
+        "natural corrections, and the exact error span as unicode code-point offsets "
+        "RELATIVE to the sentence (start_offset inclusive, end_offset exclusive) with "
+        "anchor_text exactly matching that span. Return an empty issues array when the "
+        "sentence is acceptable."
+    ),
+    user_template=(
+        "Sentence: {sentence}\nParagraph context: {paragraph}\nReturn JSON: issues (may be empty)."
+    ),
+)
+
+GHOST_PROGRESS_V1 = Prompt(
+    feature="ghost_progress",
+    version="v1",
+    system=(
+        "You judge whether a learner's completed English sentence fulfills the writing "
+        "guidance for that sentence. The guidance is a Chinese instruction describing "
+        "what the sentence should express. Judge SEMANTIC fulfillment: the sentence "
+        "must actually express the guided idea, not merely be grammatical. Accept "
+        "reasonable paraphrases. Reply fulfilled=true only when the idea is genuinely "
+        "covered; otherwise fulfilled=false with a brief Simplified Chinese reason "
+        "explaining what is missing."
+    ),
+    user_template=(
+        "Guidance (Chinese): {idea}\n"
+        "Learner's sentence: {sentence}\n"
+        "Return JSON: fulfilled, reason."
+    ),
+)
+
 CONTEXTUAL_TEACHING_V1 = Prompt(
     feature="teaching",
     version="v1",
@@ -359,6 +400,8 @@ PROMPTS: dict[tuple[str, str], Prompt] = {
     (prompt.feature, prompt.version): prompt
     for prompt in (
         GRAMMAR_DEEP_CHECK_V1,
+        GRAMMAR_SENTENCE_CHECK_V1,
+        GHOST_PROGRESS_V1,
         CONTEXTUAL_TEACHING_V1,
         EXPRESSION_POLISH_V1,
         CHINESE_TO_ENGLISH_V1,

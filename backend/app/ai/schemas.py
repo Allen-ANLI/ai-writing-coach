@@ -26,6 +26,41 @@ class DeepCheckResult(BaseModel):
     issues: list[DeepCheckIssue] = Field(default_factory=list, max_length=10)
 
 
+class SentenceCheckIssue(BaseModel):
+    """One finding of the whole-sentence LLM grammar scan (ADR-025).
+
+    Offsets are unicode code points RELATIVE to the checked sentence; the
+    service validates them against the sentence text before use.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    category: str = Field(min_length=1, max_length=30)
+    sub_category: str | None = Field(default=None, max_length=80)
+    severity: Severity
+    short_explanation: str = Field(min_length=1, max_length=500)
+    suggestions: list[str] = Field(min_length=1, max_length=3)
+    confidence: float = Field(ge=0.0, le=1.0)
+    start_offset: int = Field(ge=0)
+    end_offset: int = Field(gt=0)
+    anchor_text: str = Field(min_length=1, max_length=200)
+
+
+class SentenceCheckResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    issues: list[SentenceCheckIssue] = Field(default_factory=list, max_length=10)
+
+
+class GhostProgressResult(BaseModel):
+    """Whether a completed sentence fulfills its outline guidance (ADR-025)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fulfilled: bool
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class TeachingContent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

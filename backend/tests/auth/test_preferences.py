@@ -13,7 +13,21 @@ def test_preferences_defaults(client):
         "auto_expression_assist": True,
         "daily_review_goal": None,
         "ui_language": "zh",
+        "ghost_hints_enabled": True,
     }
+
+
+def test_ghost_hints_toggle_persists(client):
+    headers = auth_headers(client)
+    response = client.patch(
+        "/api/v1/users/me/preferences",
+        json={"ghost_hints_enabled": False},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["ghost_hints_enabled"] is False
+    again = client.get("/api/v1/users/me/preferences", headers=headers).json()["data"]
+    assert again["ghost_hints_enabled"] is False
 
 
 def test_preferences_patch_merges_and_persists(client):

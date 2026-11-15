@@ -129,3 +129,20 @@ class PlannerMessagesData(BaseModel):
 class PlannerMessagesResponse(BaseModel):
     data: PlannerMessagesData
     meta: RequestMeta
+
+
+class PlannerProgressRequest(BaseModel):
+    sentence: str = Field(min_length=1, max_length=2000)
+    idea_index: int = Field(ge=0)
+    idea: str = Field(min_length=1, max_length=500)
+
+
+class PlannerProgressData(BaseModel):
+    fulfilled: bool
+    reason: str | None
+    degraded: bool
+
+
+class PlannerProgressResponse(BaseModel):
+    data: PlannerProgressData
+    meta: RequestMeta

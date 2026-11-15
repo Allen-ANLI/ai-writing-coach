@@ -7,8 +7,10 @@ service.save_generated_outline, so confirmation, ghost hints and ownership
 rules are reused unchanged. Every call is quota-guarded and usage-logged.
 """
 
+import hashlib
 import json
 import uuid
+from collections import OrderedDict
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -16,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.ai import llm
 from app.ai.prompts.registry import get_prompt
 from app.ai.providers.base import LlmUsage
-from app.ai.schemas import PlannerChatResult
+from app.ai.schemas import GhostProgressResult, PlannerChatResult
 from app.core.config import get_settings
 from app.core.exceptions import ApiError
 from app.core.time import utcnow
@@ -186,3 +188,61 @@ def _error_usage() -> LlmUsage:
         latency_ms=0,
         estimated_cost=0.0,
     )
+
+
+# Ghost-guidance progress judgments (ADR-025). Deterministic per
+# (user, idea, sentence); cached so re-renders never re-spend quota.
+_PROGRESS_CACHE: OrderedDict[tuple, dict] = OrderedDict()
+_PROGRESS_CACHE_MAX = 1024
+
+
+def judge_progress(
+    db: Session, user: User, essay_id: uuid.UUID, *, sentence: str, idea_index: int, idea: str
+) -> dict:
+    get_essay(db, user, essay_id)
+    key = (
+        user.id,
+        idea_index,
+        hashlib.sha256(f"{idea}\n{sentence}".encode()).hexdigest(),
+    )
+    cached = _PROGRESS_CACHE.get(key)
+    if cached is not None:
+        _PROGRESS_CACHE.move_to_end(key)
+        return cached
+
+    billing_service.guard_ai_call(db, user.id)
+    db.commit()  # no transaction held during the LLM call
+    prompt = get_prompt("ghost_progress", "v1")
+    user_prompt = prompt.user_template.format(idea=idea, sentence=sentence)
+    try:
+        result, usage = llm.call_llm(
+            system=prompt.system, user=user_prompt, response_model=GhostProgressResult
+        )
+    except ApiError:
+        llm.record_usage(
+            db,
+            user_id=user.id,
+            feature="ghost_progress",
+            usage=_error_usage(),
+            prompt_version=prompt.version,
+            status="error",
+        )
+        db.commit()
+        # Degraded mode: never block the writer when the provider is down.
+        return {"fulfilled": True, "reason": None, "degraded": True}
+
+    llm.record_usage(
+        db,
+        user_id=user.id,
+        feature="ghost_progress",
+        usage=usage,
+        prompt_version=prompt.version,
+        status="success",
+    )
+    db.commit()
+    data = {"fulfilled": result.fulfilled, "reason": result.reason, "degraded": False}
+    _PROGRESS_CACHE[key] = data
+    _PROGRESS_CACHE.move_to_end(key)
+    while len(_PROGRESS_CACHE) > _PROGRESS_CACHE_MAX:
+        _PROGRESS_CACHE.popitem(last=False)
+    return data

@@ -20,6 +20,8 @@ from app.modules.outlines.schemas import (
     PlannerChatRequest,
     PlannerChatResponse,
     PlannerMessagesResponse,
+    PlannerProgressRequest,
+    PlannerProgressResponse,
 )
 from app.modules.users.models import User
 from app.schemas.common import new_request_id
@@ -93,6 +95,26 @@ def planner_messages(
     items = chat.list_messages(db, user, essay_id)
     return PlannerMessagesResponse.model_validate(
         {"data": {"items": items}, "meta": {"request_id": new_request_id()}}
+    )
+
+
+@router.post("/essays/{essay_id}/planner/progress", response_model=PlannerProgressResponse)
+def planner_progress(
+    essay_id: uuid.UUID,
+    payload: PlannerProgressRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PlannerProgressResponse:
+    data = chat.judge_progress(
+        db,
+        user,
+        essay_id,
+        sentence=payload.sentence.strip(),
+        idea_index=payload.idea_index,
+        idea=payload.idea,
+    )
+    return PlannerProgressResponse.model_validate(
+        {"data": data, "meta": {"request_id": new_request_id()}}
     )
 
 

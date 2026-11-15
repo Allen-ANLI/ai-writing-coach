@@ -55,9 +55,8 @@ def test_teaching_generated_logged_and_personalized_note_null(client, db):
     assert data["recommended_correction"]
     assert data["personalized_note"] is None  # no verified weakness history yet
 
-    logs = list(db.execute(select(AiUsageLog)).scalars())
+    logs = [log for log in db.execute(select(AiUsageLog)).scalars() if log.feature == "teaching"]
     assert len(logs) == 1
-    assert logs[0].feature == "teaching"
     assert logs[0].provider == "mock"
     assert logs[0].prompt_version == "v1"
     assert logs[0].status == "success"
@@ -75,7 +74,10 @@ def test_teaching_cached_for_same_context(client, db):
     first = _teaching(client, headers, essay["id"], issue["id"]).json()["data"]
     second = _teaching(client, headers, essay["id"], issue["id"]).json()["data"]
     assert first["teaching_id"] == second["teaching_id"]
-    assert len(list(db.execute(select(AiUsageLog)).scalars())) == 1
+    teaching_logs = [
+        log for log in db.execute(select(AiUsageLog)).scalars() if log.feature == "teaching"
+    ]
+    assert len(teaching_logs) == 1
 
 
 def test_teaching_context_change_regenerates(client, db):

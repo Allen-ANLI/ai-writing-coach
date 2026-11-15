@@ -12,16 +12,24 @@ Invariants enforced here:
 - Validation accepts contextually valid alternatives, not one reference answer.
 """
 
+from __future__ import annotations
+
 import hashlib
 import uuid
-from dataclasses import dataclass
+from collections import OrderedDict
+from dataclasses import dataclass, replace
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai import llm
 from app.ai.prompts.registry import get_prompt
-from app.ai.schemas import DeepCheckResult, TeachingContent, ValidationJudgement
+from app.ai.schemas import (
+    DeepCheckResult,
+    SentenceCheckResult,
+    TeachingContent,
+    ValidationJudgement,
+)
 from app.core.exceptions import ApiError
 from app.core.time import utcnow
 from app.infrastructure.language_tool import client as language_tool
@@ -44,6 +52,80 @@ from app.modules.writing_sessions.service import enabled_features
 
 _MAX_LLM_FRAGMENTS_PER_CHECK = 3
 _MASKED_DISPLAY = "••••"
+
+# Whole-sentence scan cache (ADR-025): identical sentences at the same revision
+# are not re-sent to the LLM. Single-worker assumption, same as the rate
+# limiter; a shared store can replace this when scaling out.
+_SENTENCE_CACHE: OrderedDict[tuple, list[rules.DetectedIssue]] = OrderedDict()
+_SENTENCE_CACHE_MAX = 512
+
+
+def _sentence_cache_key(user_id: uuid.UUID, revision: int, text: str) -> tuple:
+    return (user_id, revision, hashlib.sha256(text.encode("utf-8")).hexdigest())
+
+
+def _sentence_llm_check(
+    text: str,
+    paragraph: str | None,
+    user_id: uuid.UUID,
+    revision: int,
+    usages: list[_UsageEntry],
+) -> tuple[list[rules.DetectedIssue], bool]:
+    """Whole-sentence LLM grammar scan for errors the rule engine misses.
+
+    Offsets returned by the model are validated against the sentence text;
+    invalid spans are dropped (AGENTS §4: validate ranges, never trust them).
+    """
+    key = _sentence_cache_key(user_id, revision, text)
+    cached = _SENTENCE_CACHE.get(key)
+    if cached is not None:
+        _SENTENCE_CACHE.move_to_end(key)
+        return cached, True
+
+    prompt = get_prompt("grammar_sentence_check", "v1")
+    user_prompt = prompt.user_template.format(sentence=text, paragraph=paragraph or text)
+    try:
+        result, usage = llm.call_llm(
+            system=prompt.system, user=user_prompt, response_model=SentenceCheckResult
+        )
+    except ApiError:
+        return [], False
+    usages.append(_UsageEntry("grammar_sentence_check", prompt.version, usage, "success"))
+
+    cps = len(text)
+    detected: list[rules.DetectedIssue] = []
+    for item in result.issues:
+        start, end = item.start_offset, item.end_offset
+        if not (0 <= start < end <= cps):
+            continue
+        anchor = text[start:end]
+        if anchor != item.anchor_text:
+            # Model offsets drifted: try to relocate the anchor verbatim.
+            found = text.find(item.anchor_text)
+            if found < 0:
+                continue
+            start, end = found, found + len(item.anchor_text)
+            anchor = item.anchor_text
+        detected.append(
+            rules.DetectedIssue(
+                category=item.category,
+                sub_category=item.sub_category,
+                source="llm",
+                rule_id=f"llm_sentence:{item.category}",
+                severity=item.severity,
+                confidence=item.confidence,
+                start_offset=start,
+                end_offset=end,
+                anchor_text=anchor,
+                short_explanation=item.short_explanation,
+                suggestions=item.suggestions,
+            )
+        )
+    _SENTENCE_CACHE[key] = detected
+    _SENTENCE_CACHE.move_to_end(key)
+    while len(_SENTENCE_CACHE) > _SENTENCE_CACHE_MAX:
+        _SENTENCE_CACHE.popitem(last=False)
+    return detected, True
 
 
 @dataclass
@@ -177,15 +259,25 @@ def grammar_check(
     detected, lt_ok = _run_rule_engine(payload.text)
     deterministic = [d for d in detected if not d.needs_llm]
     uncertain = [d for d in detected if d.needs_llm]
-    if uncertain:
-        billing_service.guard_ai_call(db, user.id)
+    # ADR-025: every completed sentence gets the LLM deep check (uncertain
+    # fragments) AND a whole-sentence scan for errors rules miss.
+    billing_service.guard_ai_call(db, user.id)
     llm_confirmed, llm_ok = _deep_check_uncertain(
         uncertain, payload.text, paragraph, user.id, usages
     )
-    final = rules.merge_issues(deterministic, llm_confirmed)
-    check_status = "completed" if (lt_ok and llm_ok) else "partial"
+    sentence_issues, sentence_ok = _sentence_llm_check(
+        payload.text, paragraph, user.id, document.server_revision, usages
+    )
+    if not llm_ok and lt_ok and uncertain:
+        # Provider failure: keep uncertain LT hits at low confidence instead
+        # of silently dropping them; the check is marked partial.
+        llm_confirmed = [replace(d, confidence=0.5) for d in uncertain]
+    final = rules.merge_issues(rules.merge_issues(deterministic, llm_confirmed), sentence_issues)
+    check_status = "completed" if (lt_ok and llm_ok and sentence_ok) else "partial"
 
     # Short persistence transaction; offsets are absolute in the document.
+    # ADR-025: only issues INSIDE the checked range are reconciled/staled —
+    # other sentences' findings must survive single-sentence checks.
     now = utcnow()
     existing = list(
         db.execute(
@@ -193,6 +285,8 @@ def grammar_check(
                 WritingIssue.essay_id == essay_id,
                 WritingIssue.source_server_revision == document.server_revision,
                 WritingIssue.status == "detected",
+                WritingIssue.start_offset >= start,
+                WritingIssue.end_offset <= end,
             )
         ).scalars()
     )

@@ -7,9 +7,9 @@ or deploys publicly.
 
 ## Engineering (complete — re-verified 2026-11-15, takeover session)
 - [x] All PRD loops implemented (Writing / Learning / Improvement).
-- [x] Full API contract implemented — 101/101 operations (1.5.0).
+- [x] Full API contract implemented — 102/102 operations (1.6.0).
 - [x] Reconciliations R1–R12 resolved and documented.
-- [x] Backend 369 tests, Playwright 66 E2E, vitest 21 — all green (ADR-024).
+- [x] Backend 378 tests, Playwright 67 E2E, vitest 21 — all green (ADR-025).
 - [x] tsc / ESLint / production build (13 routes) / ruff (197 files) clean.
 - [x] Migrations 0001–0018 additive; backup/restore round-trip re-verified
       (40 tables, identical row counts; re-verify after 0018 at next drill).

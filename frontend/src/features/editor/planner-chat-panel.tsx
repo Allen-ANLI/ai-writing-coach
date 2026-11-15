@@ -109,7 +109,17 @@ function OutlineCard({ outlineId, essayId }: { outlineId: string; essayId: strin
   );
 }
 
-export function PlannerChatPanel({ essayId }: { essayId: string }) {
+export function PlannerChatPanel({
+  essayId,
+  ghostEnabled,
+  guidanceDone,
+  onToggleGhost,
+}: {
+  essayId: string;
+  ghostEnabled: boolean;
+  guidanceDone: boolean;
+  onToggleGhost: (enabled: boolean) => void;
+}) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
@@ -159,6 +169,23 @@ export function PlannerChatPanel({ essayId }: { essayId: string }) {
         <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
           对话确认文章结构，写作途中可随时调整
         </p>
+        <label className="mt-2 flex items-center justify-between gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+          <span>
+            写作指引
+            {guidanceDone && (
+              <span className="ml-1 text-emerald-600 dark:text-emerald-400">（大纲已完成）</span>
+            )}
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="开启或关闭写作指引"
+            data-testid="ghost-toggle"
+            checked={ghostEnabled}
+            onChange={(event) => onToggleGhost(event.target.checked)}
+            className="h-4 w-4"
+          />
+        </label>
       </div>
 
       <div ref={scrollRef} className="awc-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">

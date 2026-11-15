@@ -740,6 +740,27 @@ public deployment approval.
 
 环境事件：E2E 期间 Docker Desktop 崩溃，`docker desktop restart` 恢复后重跑。
 
+## 3t. ADR-025 — 语法可靠性 + 整句识别 + 句子级指引 (2026-11-15)
+
+**Status: DONE, verified, committed.**
+
+诊断（用户报告"写几句后语法失效/只识别单词错误/幽灵提示一两句就停"）：
+- 防抖只查光标所在句，快速输入越过句点→永不触发；自动保存竞态丢弃响应；
+  前端 set 整屏替换 + 后端同修订全量 stale → 多句标记互相清除。
+- 实测 LT 对 "I very like"/"suggest me to go"/"although...but" 零匹配；
+  LLM 仅确认 LT 片段，从不整句扫描；不确定命中被拒绝/失败即丢弃。
+- 幽灵提示按段落序号、仅空段落/段尾显示、idea 用完即止。
+
+交付：
+- 查"光标处/之前最后一个完成句" + 客户端去重；过期响应按范围调和；
+  前端 merge 按范围替换 + 后端 stale 限定范围 → 多句下划线共存。
+- 整句 LLM 扫描 grammar_sentence_check v1（偏移校验、缓存、配额计量）；
+  provider 故障时不确定 LT 命中以 0.5 置信度保留（partial）。
+- 幽灵指引重做为句子级循环：展平大纲、持续显示、句点触发
+  POST planner/progress（ghost_progress v1）判断达成→推进；缓存+降级；
+  开关移至构思助手面板（preferences.ghost_hints_enabled，无迁移）。
+- 契约 1.6.0（102 操作）；ADR-025、AGENTS §4 修订、矩阵更新。
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

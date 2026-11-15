@@ -11,11 +11,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { EvaluationDialog } from "@/features/editor/evaluation-dialog";
 import { ExpressionAssist } from "@/features/editor/expression-assist";
-import { createGhostHintExtension, setGhostPlan, type GhostParagraph } from "@/features/editor/ghost-hint-extension";
+import {
+  advanceGhostHint,
+  createGhostHintExtension,
+  getGhostIndex,
+  setGhostConfig,
+} from "@/features/editor/ghost-hint-extension";
 import { createGrammarExtension } from "@/features/editor/grammar/grammar-extension";
 import { GrammarHoverCard } from "@/features/editor/grammar/grammar-hover-card";
 import { useGrammar } from "@/features/editor/grammar/use-grammar";
@@ -23,10 +28,12 @@ import { PlannerChatPanel } from "@/features/editor/planner-chat-panel";
 import { SessionControls } from "@/features/editor/session-controls";
 import { useAutosave, type AutosaveApi, type SaveStatus } from "@/features/editor/use-autosave";
 import { VersionHistory } from "@/features/editor/version-history";
-import { BLOCK_SEPARATOR, countWords } from "@/lib/document-text";
+import { BLOCK_SEPARATOR, countWords, splitSentences } from "@/lib/document-text";
 import { getEssay } from "@/services/essays";
 import { getWorkingDocument } from "@/services/documents";
 import { getOutline, listOutlines } from "@/services/outlines";
+import { judgeGhostProgress } from "@/services/planner";
+import { getPreferences, patchPreferences } from "@/services/preferences";
 import { createSession, listSessions } from "@/services/sessions";
 import type { TipTapDocument } from "@/types/api";
 
@@ -97,20 +104,35 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     queryFn: async () => (await getOutline(confirmedPlan?.id as string)).data,
     enabled: confirmedPlan !== null,
   });
-  const planParagraphs = useMemo<GhostParagraph[]>(() => {
+  // ADR-025: 大纲展平为有序句子指引，按句循环、持续提示。
+  const flatIdeas = useMemo<string[]>(() => {
     const nodes = planQuery.data?.nodes ?? [];
     const byParent = (parentId: string | null) =>
       nodes
         .filter((node) => node.parent_id === parentId)
         .sort((a, b) => a.sort_order - b.sort_order);
-    const paragraphs: GhostParagraph[] = [];
+    const ideas: string[] = [];
     for (const section of byParent(null)) {
       for (const paragraph of byParent(section.id)) {
-        paragraphs.push({ ideas: byParent(paragraph.id).map((idea) => idea.title) });
+        ideas.push(...byParent(paragraph.id).map((idea) => idea.title));
       }
     }
-    return paragraphs;
+    return ideas;
   }, [planQuery.data]);
+
+  const preferencesQuery = useQuery({
+    queryKey: ["preferences"],
+    queryFn: async () => (await getPreferences()).data,
+  });
+  const ghostEnabled = preferencesQuery.data?.ghost_hints_enabled ?? true;
+  const toggleGhost = useMutation({
+    mutationFn: async (enabled: boolean) => patchPreferences({ ghost_hints_enabled: enabled }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["preferences"] });
+    },
+  });
+  const [ghostIndex, setGhostIndex] = useState(0);
+  const guidanceDone = flatIdeas.length > 0 && ghostIndex >= flatIdeas.length;
 
   const suppressUpdateRef = useRef(false);
   const initializedRef = useRef(false);
@@ -156,6 +178,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
       }
       autosaveRef.current?.markDirty();
       setTick((value) => value + 1);
+      maybeJudgeProgressRef.current();
     },
   });
 
@@ -171,6 +194,62 @@ export function WritingEditor({ essayId }: { essayId: string }) {
 
   const grammar = useGrammar({ essayId, editor, session: activeSession, autosave, applyContent });
 
+  // ADR-025: 句点完成 → 判断是否达成当前指引 → 达成则推进到下一句。
+  const ghostEnabledRef = useRef(ghostEnabled);
+  const flatIdeasRef = useRef(flatIdeas);
+  const processedSentencesRef = useRef(0);
+  const judgingRef = useRef(false);
+  useEffect(() => {
+    ghostEnabledRef.current = ghostEnabled;
+    flatIdeasRef.current = flatIdeas;
+  });
+
+  const maybeJudgeProgress = useCallback(() => {
+    const current = editorRef.current;
+    const ideas = flatIdeasRef.current;
+    if (!current || !ghostEnabledRef.current || judgingRef.current) {
+      return;
+    }
+    const index = getGhostIndex(current.view);
+    if (index >= ideas.length) {
+      return;
+    }
+    const plain = current.getText({ blockSeparator: BLOCK_SEPARATOR });
+    const completed = splitSentences(plain).filter((s) => s.complete);
+    if (completed.length <= processedSentencesRef.current) {
+      return;
+    }
+    const sentence = completed[completed.length - 1].text.trim();
+    if (!sentence) {
+      return;
+    }
+    judgingRef.current = true;
+    void judgeGhostProgress(essayId, {
+      sentence,
+      idea_index: index,
+      idea: ideas[index],
+    })
+      .then((response) => {
+        processedSentencesRef.current = completed.length;
+        const latest = editorRef.current;
+        if (response.data.fulfilled && latest && getGhostIndex(latest.view) === index) {
+          advanceGhostHint(latest.view);
+          setGhostIndex(index + 1);
+        }
+      })
+      .catch(() => {
+        // Provider/network failure: never block the writer; keep the hint.
+        processedSentencesRef.current = completed.length;
+      })
+      .finally(() => {
+        judgingRef.current = false;
+      });
+  }, [essayId]);
+  const maybeJudgeProgressRef = useRef(maybeJudgeProgress);
+  useEffect(() => {
+    maybeJudgeProgressRef.current = maybeJudgeProgress;
+  }, [maybeJudgeProgress]);
+
   // Initialize once per essay when both the editor and the document are ready.
   useEffect(() => {
     if (!editor || !documentQuery.data || initializedRef.current) {
@@ -182,12 +261,18 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     setTick((value) => value + 1);
   }, [editor, documentQuery.data, applyContent, autosave]);
 
-  // 已确认大纲 → 灰色中文指引（段落级推进）。
+  // 已确认大纲 → 灰色中文指引（句子级循环，开关来自偏好设置）。
   useEffect(() => {
     if (editor) {
-      setGhostPlan(editor.view, planParagraphs);
+      const previousIndex = getGhostIndex(editor.view);
+      setGhostConfig(editor.view, flatIdeas, ghostEnabled);
+      const nextIndex = getGhostIndex(editor.view);
+      if (nextIndex !== previousIndex || nextIndex === 0) {
+        processedSentencesRef.current = 0;
+      }
+      queueMicrotask(() => setGhostIndex(nextIndex));
     }
-  }, [editor, planParagraphs]);
+  }, [editor, flatIdeas, ghostEnabled]);
 
   // IME composition: save after composition ends, never mid-composition.
   useEffect(() => {
@@ -383,13 +468,23 @@ export function WritingEditor({ essayId }: { essayId: string }) {
 
       <div className="flex min-h-0 flex-1">
         <aside className="hidden w-72 shrink-0 border-r border-zinc-200 dark:border-zinc-800 lg:block">
-          <PlannerChatPanel essayId={essayId} />
+          <PlannerChatPanel
+            essayId={essayId}
+            ghostEnabled={ghostEnabled}
+            guidanceDone={guidanceDone}
+            onToggleGhost={(enabled) => toggleGhost.mutate(enabled)}
+          />
         </aside>
 
         {mobileChatOpen && (
           <div className="fixed inset-0 z-40 flex lg:hidden" onClick={() => setMobileChatOpen(false)}>
             <div className="h-full w-80 max-w-[85%] bg-white shadow-xl dark:bg-zinc-950" onClick={(event) => event.stopPropagation()}>
-              <PlannerChatPanel essayId={essayId} />
+              <PlannerChatPanel
+                essayId={essayId}
+                ghostEnabled={ghostEnabled}
+                guidanceDone={guidanceDone}
+                onToggleGhost={(enabled) => toggleGhost.mutate(enabled)}
+              />
             </div>
             <div className="flex-1 bg-black/30" />
           </div>

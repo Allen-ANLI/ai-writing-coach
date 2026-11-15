@@ -907,6 +907,17 @@ export interface PlannerMessagesResponse {
   meta?: RequestMeta;
 }
 
+export interface PlannerProgressData {
+  fulfilled: boolean;
+  reason: string | null;
+  degraded: boolean;
+}
+
+export interface PlannerProgressResponse {
+  data: PlannerProgressData;
+  meta?: RequestMeta;
+}
+
 // Workflows (Slice 8, API Spec §15)
 
 export type WorkflowType = "writing_planner" | "learning_extractor" | "personalized_study_planner";
@@ -971,6 +982,7 @@ export interface PreferencesData {
   auto_expression_assist: boolean;
   daily_review_goal: number | null;
   ui_language: "zh" | "en";
+  ghost_hints_enabled: boolean;
 }
 
 export interface PreferencesResponse {

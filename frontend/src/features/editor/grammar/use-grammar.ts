@@ -117,6 +117,9 @@ export function useGrammar({
   const validatingRef = useRef(false);
   const teachingCacheRef = useRef<Map<string, TeachingData>>(new Map());
   const teachingPendingRef = useRef<Set<string>>(new Set());
+  // ADR-025: skip re-checking an unchanged sentence while the user types the
+  // next one (server-side cache also prevents duplicate LLM spend).
+  const lastCheckedRef = useRef<string | null>(null);
 
   useEffect(() => {
     editorRef.current = editor;
@@ -179,16 +182,34 @@ export function useGrammar({
           },
           controller.signal,
         );
-        // Stale-response guard: document moved on while the check ran.
+        if (controller.signal.aborted) {
+          return;
+        }
+        const latest = editorRef.current;
+        if (!latest) {
+          return;
+        }
+        // ADR-025 stale reconciliation: autosave may bump the revision while
+        // the check runs. Apply the findings when the checked sentence is
+        // still verbatim at the same range (offsets remain valid); otherwise
+        // drop — the saved-effect re-schedules at the new revision.
+        const plainNow = latest.getText({ blockSeparator: BLOCK_SEPARATOR });
+        const rangeIntact = plainNow.slice(span.start, span.end) === span.text;
         if (
-          controller.signal.aborted ||
-          response.data.server_revision !== autosaveRef.current.serverRevision
+          response.data.server_revision !== autosaveRef.current.serverRevision &&
+          !rangeIntact
         ) {
           return;
         }
-        dispatchMeta(current, {
-          type: "set",
-          issues: toIssueStates(current, response.data.issues),
+        const pmRange = codepointRangeToPm(latest.state.doc, span.start, span.end);
+        if (!pmRange) {
+          return;
+        }
+        dispatchMeta(latest, {
+          type: "merge",
+          start: pmRange.from,
+          end: pmRange.to,
+          issues: toIssueStates(latest, response.data.issues),
         });
         syncCount();
       } catch {
@@ -218,10 +239,24 @@ export function useGrammar({
         current.state.selection.from,
       ).start;
       const spans = splitSentences(plainText);
-      const span = spans.find((s) => cursorCp >= s.start && cursorCp <= s.end);
-      if (!span || !span.complete || span.text.trim() === "") {
+      // ADR-025: check the completed sentence at the cursor, or the last
+      // completed sentence BEFORE the cursor — fast typists move past the
+      // period before the debounce fires, which used to skip checks entirely.
+      let span = spans.find(
+        (s) => s.complete && cursorCp >= s.start && cursorCp <= s.end,
+      );
+      if (!span) {
+        const before = spans.filter((s) => s.complete && s.end <= cursorCp);
+        span = before[before.length - 1];
+      }
+      if (!span || span.text.trim() === "") {
         return; // never check incomplete input prematurely
       }
+      const key = `${span.start}:${span.end}:${span.text}`;
+      if (lastCheckedRef.current === key) {
+        return; // unchanged sentence already checked
+      }
+      lastCheckedRef.current = key;
       void runCheck(span);
     }, 900);
   }, [runCheck]);

@@ -59,6 +59,7 @@ class PreferencesData(BaseModel):
     auto_expression_assist: bool = True
     daily_review_goal: int | None = Field(default=None, ge=1, le=100)
     ui_language: Literal["zh", "en"] = "zh"
+    ghost_hints_enabled: bool = True
 
 
 class PatchPreferencesRequest(BaseModel):
@@ -68,6 +69,7 @@ class PatchPreferencesRequest(BaseModel):
     auto_expression_assist: bool | None = None
     daily_review_goal: int | None = Field(default=None, ge=1, le=100)
     ui_language: Literal["zh", "en"] | None = None
+    ghost_hints_enabled: bool | None = None
 
 
 class PreferencesResponse(BaseModel):

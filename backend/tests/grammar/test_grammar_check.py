@@ -48,14 +48,18 @@ def test_check_detects_agreement_error_with_masked_suggestions(client):
     assert "goes" not in response.text
 
 
-def test_deterministic_check_never_calls_llm(client, db):
+def test_deterministic_rules_instant_plus_one_sentence_scan(client, db):
+    """ADR-025: deterministic rule hits never wait for the LLM, and every
+    completed sentence gets exactly one whole-sentence scan (no fragment
+    deep-check when nothing is uncertain)."""
     headers = auth_headers(client)
     essay, session = setup_essay_with_text(client, headers)
 
     response = check_text(client, headers, essay["id"], session["id"], TEXT)
     assert response.status_code == 200
+    assert response.json()["data"]["issues"]  # deterministic hit still present
     logs = list(db.execute(select(AiUsageLog)).scalars())
-    assert logs == []  # rule-first cost invariant
+    assert [log.feature for log in logs] == ["grammar_sentence_check"]
 
 
 def test_clean_text_returns_no_issues(client):
@@ -66,6 +70,72 @@ def test_clean_text_returns_no_issues(client):
     response = check_text(client, headers, essay["id"], session["id"], text)
     assert response.status_code == 200
     assert response.json()["data"]["issues"] == []
+
+
+def test_sentence_scan_finds_errors_rules_miss(client, monkeypatch):
+    """ADR-025: the whole-sentence LLM scan surfaces Chinglish that LT misses;
+    model offsets are validated and converted to absolute document offsets."""
+    from app.ai import llm
+    from app.ai.providers.base import LlmUsage
+    from app.ai.schemas import SentenceCheckResult
+
+    text = "I very like this book."
+    headers = auth_headers(client)
+    essay, session = setup_essay_with_text(client, headers, text=text)
+
+    def fake_call_llm(*, system, user, response_model):
+        assert response_model is SentenceCheckResult
+        return (
+            SentenceCheckResult.model_validate(
+                {
+                    "issues": [
+                        {
+                            "category": "grammar",
+                            "sub_category": "word_order",
+                            "severity": "high",
+                            "short_explanation": "语序错误：very 不能直接修饰动词 like。",
+                            "suggestions": ["really like", "like ... very much"],
+                            "confidence": 0.9,
+                            "start_offset": 2,
+                            "end_offset": 11,
+                            "anchor_text": "very like",
+                        },
+                        {
+                            "category": "grammar",
+                            "severity": "low",
+                            "short_explanation": "越界 span 必须被丢弃。",
+                            "suggestions": ["x"],
+                            "confidence": 0.9,
+                            "start_offset": 0,
+                            "end_offset": 999,
+                            "anchor_text": "I very like this book.",
+                        },
+                    ]
+                }
+            ),
+            LlmUsage(
+                provider="mock",
+                model_name="mock",
+                input_tokens=1,
+                output_tokens=1,
+                latency_ms=1,
+                estimated_cost=0.0,
+            ),
+        )
+
+    monkeypatch.setattr(llm, "call_llm", fake_call_llm)
+    response = check_text(client, headers, essay["id"], session["id"], text)
+    assert response.status_code == 200, response.text
+    issues = response.json()["data"]["issues"]
+    assert len(issues) == 1  # invalid span dropped
+    issue = issues[0]
+    assert issue["source"] == "llm"
+    assert issue["start_offset"] == 2
+    assert issue["end_offset"] == 11
+    assert issue["anchor_text"] == "very like"
+    for suggestion in issue["suggestions"]:
+        assert suggestion["display_text"] == "••••"
+    assert "really like" not in response.text
 
 
 def test_independent_mode_is_rejected_backend_side(client):

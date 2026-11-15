@@ -126,6 +126,16 @@ test("Tab without a visible correction keeps normal editor behavior", async ({ p
   expect(content).toContain("He go to school yesterday.");
 });
 
+test("multiple sentences keep their own underlines (ADR-025)", async ({ page }) => {
+  await openEditor(page);
+  await typeAndWaitSaved(page, "He go to school.");
+  await waitForFirstIssue(page);
+  // 继续写第二句（快速输入，光标越过句点）——第一句的标记必须保留。
+  await page.keyboard.type(" She like apples.");
+  await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
+  await expect(page.locator(".awc-issue")).toHaveCount(2, { timeout: 30_000 });
+});
+
 test("correct self-edit clears the highlight automatically", async ({ page }) => {
   await openEditor(page);
   await typeAndWaitSaved(page, BAD_TEXT);

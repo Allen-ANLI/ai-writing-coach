@@ -49,18 +49,27 @@ test("chat planner proposes an outline; confirmation drives ghost hints", async 
   await page.getByTestId("confirm-outline").first().click();
   await expect(card).toContainText("已确认", { timeout: 15_000 });
 
-  // 光标进入空段落 → 灰色指引 widget 出现（不写入正文）。
+  // 光标进入空段落 → 灰色指引 widget 持续出现（不写入正文）。
   await page.getByTestId("editor-content").click();
   const hint = page.getByTestId("ghost-hint");
   await expect(hint).toBeVisible({ timeout: 15_000 });
   await expect(hint).toContainText("mock");
+  await expect(hint).toHaveAttribute("data-ghost-index", "0");
   // 指引只是 DOM widget：字数保持 0，绝不进入文档。
   await expect(page.getByTestId("word-count")).toHaveText("0 词");
-  // 点击关闭指引；正文仍为空（AI 不代写）。
-  await hint.click();
+
+  // ADR-025：开关在构思助手面板，关闭后隐藏，开启后恢复。
+  await page.getByTestId("ghost-toggle").click();
   await expect(page.getByTestId("ghost-hint")).toHaveCount(0);
-  await expect(page.getByTestId("editor-content")).toHaveText("");
-  await expect(page.getByTestId("word-count")).toHaveText("0 词");
+  await page.getByTestId("ghost-toggle").click();
+  await expect(page.getByTestId("ghost-hint")).toBeVisible({ timeout: 15_000 });
+
+  // 句点完成一句 → mock 判定 fulfilled=true → 推进到下一句指引。
+  await page.getByTestId("editor-content").click();
+  await page.keyboard.type("Public transport should be free.");
+  await expect(page.getByTestId("ghost-hint")).toHaveAttribute("data-ghost-index", "1", {
+    timeout: 20_000,
+  });
 });
 
 test("study planner workflow confirms suggestions", async ({ page }) => {

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Writing Coach API
-  version: 1.5.0
+  version: 1.6.0
   description: Final API contract aligned with Database ERD V1.2. Working documents use server_revision; immutable
     snapshots use version_no. Refresh tokens are HttpOnly cookies. 1.1.1 adds the additive
     infrastructure endpoint GET /health (200 database reachable, 503 database unavailable);
@@ -16,7 +16,10 @@ info:
     deletion/export; additive only. 1.5.0 (ADR-024, user decisions 2026-11-15) adds the
     conversational planner (POST /essays/{essay_id}/planner/chat, GET
     /essays/{essay_id}/planner/messages); outline confirmation now archives earlier
-    confirmed versions (one current plan per essay); additive only.
+    confirmed versions (one current plan per essay); additive only. 1.6.0 (ADR-025)
+    adds POST /essays/{essay_id}/planner/progress (ghost-guidance fulfillment
+    judgment) and preferences.ghost_hints_enabled; grammar checks gain a
+    whole-sentence LLM scan (behavioral, same endpoint); additive only.
 servers:
 - url: https://api.example.com/api/v1
   description: Production placeholder
@@ -2238,6 +2241,40 @@ paths:
           description: Request validation error
         '429':
           description: Rate limit exceeded
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/planner/progress:
+    post:
+      tags:
+      - Outlines
+      summary: Judge ghost-guidance sentence fulfillment (ADR-025)
+      description: >-
+        After the learner completes a sentence, judge whether it fulfills the
+        current outline guidance. fulfilled=true advances the ghost hint to the
+        next idea; degraded=true means the provider was unavailable and the
+        client should advance without blocking.
+      responses:
+        '200':
+          description: Fulfillment judgment
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit or AI quota exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
       parameters:
       - name: essay_id
         in: path

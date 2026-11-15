@@ -71,10 +71,14 @@ class MockProvider:
         # Deterministic planner-chat special case: the generic builder picks
         # the first Literal value ("discuss"), which would never propose an
         # outline. E2E needs the propose path to exercise confirmation.
-        from app.ai.schemas import PlannerChatResult
+        from app.ai.schemas import PlannerChatResult, SentenceCheckResult
 
         if isinstance(instance, PlannerChatResult):
             instance = instance.model_copy(update={"action": "propose"})
+        if isinstance(instance, SentenceCheckResult):
+            # Generic offsets would be invalid spans; the deterministic mock
+            # reports no sentence-level findings (rule engine still runs).
+            instance = instance.model_copy(update={"issues": []})
         content = instance.model_dump(mode="json")
         latency_ms = int((time.monotonic() - started) * 1000)
         serialized = json.dumps(content, ensure_ascii=False)

@@ -39,6 +39,9 @@ export const grammarPluginKey = new PluginKey<GrammarPluginState>("awcGrammar");
 
 export type GrammarMeta =
   | { type: "set"; issues: GrammarIssueState[] }
+  // ADR-025: replace only issues inside the checked sentence range; other
+  // sentences' findings survive (multi-sentence underlines coexist).
+  | { type: "merge"; start: number; end: number; issues: GrammarIssueState[] }
   | { type: "reveal"; issueId: string; suggestions: RevealedSuggestion[] }
   | { type: "remove"; issueId: string }
   | { type: "update"; issueId: string; state: GrammarIssueState };
@@ -86,6 +89,12 @@ export function createGrammarExtension() {
                 switch (meta.type) {
                   case "set":
                     issues = meta.issues;
+                    break;
+                  case "merge":
+                    issues = [
+                      ...issues.filter((item) => item.to <= meta.start || item.from >= meta.end),
+                      ...meta.issues,
+                    ];
                     break;
                   case "reveal":
                     issues = issues.map((item) =>
