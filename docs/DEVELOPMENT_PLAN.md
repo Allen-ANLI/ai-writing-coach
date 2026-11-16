@@ -804,6 +804,19 @@ public deployment approval.
   Playwright 71（+3：语法顺序接受、润色高亮保留、中文自动卡）、
   tsc/ESLint/build/ruff 干净。
 
+## 3w. 免费用户临时取消 AI 额度限制 (2026-11-16)
+
+**Status: DONE, verified, committed.**
+
+- 用户指令：暂时取消免费用户所有 AI 额度限制。新增配置
+  `FREE_PLAN_QUOTAS_DISABLED`（默认 true）：guard_ai_call/guard_evaluation
+  对 free 计划跳过 enforcement；billing usage 与 plans 列表对 free 返回
+  null（不限）；计量照常（分析不受影响）；付费计划不变。
+- 临时性：恢复只需设 `FREE_PLAN_QUOTAS_DISABLED=false`，无迁移、种子配额未动。
+- 测试/E2E 强制 false 以继续验证配额机制本身；新增豁免测试（免费不限+计量
+  保留、付费仍受限）。backend 399、E2E 71、vitest 41、tsc/ESLint/ruff 干净；
+  dev 实时探针 PASS。
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

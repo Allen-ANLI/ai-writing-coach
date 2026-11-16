@@ -17,6 +17,7 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.exceptions import ApiError
 from app.core.time import utcnow
 from app.modules.billing.models import (
@@ -25,9 +26,15 @@ from app.modules.billing.models import (
     UsageMeter,
     UserSubscription,
 )
-from app.modules.billing.schemas import SubscriptionData, UsageData
+from app.modules.billing.schemas import PlanData, SubscriptionData, UsageData
 
 FREE_PLAN_CODE = "free"
+
+
+def _free_quotas_disabled() -> bool:
+    """Temporary exemption (2026-11-16 user directive): free users are not
+    quota-limited. Metering still counts every call for analytics."""
+    return get_settings().free_plan_quotas_disabled
 
 
 def _period_start(moment: datetime) -> date:
@@ -121,6 +128,8 @@ def guard_ai_call(db: Session, user_id: uuid.UUID) -> None:
     _, plan = get_or_create_subscription(db, user_id)
     if plan.quota_ai_calls_monthly is None:
         return
+    if plan.code == FREE_PLAN_CODE and _free_quotas_disabled():
+        return
     meter = _meter(db, user_id)
     if meter.ai_calls >= plan.quota_ai_calls_monthly:
         raise ApiError(
@@ -131,6 +140,8 @@ def guard_ai_call(db: Session, user_id: uuid.UUID) -> None:
 def guard_evaluation(db: Session, user_id: uuid.UUID) -> None:
     _, plan = get_or_create_subscription(db, user_id)
     if plan.quota_evaluations_monthly is None:
+        return
+    if plan.code == FREE_PLAN_CODE and _free_quotas_disabled():
         return
     meter = _meter(db, user_id)
     if meter.evaluations >= plan.quota_evaluations_monthly:
@@ -162,13 +173,23 @@ def meter_evaluation(db: Session, user_id: uuid.UUID) -> None:
     )
 
 
-def list_plans(db: Session) -> list[SubscriptionPlan]:
+def list_plans(db: Session) -> list[PlanData]:
     rows = db.execute(
         select(SubscriptionPlan)
         .where(SubscriptionPlan.is_active.is_(True))
         .order_by(SubscriptionPlan.price_monthly.asc())
     ).scalars()
-    return list(rows)
+    plans = [PlanData.model_validate(row) for row in rows]
+    if _free_quotas_disabled():
+        plans = [
+            plan.model_copy(
+                update={"quota_ai_calls_monthly": None, "quota_evaluations_monthly": None}
+            )
+            if plan.code == FREE_PLAN_CODE
+            else plan
+            for plan in plans
+        ]
+    return plans
 
 
 def subscription_data(db: Session, user_id: uuid.UUID) -> SubscriptionData:
@@ -265,11 +286,12 @@ def usage_data(db: Session, user_id: uuid.UUID) -> UsageData:
     _, plan = get_or_create_subscription(db, user_id)
     meter = _meter(db, user_id)
     db.commit()
+    unlimited_free = plan.code == FREE_PLAN_CODE and _free_quotas_disabled()
     return UsageData(
         plan_code=plan.code,
         period_start=meter.period_start.isoformat(),
         ai_calls=meter.ai_calls,
         evaluations=meter.evaluations,
-        quota_ai_calls_monthly=plan.quota_ai_calls_monthly,
-        quota_evaluations_monthly=plan.quota_evaluations_monthly,
+        quota_ai_calls_monthly=None if unlimited_free else plan.quota_ai_calls_monthly,
+        quota_evaluations_monthly=None if unlimited_free else plan.quota_evaluations_monthly,
     )

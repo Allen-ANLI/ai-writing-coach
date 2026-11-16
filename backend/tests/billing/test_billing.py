@@ -199,6 +199,45 @@ def test_upgrade_lifts_quota(client, db):
     assert _evaluation_once(client, headers).status_code == 202
 
 
+def test_free_quota_exemption_when_disabled(client, db, monkeypatch):
+    """Temporary directive (2026-11-16): with the exemption on, free users
+    are never quota-blocked and see unlimited caps; metering keeps counting."""
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "free_plan_quotas_disabled", True)
+    headers = auth_headers(client)
+    client.get("/api/v1/billing/usage", headers=headers)  # materialize meter
+    _set_meter(db, ai_calls=100, evaluations=10)
+
+    assert _evaluation_once(client, headers).status_code == 202
+
+    usage = client.get("/api/v1/billing/usage", headers=headers).json()["data"]
+    assert usage["quota_ai_calls_monthly"] is None
+    assert usage["quota_evaluations_monthly"] is None
+    assert usage["ai_calls"] >= 1  # analytics metering is unaffected
+
+    plans = client.get("/api/v1/billing/plans", headers=headers).json()["data"]["items"]
+    free = next(p for p in plans if p["code"] == "free")
+    assert free["quota_ai_calls_monthly"] is None
+    assert free["quota_evaluations_monthly"] is None
+    pro = next(p for p in plans if p["code"] == "pro")
+    assert pro["quota_ai_calls_monthly"] == 1000  # paid plans unchanged
+
+
+def test_exemption_does_not_lift_paid_plan_quotas(client, db, monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "free_plan_quotas_disabled", True)
+    headers = auth_headers(client)
+    _upgrade(client, headers)  # pro: 1000 AI calls / 100 evaluations
+    client.get("/api/v1/billing/usage", headers=headers)
+    _set_meter(db, ai_calls=1000, evaluations=100)
+
+    response = _evaluation_once(client, headers)
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "QUOTA_EXCEEDED"
+
+
 def test_history_is_user_scoped(client):
     headers_a = auth_headers(client, email="hist-a@example.com")
     headers_b = auth_headers(client, email="hist-b@example.com")

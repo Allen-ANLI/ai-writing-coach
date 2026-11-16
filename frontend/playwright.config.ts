@@ -56,6 +56,9 @@ export default defineConfig({
         API_RATE_LIMIT_MAX_REQUESTS: "0",
         // E2E stays deterministic and never spends real API credits.
         LLM_PROVIDER: "mock",
+        // The temporary free-tier quota exemption is a deployment setting;
+        // E2E keeps enforcement ON to verify quota display/limits.
+        FREE_PLAN_QUOTAS_DISABLED: "false",
       },
     },
     {

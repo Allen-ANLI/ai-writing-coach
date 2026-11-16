@@ -9,7 +9,12 @@ or deploys publicly.
 - [x] All PRD loops implemented (Writing / Learning / Improvement).
 - [x] Full API contract implemented — 104/104 operations (1.8.0).
 - [x] Reconciliations R1–R12 resolved and documented.
-- [x] Backend 397 tests, Playwright 71 E2E, vitest 41 — all green (ADR-027).
+- [x] Backend 399 tests, Playwright 71 E2E, vitest 41 — all green (ADR-027 +
+      free-tier quota exemption).
+- [x] Temporary free-tier AI quota exemption active (2026-11-16 user
+      directive): FREE_PLAN_QUOTAS_DISABLED=true by default; metering intact;
+      paid plans unchanged. Restore enforcement with =false before launch
+      pricing goes live.
 - [x] tsc / ESLint / production build (13 routes) / ruff (197 files) clean.
 - [x] Migrations 0001–0019 additive; backup/restore round-trip re-verified
       (40 tables, identical row counts; re-verify after 0019 at next drill).

@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     # Base URL used to build the reset link in the email body.
     frontend_base_url: str = "http://localhost:3500"
 
+    # --- Billing (Slice 10, ADR-021) ---
+    # Temporary user directive (2026-11-16): free users have NO AI quota
+    # limits. Metering keeps counting for analytics; only enforcement and
+    # the displayed caps are lifted. Set FREE_PLAN_QUOTAS_DISABLED=false to
+    # restore the seeded free-plan quotas.
+    free_plan_quotas_disabled: bool = True
+
     # --- Observability & hardening (Slice 11b) ---
     log_level: str = "INFO"
     log_format: str = "json"  # json | text

@@ -7,6 +7,10 @@ os.environ["LLM_PROVIDER"] = "mock"
 # The suite fires thousands of requests from one test client; the general
 # per-IP limiter is exercised separately and disabled here.
 os.environ["API_RATE_LIMIT_MAX_REQUESTS"] = "0"
+# The temporary free-tier quota exemption (2026-11-16) is a deployment
+# setting; the suite keeps enforcement ON to verify the mechanism itself.
+# The exemption path is covered by a dedicated settings-monkeypatch test.
+os.environ["FREE_PLAN_QUOTAS_DISABLED"] = "false"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
