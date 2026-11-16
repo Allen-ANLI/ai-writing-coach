@@ -31,12 +31,20 @@ class GrammarCheckRequest(BaseModel):
     text: str = Field(min_length=1, max_length=20000)
     text_range: TextRange
     context: dict | None = None
+    # ADR-034: live mode = Word-like instant rule-only check on the current
+    # (possibly unsaved) cursor sentence. No revision/text_range-vs-doc gate,
+    # no LLM, no persistence; issues are ephemeral display-only.
+    live: bool = False
 
 
 class SuggestionStub(BaseModel):
     id: uuid.UUID
     display_text: str = "••••"
     answer_revealed: bool = False
+    # ADR-034: live (ephemeral) issues set answer_revealed=True and put the
+    # deterministic correction in display_text so it shows instantly without a
+    # DB reveal. Persisted issues stay masked ("••••", answer_revealed=False)
+    # and never carry suggested_text before an explicit reveal.
 
 
 class IssueData(BaseModel):
@@ -57,12 +65,15 @@ class IssueData(BaseModel):
     short_explanation: str | None
     status: str
     suggestions: list[SuggestionStub]
+    # ADR-034: true for ephemeral live-check findings (no DB row); the frontend
+    # routes hover/accept differently (pre-revealed; accept-after-save).
+    live: bool = False
 
 
 class GrammarCheckData(BaseModel):
     server_revision: int
     client_revision: int
-    check_status: Literal["completed", "partial"]
+    check_status: Literal["completed", "partial", "live"]
     issues: list[IssueData]
 
 

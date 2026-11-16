@@ -42,9 +42,9 @@ def process_outline_generation(session_factory: sessionmaker, outline_id: uuid.U
         previously_learned = "; ".join(e.english_text for e in recalled) or "(none)"
         db.commit()  # no transaction held during the LLM call
 
-        # v5: Chinese guidance, English thesis, AI-chosen structure + rich
-        # hierarchical markdown outline (ADR-033).
-        prompt = get_prompt("outline_generate", "v5")
+        # v6: Chinese guidance, English thesis, AI-chosen structure + rich
+        # hierarchical markdown outline with ordered-list numbering (ADR-034).
+        prompt = get_prompt("outline_generate", "v6")
         user_message = prompt.user_template.format(
             question_prompt=question_prompt,
             viewpoint=viewpoint,

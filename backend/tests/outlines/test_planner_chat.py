@@ -296,19 +296,21 @@ def test_stray_llm_fields_are_tolerated(client, monkeypatch):
     assert "title_note" not in paragraph
 
 
-def test_planner_chat_uses_prompt_v6(client, db):
+def test_planner_chat_uses_prompt_v7(client, db):
     headers = auth_headers(client)
     essay = create_essay(client, headers)
     # Real mock provider (not monkeypatched): deterministic propose.
     response = _chat(client, headers, essay["id"], "我同意公共交通免费")
     assert response.status_code == 200
     outline = response.json()["data"]["outline"]
-    # ADR-032/033: English essay + sentence-aligned Chinese + hierarchical md.
+    # ADR-032/033/034: English essay + sentence-aligned Chinese + hierarchical
+    # markdown with ordered-list numbering.
     assert "Public transport" in outline["model_essay"]
     assert "公共交通" in outline["model_essay_zh"]
     assert outline["outline_md"].startswith("## ")
     assert "**" in outline["outline_md"]  # bold short labels
-    assert "\n  - " in outline["outline_md"]  # nested sub-points
+    assert "\n1. " in outline["outline_md"]  # ordered idea markers
+    assert "\n   1. " in outline["outline_md"]  # nested ordered sub-points
     # 1:1 sentence alignment: same sentence count in English and Chinese.
     import re
 
@@ -320,4 +322,4 @@ def test_planner_chat_uses_prompt_v6(client, db):
 
     logs = db.query(AiUsageLog).filter(AiUsageLog.feature == "planner_chat").all()
     assert len(logs) == 1
-    assert logs[0].prompt_version == "v6"
+    assert logs[0].prompt_version == "v7"

@@ -25,6 +25,28 @@ describe("parseOutlineMarkdown (ADR-032/033)", () => {
     ]);
   });
 
+  it("parses ordered-list idea markers with their number (ADR-034)", () => {
+    const md =
+      "## 原因分析\n### 两大原因\n" +
+      "1. **生活节奏快**：忙碌无暇交往。例如：早出晚归。\n" +
+      "   1. 工时长\n   2. 通勤累\n" +
+      "2. **缺共享空间**：物理环境阻碍相聚。";
+    const blocks = parseOutlineMarkdown(md);
+    expect(blocks).toEqual([
+      { type: "section", text: "原因分析" },
+      { type: "paragraph", text: "两大原因" },
+      { type: "ordered", depth: 0, number: 1, text: "**生活节奏快**：忙碌无暇交往。例如：早出晚归。" },
+      { type: "ordered", depth: 1, number: 1, text: "工时长" },
+      { type: "ordered", depth: 1, number: 2, text: "通勤累" },
+      { type: "ordered", depth: 0, number: 2, text: "**缺共享空间**：物理环境阻碍相聚。" },
+    ]);
+  });
+
+  it("keeps a bullet whose text starts with a number as a bullet (ADR-034)", () => {
+    const blocks = parseOutlineMarkdown("- 1. 城市交通拥堵");
+    expect(blocks).toEqual([{ type: "bullet", depth: 0, text: "1. 城市交通拥堵" }]);
+  });
+
   it("ignores blank lines and treats # as a section", () => {
     const blocks = parseOutlineMarkdown("# 标题\n\n普通文本\n* 项目");
     expect(blocks).toEqual([

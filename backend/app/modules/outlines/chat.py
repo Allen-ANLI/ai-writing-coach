@@ -107,7 +107,8 @@ def send_message(
     db.add(user_message)
     db.commit()  # no transaction held during the LLM call
 
-    prompt = get_prompt("planner_chat", "v6")
+    # ADR-034: outline_md uses ordered-list numbering (1. **短概括**…).
+    prompt = get_prompt("planner_chat", "v7")
     user_prompt = prompt.user_template.format(
         question_prompt=essay.question_prompt or "(free writing)",
         current_outline=service.outline_json(confirmed),

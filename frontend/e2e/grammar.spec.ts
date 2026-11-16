@@ -54,7 +54,12 @@ async function typeAndWaitSaved(page: Page, text: string): Promise<void> {
 }
 
 async function waitForFirstIssue(page: Page): Promise<void> {
-  await expect(page.locator(".awc-issue").first()).toBeVisible({ timeout: 30_000 });
+  // ADR-034: live (ephemeral) findings appear first; tests that need the
+  // persisted pipeline (teaching, records, DB accept) wait for a non-live
+  // issue produced by the save-time full check.
+  await expect(page.locator('.awc-issue:not([data-live="true"])').first()).toBeVisible({
+    timeout: 30_000,
+  });
 }
 
 test("completed sentence is checked automatically; hover shows correction directly", async ({ page }) => {
@@ -329,12 +334,20 @@ test("records dialog reviews grammar errors and expression optimizations (ADR-02
   await expect(page.getByTestId("expression-records")).toBeVisible();
 });
 
-test("incomplete sentence is not checked prematurely", async ({ page }) => {
+test("incomplete input is live-checked instantly like Word (ADR-034)", async ({ page }) => {
   await openEditor(page);
   await page.getByTestId("editor-content").click();
-  // No sentence-final punctuation: must not trigger a check.
+  // No sentence-final punctuation: the deterministic agreement error must
+  // still show immediately (Word-like live check, no completion/save gate).
   await page.keyboard.type("He go to school");
-  await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
-  await page.waitForTimeout(2500);
-  await expect(page.locator(".awc-issue")).toHaveCount(0);
+  const liveIssue = page.locator('.awc-issue[data-live="true"]').first();
+  await expect(liveIssue).toBeVisible({ timeout: 10_000 });
+  await expect(liveIssue).toHaveText("go");
+
+  // Hover shows the correction instantly (pre-revealed, no DB reveal call).
+  await liveIssue.hover();
+  await expect(page.getByTestId("grammar-hover-card")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("revealed-answer")).toHaveText(/went|goes/, { timeout: 10_000 });
+  // Live findings have no persisted issue yet → no teaching button.
+  await expect(page.getByTestId("request-teaching")).toHaveCount(0);
 });

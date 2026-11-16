@@ -44,7 +44,9 @@ import {
   validateIssue,
 } from "@/services/grammar";
 import type {
+  AcceptIssueData,
   IssueData,
+  RevealedSuggestion,
   SessionData,
   TeachingData,
   TipTapDocument,
@@ -75,6 +77,42 @@ function toIssueStates(editor: Editor, issues: IssueData[]): GrammarIssueState[]
     states.push({ issue, from: range.from, to: range.to, revealed: null });
   }
   return states;
+}
+
+// ADR-034: live findings are pre-revealed (deterministic rule corrections in
+// display_text); build their suggestion options without a DB reveal call.
+function toLiveIssueStates(editor: Editor, issues: IssueData[]): GrammarIssueState[] {
+  const states: GrammarIssueState[] = [];
+  for (const issue of issues) {
+    const range = codepointRangeToPm(editor.state.doc, issue.start_offset, issue.end_offset);
+    if (!range) {
+      continue;
+    }
+    const revealed: RevealedSuggestion[] = issue.suggestions.map((s, index) => ({
+      id: s.id,
+      suggested_text: s.display_text,
+      explanation: null,
+      is_recommended: index === 0,
+    }));
+    states.push({ issue, from: range.from, to: range.to, revealed });
+  }
+  return states;
+}
+
+// ADR-028/034: grammar first — polish fragments overlapping grammar findings
+// yield until the grammar is fixed (then a re-scan runs).
+function suppressOverlappingPolish(editor: Editor, from: number, to: number) {
+  const grammarInSpan = getGrammarIssues(editor.view).filter((g) => g.to > from && g.from < to);
+  for (const fragment of getPolishFragments(editor.view)) {
+    if (grammarInSpan.some((g) => fragment.from < g.to && fragment.to > g.from)) {
+      editor.view.dispatch(
+        editor.state.tr.setMeta(polishPluginKey, {
+          type: "remove",
+          suggestionId: fragment.fragment.suggestion_id,
+        }),
+      );
+    }
+  }
 }
 
 function teachingErrorMessage(error: unknown): string {
@@ -127,6 +165,11 @@ export function useGrammar({
   // ADR-025: skip re-checking an unchanged sentence while the user types the
   // next one (server-side cache also prevents duplicate LLM spend).
   const lastCheckedRef = useRef<string | null>(null);
+  // ADR-034: Word-like live check — independent debounce/abort/dedup so it
+  // never waits for save or the LLM and never bundles with polish.
+  const liveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveAbortRef = useRef<AbortController | null>(null);
+  const lastLiveKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     editorRef.current = editor;
@@ -218,21 +261,7 @@ export function useGrammar({
           end: pmRange.to,
           issues: toIssueStates(latest, response.data.issues),
         });
-        // ADR-028: grammar first — polish fragments overlapping the grammar
-        // findings yield until the grammar is fixed (then a re-scan runs).
-        const grammarInSpan = getGrammarIssues(latest.view).filter(
-          (g) => g.to > pmRange.from && g.from < pmRange.to,
-        );
-        for (const fragment of getPolishFragments(latest.view)) {
-          if (grammarInSpan.some((g) => fragment.from < g.to && fragment.to > g.from)) {
-            latest.view.dispatch(
-              latest.state.tr.setMeta(polishPluginKey, {
-                type: "remove",
-                suggestionId: fragment.fragment.suggestion_id,
-              }),
-            );
-          }
-        }
+        suppressOverlappingPolish(latest, pmRange.from, pmRange.to);
         syncCount();
       } catch {
         // aborted / 403 independent / 409 stale / network: editor stays usable
@@ -292,6 +321,110 @@ export function useGrammar({
       void runCheck(span);
     }, justCompleted ? 120 : 350);
   }, [runCheck]);
+
+  // --- ADR-034: Word-like live check (rule-only, instant, no save gate) ------
+
+  const runLiveCheck = useCallback(
+    async (span: { start: number; end: number; text: string }) => {
+      const current = editorRef.current;
+      const currentSession = sessionRef.current;
+      if (!current || !currentSession || !enabledRef.current) {
+        return;
+      }
+      liveAbortRef.current?.abort();
+      const controller = new AbortController();
+      liveAbortRef.current = controller;
+      const save = autosaveRef.current;
+      try {
+        const response = await grammarCheck(
+          essayId,
+          {
+            session_id: currentSession.id,
+            server_revision: save.serverRevision,
+            client_revision: save.clientRevision,
+            text: span.text,
+            text_range: {
+              start: span.start,
+              end: span.end,
+              offset_unit: "unicode_codepoint",
+            },
+            context: { paragraph_text: span.text },
+            live: true,
+          },
+          controller.signal,
+        );
+        if (controller.signal.aborted) {
+          return;
+        }
+        const latest = editorRef.current;
+        if (!latest) {
+          return;
+        }
+        // The user may keep typing while LT runs: apply only if the checked
+        // span is still verbatim at the same range; otherwise the next edit
+        // re-schedules a fresh live check.
+        const plainNow = latest.getText({ blockSeparator: BLOCK_SEPARATOR });
+        if (plainNow.slice(span.start, span.end) !== span.text) {
+          return;
+        }
+        const pmRange = codepointRangeToPm(latest.state.doc, span.start, span.end);
+        if (!pmRange) {
+          return;
+        }
+        dispatchMeta(latest, {
+          type: "merge",
+          start: pmRange.from,
+          end: pmRange.to,
+          issues: toLiveIssueStates(latest, response.data.issues),
+          live: true,
+        });
+        suppressOverlappingPolish(latest, pmRange.from, pmRange.to);
+        syncCount();
+      } catch {
+        // aborted / 403 independent / network: editor stays usable
+      }
+    },
+    [essayId, syncCount],
+  );
+
+  const scheduleLiveCheck = useCallback(() => {
+    const current = editorRef.current;
+    if (!current || !enabledRef.current) {
+      return;
+    }
+    if (liveTimerRef.current) {
+      clearTimeout(liveTimerRef.current);
+    }
+    // Word-like ~300ms debounce; checks the cursor sentence even when it is
+    // still incomplete (no sentence-completion or save gate).
+    liveTimerRef.current = setTimeout(() => {
+      const editor = editorRef.current;
+      if (!editor || editor.view.composing) {
+        return;
+      }
+      const plainText = editor.getText({ blockSeparator: BLOCK_SEPARATOR });
+      const cursorCp = pmRangeToCodepoints(
+        editor.state.doc,
+        editor.state.selection.from,
+        editor.state.selection.from,
+      ).start;
+      const spans = splitSentences(plainText);
+      let span = spans.find((s) => cursorCp >= s.start && cursorCp <= s.end);
+      if (!span) {
+        const before = spans.filter((s) => s.end <= cursorCp);
+        span = before[before.length - 1];
+      }
+      if (!span || span.text.trim() === "") {
+        return;
+      }
+      const key = `${span.start}:${span.end}:${span.text}`;
+      if (lastLiveKeyRef.current === key) {
+        return; // unchanged region already live-checked
+      }
+      lastLiveKeyRef.current = key;
+      void runLiveCheck(span);
+    }, 300);
+  }, [runLiveCheck]);
 
   // --- Self-correction validation -------------------------------------------
 
@@ -357,7 +490,8 @@ export function useGrammar({
     return () => clearTimeout(timer);
   }, [enabled, autosave.status, autosave.serverRevision, runValidations, scheduleCheckForEdit]);
 
-  // Track edits: schedule sentence checks + mark intersected issues pending.
+  // Track edits: schedule live + sentence checks + mark intersected issues
+  // pending validation.
   useEffect(() => {
     if (!editor) {
       return;
@@ -370,6 +504,7 @@ export function useGrammar({
       if (!current || current.view.composing) {
         return; // IME composition: wait for compositionend
       }
+      scheduleLiveCheck();
       scheduleCheckForEdit();
       const issues = getGrammarIssues(current.view);
       if (issues.length === 0) {
@@ -378,6 +513,9 @@ export function useGrammar({
       for (const map of transaction.mapping.maps) {
         map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
           for (const item of issues) {
+            if (item.issue.live) {
+              continue; // ADR-034: ephemeral live findings have no DB row
+            }
             if (newStart <= item.to && newEnd >= item.from) {
               const cp = pmRangeToCodepoints(current.state.doc, item.from, item.to);
               pendingValidationRef.current.set(item.issue.id, cp);
@@ -386,14 +524,17 @@ export function useGrammar({
         });
       }
     };
-    const onCompositionEnd = () => scheduleCheckForEdit();
+    const onCompositionEnd = () => {
+      scheduleLiveCheck();
+      scheduleCheckForEdit();
+    };
     editor.on("update", onUpdate);
     editor.view.dom.addEventListener("compositionend", onCompositionEnd);
     return () => {
       editor.off("update", onUpdate);
       editor.view.dom.removeEventListener("compositionend", onCompositionEnd);
     };
-  }, [editor, scheduleCheckForEdit]);
+  }, [editor, scheduleLiveCheck, scheduleCheckForEdit]);
 
   // --- Hover: fetch suggestions + teaching in parallel -----------------------
 
@@ -523,8 +664,13 @@ export function useGrammar({
         teaching: cachedTeaching,
         teachingLoading: false,
         teachingError: null,
+        live: item.issue.live ?? false,
       });
-      loadSuggestions(item);
+      // ADR-034: live findings are pre-revealed; only persisted issues need
+      // the DB reveal call.
+      if (!item.issue.live) {
+        loadSuggestions(item);
+      }
     };
     const onHoverEnd = () => {
       if (hoverGraceRef.current) {
@@ -566,17 +712,159 @@ export function useGrammar({
 
   // --- Accept / ignore --------------------------------------------------------
 
+  // ADR-027: mirror the server's range-scoped reconciliation locally so the
+  // other underlines survive with consistent offsets after an acceptance.
+  const reconcileAfterAccept = useCallback(
+    (oldPlain: string, data: AcceptIssueData, removedIssueId: string) => {
+      const current = editorRef.current;
+      if (!current) {
+        return;
+      }
+      applyContentRef.current(data.content_json);
+      autosaveRef.current.setServerRevision(data.server_revision);
+      const oldCps = Array.from(oldPlain);
+      const newCps = Array.from(data.plain_text);
+      let prefix = 0;
+      while (prefix < oldCps.length && prefix < newCps.length && oldCps[prefix] === newCps[prefix]) {
+        prefix += 1;
+      }
+      let suffix = 0;
+      while (
+        suffix < oldCps.length - prefix &&
+        suffix < newCps.length - prefix &&
+        oldCps[oldCps.length - 1 - suffix] === newCps[newCps.length - 1 - suffix]
+      ) {
+        suffix += 1;
+      }
+      const startCp = prefix;
+      const endCp = oldCps.length - suffix;
+      dispatchMeta(current, {
+        type: "accept-shift",
+        startCp,
+        endCp,
+        delta: newCps.length - suffix - endCp,
+        removedIssueId,
+      });
+      setHover(null);
+      syncCount();
+      void queryClient.invalidateQueries({ queryKey: ["essay", essayId] });
+    },
+    [essayId, setHover, syncCount, queryClient],
+  );
+
+  // ADR-034: saveNow is fire-and-forget; poll until the save lands.
+  const waitForSaved = useCallback((predicate: () => boolean, timeoutMs = 4000): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const started = Date.now();
+      const tick = () => {
+        if (predicate()) {
+          resolve(true);
+          return;
+        }
+        if (Date.now() - started > timeoutMs) {
+          resolve(false);
+          return;
+        }
+        setTimeout(tick, 30);
+      };
+      tick();
+    });
+  }, []);
+
+  // ADR-034: accept-after-save for an ephemeral live finding — save the text,
+  // run the full check to persist a real issue, then accept the chosen option.
+  const acceptLiveIssue = useCallback(
+    async (item: GrammarIssueState, chosen: RevealedSuggestion | null) => {
+      const currentSession = sessionRef.current;
+      if (!currentSession) {
+        return;
+      }
+      if (autosaveRef.current.status !== "saved") {
+        const beforeRev = autosaveRef.current.serverRevision;
+        autosaveRef.current.saveNow();
+        const ok = await waitForSaved(
+          () =>
+            autosaveRef.current.status === "saved" &&
+            autosaveRef.current.serverRevision > beforeRev,
+        );
+        if (!ok) {
+          setHover(null);
+          return;
+        }
+      }
+      const latest = editorRef.current;
+      if (!latest) {
+        return;
+      }
+      const plainText = latest.getText({ blockSeparator: BLOCK_SEPARATOR });
+      const cp = pmRangeToCodepoints(latest.state.doc, item.from, item.from).start;
+      const spans = splitSentences(plainText);
+      const span =
+        spans.find((s) => cp >= s.start && cp <= s.end) ??
+        [...spans].reverse().find((s) => s.complete && s.end <= cp);
+      if (!span) {
+        setHover(null);
+        return;
+      }
+      try {
+        const response = await grammarCheck(essayId, {
+          session_id: currentSession.id,
+          server_revision: autosaveRef.current.serverRevision,
+          client_revision: autosaveRef.current.clientRevision,
+          text: span.text,
+          text_range: {
+            start: span.start,
+            end: span.end,
+            offset_unit: "unicode_codepoint",
+          },
+          context: { paragraph_text: span.text },
+        });
+        const persisted = response.data.issues.find(
+          (i) => i.rule_id === item.issue.rule_id && i.anchor_text === item.issue.anchor_text,
+        );
+        const pmRange = codepointRangeToPm(latest.state.doc, span.start, span.end);
+        if (pmRange) {
+          dispatchMeta(latest, {
+            type: "merge",
+            start: pmRange.from,
+            end: pmRange.to,
+            issues: toIssueStates(latest, response.data.issues),
+          });
+          suppressOverlappingPolish(latest, pmRange.from, pmRange.to);
+        }
+        if (!persisted) {
+          setHover(null);
+          syncCount();
+          return;
+        }
+        const revealed = await revealIssue(essayId, persisted.id);
+        const suggestion =
+          revealed.data.suggestions.find((s) => s.suggested_text === chosen?.suggested_text) ??
+          revealed.data.suggestions.find((s) => s.is_recommended) ??
+          revealed.data.suggestions[0];
+        const oldPlain = latest.getText({ blockSeparator: BLOCK_SEPARATOR });
+        const acceptResponse = await acceptIssue(essayId, persisted.id, {
+          base_revision: autosaveRef.current.serverRevision,
+          client_revision: autosaveRef.current.clientRevision,
+          suggestion_id: suggestion?.id ?? null,
+        });
+        reconcileAfterAccept(oldPlain, acceptResponse.data, persisted.id);
+      } catch (error) {
+        if (error instanceof ApiClientError && error.status === 409) {
+          setHover(null);
+          scheduleCheckForEdit();
+        } else {
+          setHover(null);
+        }
+      }
+    },
+    [essayId, waitForSaved, reconcileAfterAccept, setHover, syncCount, scheduleCheckForEdit],
+  );
+
   const acceptCorrection = useCallback(() => {
     const current = editorRef.current;
     const card = hoverRef.current;
-    const save = autosaveRef.current;
-    if (
-      !current ||
-      !card ||
-      !card.suggestions ||
-      card.suggestions.length === 0 ||
-      save.status !== "saved"
-    ) {
+    if (!current || !card || !card.suggestions || card.suggestions.length === 0) {
       return;
     }
     // ADR-029: accept the SELECTED suggestion (any alternative), not only
@@ -585,44 +873,25 @@ export function useGrammar({
       card.suggestions.find((s) => s.id === card.selectedSuggestionId) ??
       card.suggestions.find((s) => s.is_recommended) ??
       card.suggestions[0];
+    // ADR-034: live findings accept after save (no DB row yet).
+    if (card.live) {
+      const item = getGrammarIssues(current.view).find((i) => i.issue.id === card.issueId);
+      if (item) {
+        void acceptLiveIssue(item, chosen ?? null);
+      }
+      return;
+    }
+    const save = autosaveRef.current;
+    if (save.status !== "saved") {
+      return;
+    }
     const oldPlain = current.getText({ blockSeparator: BLOCK_SEPARATOR });
     void acceptIssue(essayId, card.issueId, {
       base_revision: save.serverRevision,
       client_revision: save.clientRevision,
       suggestion_id: chosen?.id ?? null,
     })
-      .then((response) => {
-        applyContentRef.current(response.data.content_json);
-        autosaveRef.current.setServerRevision(response.data.server_revision);
-        // ADR-027: mirror the server's range-scoped reconciliation locally so
-        // the other underlines survive with consistent offsets.
-        const oldCps = Array.from(oldPlain);
-        const newCps = Array.from(response.data.plain_text);
-        let prefix = 0;
-        while (prefix < oldCps.length && prefix < newCps.length && oldCps[prefix] === newCps[prefix]) {
-          prefix += 1;
-        }
-        let suffix = 0;
-        while (
-          suffix < oldCps.length - prefix &&
-          suffix < newCps.length - prefix &&
-          oldCps[oldCps.length - 1 - suffix] === newCps[newCps.length - 1 - suffix]
-        ) {
-          suffix += 1;
-        }
-        const startCp = prefix;
-        const endCp = oldCps.length - suffix;
-        dispatchMeta(current, {
-          type: "accept-shift",
-          startCp,
-          endCp,
-          delta: newCps.length - suffix - endCp,
-          removedIssueId: card.issueId,
-        });
-        setHover(null);
-        syncCount();
-        void queryClient.invalidateQueries({ queryKey: ["essay", essayId] });
-      })
+      .then((response) => reconcileAfterAccept(oldPlain, response.data, card.issueId))
       .catch((error) => {
         // ADR-027: a genuinely stale finding self-heals — close the card and
         // re-check the sentence instead of failing silently.
@@ -631,12 +900,23 @@ export function useGrammar({
           scheduleCheckForEdit();
         }
       });
-  }, [essayId, setHover, syncCount, queryClient, scheduleCheckForEdit]);
+  }, [essayId, acceptLiveIssue, reconcileAfterAccept, setHover, scheduleCheckForEdit]);
 
   const ignore = useCallback(
     (issueId: string) => {
       const current = editorRef.current;
       if (!current) {
+        return;
+      }
+      const item = getGrammarIssues(current.view).find((i) => i.issue.id === issueId);
+      // ADR-034: ephemeral live findings have no DB row — drop locally.
+      if (item?.issue.live) {
+        dispatchMeta(current, { type: "remove", issueId });
+        if (hoverRef.current?.issueId === issueId) {
+          setHover(null);
+        }
+        syncCount();
+        document.dispatchEvent(new CustomEvent(POLISH_EVENTS.rescan));
         return;
       }
       void ignoreIssue(essayId, issueId)
@@ -664,8 +944,8 @@ export function useGrammar({
   const requestTeaching = useCallback(() => {
     const current = editorRef.current;
     const card = hoverRef.current;
-    if (!current || !card) {
-      return;
+    if (!current || !card || card.live) {
+      return; // ADR-034: live findings have no persisted issue to teach from
     }
     const item = getGrammarIssues(current.view).find((i) => i.issue.id === card.issueId);
     if (item) {

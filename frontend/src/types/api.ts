@@ -373,6 +373,8 @@ export interface IssueData {
   short_explanation: string | null;
   status: "detected" | "resolved" | "ignored" | "stale";
   suggestions: SuggestionStub[];
+  /** ADR-034: ephemeral live-check finding (no DB row); pre-revealed, accept-after-save. */
+  live?: boolean;
 }
 
 export interface GrammarCheckRequest {
@@ -382,12 +384,14 @@ export interface GrammarCheckRequest {
   text: string;
   text_range: { start: number; end: number; offset_unit: "unicode_codepoint" };
   context?: { previous_sentence?: string | null; next_sentence?: string | null; paragraph_text?: string | null };
+  /** ADR-034: Word-like instant rule-only check on the current cursor sentence. */
+  live?: boolean;
 }
 
 export interface GrammarCheckData {
   server_revision: number;
   client_revision: number;
-  check_status: "completed" | "partial";
+  check_status: "completed" | "partial" | "live";
   issues: IssueData[];
 }
 

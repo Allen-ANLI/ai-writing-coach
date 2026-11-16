@@ -232,6 +232,70 @@ def _deep_check_uncertain(
     return confirmed, all_ok
 
 
+# ADR-034: stable synthetic ids for ephemeral live findings (no DB row). The
+# same rule+span+anchor yields the same id across re-checks so the frontend
+# can reconcile live decorations without flicker.
+_LIVE_ID_NAMESPACE = uuid.UUID("6f9619ff-8b86-d011-b42d-00c04fc964ff")
+
+
+def _live_check(essay_id: uuid.UUID, payload: GrammarCheckRequest) -> dict:
+    """Word-like instant grammar: deterministic rule hits only, ephemeral.
+
+    Offsets are absolute in the document (text_range.start + relative). No
+    revision/text_range-vs-saved-doc validation: the text may be unsaved. No
+    LLM call, no billing, no persistence — suggestions are exposed inline so
+    they display instantly; acceptance happens after save via the full check.
+    """
+    start, end = payload.text_range.start, payload.text_range.end
+    if end <= start:
+        raise ApiError(422, "VALIDATION_ERROR", "text_range end must exceed start.")
+    detected, _lt_ok = _run_rule_engine(payload.text)
+    issues: list[dict] = []
+    for d in detected:
+        if d.needs_llm:
+            continue  # uncertain hits wait for the save-time LLM deep check
+        abs_start = start + d.start_offset
+        abs_end = start + d.end_offset
+        issue_id = uuid.uuid5(
+            _LIVE_ID_NAMESPACE,
+            f"{essay_id}:{d.rule_id}:{abs_start}:{abs_end}:{d.anchor_text}",
+        )
+        suggestions = [
+            {
+                "id": uuid.uuid5(_LIVE_ID_NAMESPACE, f"{issue_id}:suggestion:{order}"),
+                "display_text": text,
+                "answer_revealed": True,
+            }
+            for order, text in enumerate(d.suggestions)
+        ]
+        issues.append(
+            {
+                "id": issue_id,
+                "category": d.category,
+                "sub_category": d.sub_category,
+                "source": d.source,
+                "rule_id": d.rule_id,
+                "severity": d.severity,
+                "source_server_revision": payload.server_revision,
+                "essay_version_id": None,
+                "start_offset": abs_start,
+                "end_offset": abs_end,
+                "offset_unit": "unicode_codepoint",
+                "anchor_text": d.anchor_text,
+                "short_explanation": d.short_explanation,
+                "status": "detected",
+                "suggestions": suggestions,
+                "live": True,
+            }
+        )
+    return {
+        "server_revision": payload.server_revision,
+        "client_revision": payload.client_revision,
+        "check_status": "live",
+        "issues": issues,
+    }
+
+
 def grammar_check(
     db: Session, user: User, essay_id: uuid.UUID, payload: GrammarCheckRequest
 ) -> dict:
@@ -243,6 +307,11 @@ def grammar_check(
             "RESOURCE_ACCESS_DENIED",
             "Real-time grammar assistance is disabled in independent writing mode.",
         )
+    if payload.live:
+        # ADR-034: Word-like instant check — rule engine only, no saved-doc
+        # gate, no LLM, no persistence. Close the read transaction first.
+        db.commit()
+        return _live_check(essay_id, payload)
     document = essay_repository.lock_working_document(db, essay_id)
     if document.server_revision != payload.server_revision:
         raise ApiError(409, "STALE_AI_RESULT", "The document changed; check the current revision.")

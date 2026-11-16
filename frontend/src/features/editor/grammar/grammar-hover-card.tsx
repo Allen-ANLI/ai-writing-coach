@@ -21,6 +21,8 @@ export interface HoverCardState {
   teaching: TeachingData | null;
   teachingLoading: boolean;
   teachingError: string | null;
+  /** ADR-034: ephemeral live finding — pre-revealed, no DB teaching available. */
+  live?: boolean;
 }
 
 export function GrammarHoverCard({
@@ -132,7 +134,7 @@ export function GrammarHoverCard({
         )}
       </div>
 
-      {!isSpelling && (
+      {!isSpelling && !state.live && (
         <div className="mt-2 border-t border-zinc-100 pt-2 dark:border-zinc-800">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">

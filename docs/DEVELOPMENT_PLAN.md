@@ -941,6 +941,33 @@ public deployment approval.
   tsc/ESLint/build/ruff 干净。注：LT 冷启动/并发负载会致 grammar 测试瞬时超时，
   预热后重跑即绿。
 
+## 3ad. ADR-034 — 大纲序号化 + Word 式即时语法 (2026-11-16)
+
+**Status: DONE, verified, committed.**
+
+- 大纲序号：planner_chat v7 / outline_generate v6 的 outline_md 改用有序列表
+  `1. **短概括**：详解。例如。`（序号由列表标记提供，粗体标签不再内嵌"原因1"），
+  子要点 `   1. ` 缩进有序。前端 parseOutlineMarkdown 解析有序标记
+  （`/^\d+\.\s/`→{ordered,depth,number,text}）渲染数字标记+嵌套缩进；保留 bullet
+  向后兼容。mock outline_md 同步改有序。
+- Word 式即时语法（用户选定：Live 即时显示+保存后深度；范围=光标所在句/段）：
+  grammar-check 增 live 标志。live=true 仅归属/会话/模式校验，跳过保存门控与
+  text_range 对已保存文档校验，只跑规则引擎取确定性命中，**不调 LLM/不计费/不落库**，
+  返回临时 issue（uuid5 合成 id、绝对偏移、live=true、check_status="live"、建议
+  内联 revealed）。非 live 路径不变（保存后 LT+LLM 深度+持久化）。
+- 前端 use-grammar：编辑防抖~300ms 查光标所在句（含未写完），无保存门控、独立
+  abort/去重、与润色解耦；merge live 进 span 并抑制重叠润色。full check 保存后
+  替换该 span 的 live。插件 merge 增 live 语义（live 保留持久化项+去重，full 全替换），
+  抽出纯函数 mergeIssueStates。悬浮 live 预揭示（不调 reveal/teaching），隐藏讲解。
+  接受 live=保存→full check 持久化→按 rule+anchor 匹配→reveal→接受所选→范围协调；
+  忽略 live 本地移除。
+- 简短解释来源说明：确定性错误=规则中文模板/LT 消息（非 LLM，瞬时）；仅 LLM 检出
+  错误的解释由 LLM 生成。
+- 契约 1.12.0（106 操作不变，复用 grammar-check）；无 DB 迁移（live 临时态）。
+  backend 423（+7 live）、vitest 59（+2 有序解析 +5 merge）、tsc/ESLint/ruff 干净。
+  注：LT 冷启动/并发负载会致 grammar 测试瞬时超时，预热后重跑即绿；pytest 与 E2E
+  绝不并行（共享测试库）。
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

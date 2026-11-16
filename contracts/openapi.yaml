@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Writing Coach API
-  version: 1.11.0
+  version: 1.12.0
   description: Final API contract aligned with Database ERD V1.2. Working documents use server_revision; immutable
     snapshots use version_no. Refresh tokens are HttpOnly cookies. 1.1.1 adds the additive
     infrastructure endpoint GET /health (200 database reachable, 503 database unavailable);
@@ -41,7 +41,12 @@ info:
     /essays/{essay_id}/planner/match (ghost location by position + embedding
     content match; mock degrades to pure position); planner_chat v6 /
     outline_generate v5 produce a rich hierarchical markdown outline; additive
-    only.
+    only. 1.12.0 (ADR-034) grammar-check gains an optional live flag (Word-like
+    instant rule-only check on the current cursor sentence — no save gate, no LLM,
+    no persistence); GrammarIssue gains live and check_status gains "live"; live
+    suggestions are revealed inline (answer_revealed may be true). planner_chat v7
+    / outline_generate v6 emit ordered-list numbering (1. **短概括**) in outline_md;
+    additive only.
 servers:
 - url: https://api.example.com/api/v1
   description: Production placeholder
@@ -936,6 +941,13 @@ paths:
                 context:
                   type: object
                   additionalProperties: true
+                live:
+                  type: boolean
+                  description: >-
+                    ADR-034 Word-like instant check: deterministic rule engine only on
+                    the current (possibly unsaved) cursor sentence. No revision/text_range
+                    gate, no LLM, no persistence; issues are ephemeral (live=true) with
+                    suggestions revealed inline. Acceptance happens after save.
               required:
               - session_id
               - server_revision
@@ -3172,9 +3184,12 @@ components:
                 format: uuid
               display_text:
                 type: string
+                description: Masked "••••" until revealed; for live issues the actual correction.
               answer_revealed:
                 type: boolean
-                const: false
+                description: >-
+                  False for persisted issues before an explicit reveal; true for
+                  ephemeral live issues (deterministic corrections shown inline).
         status:
           type: string
           enum:
@@ -3182,6 +3197,9 @@ components:
           - resolved
           - ignored
           - stale
+        live:
+          type: boolean
+          description: ADR-034 true for ephemeral live-check findings (no DB row).
     GrammarCheckResponse:
       type: object
       properties:
@@ -3197,6 +3215,7 @@ components:
               enum:
               - completed
               - partial
+              - live
             issues:
               type: array
               items:

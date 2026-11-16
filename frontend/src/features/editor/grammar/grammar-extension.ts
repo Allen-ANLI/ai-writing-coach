@@ -42,7 +42,10 @@ export type GrammarMeta =
   | { type: "set"; issues: GrammarIssueState[] }
   // ADR-025: replace only issues inside the checked sentence range; other
   // sentences' findings survive (multi-sentence underlines coexist).
-  | { type: "merge"; start: number; end: number; issues: GrammarIssueState[] }
+  // ADR-034: live=true swaps only ephemeral live findings in the span and
+  // keeps persisted ones (deduped by rule+span); live=false (full check)
+  // replaces everything in the span with persisted findings.
+  | { type: "merge"; start: number; end: number; issues: GrammarIssueState[]; live?: boolean }
   // ADR-027: after an acceptance, mirror the server's range-scoped
   // reconciliation: drop the accepted issue and any issue intersecting the
   // replaced code-point range (staled server-side), shift the rest.
@@ -62,6 +65,7 @@ function buildDecorations(doc: ProseMirrorNode, issues: GrammarIssueState[]): De
       Decoration.inline(item.from, item.to, {
         class: `awc-issue awc-issue--${item.issue.category}`,
         "data-issue-id": item.issue.id,
+        "data-live": item.issue.live ? "true" : "false",
       }),
     );
   }
@@ -104,12 +108,10 @@ export function createGrammarExtension() {
                   case "set":
                     issues = meta.issues;
                     break;
-                  case "merge":
-                    issues = [
-                      ...issues.filter((item) => item.to <= meta.start || item.from >= meta.end),
-                      ...meta.issues,
-                    ];
+                  case "merge": {
+                    issues = mergeIssueStates(issues, meta);
                     break;
+                  }
                   case "accept-shift":
                     issues = issues
                       .filter((item) => item.issue.id !== meta.removedIssueId)
@@ -190,4 +192,30 @@ export function createGrammarExtension() {
 
 export function getGrammarIssues(view: EditorView): GrammarIssueState[] {
   return grammarPluginKey.getState(view.state)?.issues ?? [];
+}
+
+/**
+ * ADR-025/034 range-scoped merge (pure, unit-testable).
+ * live=true: swap only ephemeral live findings inside the span, keeping
+ * persisted ones and deduping live against persisted by (rule_id, from, to).
+ * live=false (full check): replace everything inside the span.
+ * Findings outside the span always survive.
+ */
+export function mergeIssueStates(
+  previous: GrammarIssueState[],
+  meta: { start: number; end: number; issues: GrammarIssueState[]; live?: boolean },
+): GrammarIssueState[] {
+  const outside = previous.filter((item) => item.to <= meta.start || item.from >= meta.end);
+  if (meta.live) {
+    const inSpan = previous.filter((item) => item.to > meta.start && item.from < meta.end);
+    const persisted = inSpan.filter((item) => !item.issue.live);
+    const persistedKeys = new Set(
+      persisted.map((item) => `${item.issue.rule_id}:${item.from}:${item.to}`),
+    );
+    const newLive = meta.issues.filter(
+      (item) => !persistedKeys.has(`${item.issue.rule_id}:${item.from}:${item.to}`),
+    );
+    return [...outside, ...persisted, ...newLive];
+  }
+  return [...outside, ...meta.issues];
 }
