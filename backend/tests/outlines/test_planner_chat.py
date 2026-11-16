@@ -195,3 +195,108 @@ def test_empty_message_rejected(client):
     headers = auth_headers(client)
     essay = create_essay(client, headers)
     assert _chat(client, headers, essay["id"], "   ").status_code == 422
+
+
+def test_propose_stores_model_essay(client, monkeypatch):
+    """ADR-029: the planner returns a complete model essay alongside the
+    outline; it is persisted and served for ghost guidance."""
+    headers = auth_headers(client)
+    essay = create_essay(client, headers, writing_type="ielts_task2")
+    essay_text = (
+        "Public transport should be free in large cities. "
+        "Free buses and trains reduce private car use. "
+        "This also cuts air pollution."
+    )
+    _patch_llm(
+        monkeypatch,
+        PlannerChatResult(
+            reply="我写好了范文和它的大纲，请确认。",
+            action="propose",
+            outline=_outline_payload(),
+            model_essay=essay_text,
+        ),
+    )
+
+    response = _chat(client, headers, essay["id"], "我同意公共交通免费")
+    assert response.status_code == 200, response.text
+    outline = response.json()["data"]["outline"]
+    assert outline["model_essay"] == essay_text
+
+    detail = client.get(f"/api/v1/outlines/{outline['id']}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["data"]["model_essay"] == essay_text
+
+
+def test_relaxed_structure_is_accepted(client, monkeypatch):
+    """ADR-029: structure is the AI's choice — a single section with one
+    paragraph and many sentence ideas (outside the old 2-5/1-4 bounds) must
+    persist and display."""
+    headers = auth_headers(client)
+    essay = create_essay(client, headers)
+    flexible = OutlineGenerationResult.model_validate(
+        {
+            "thesis_statement": "Free public transport benefits cities.",
+            "sections": [
+                {
+                    "title": "正文",
+                    "paragraphs": [
+                        {
+                            "title": "论证",
+                            "sentence_ideas": [f"要点{i}" for i in range(1, 8)],
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    _patch_llm(
+        monkeypatch,
+        PlannerChatResult(reply="结构由我定。", action="propose", outline=flexible),
+    )
+
+    response = _chat(client, headers, essay["id"], "开始")
+    assert response.status_code == 200, response.text
+    outline = response.json()["data"]["outline"]
+    sections = [n for n in outline["nodes"] if n["node_type"] == "section"]
+    ideas = [n for n in outline["nodes"] if n["node_type"] == "sentence_idea"]
+    assert len(sections) == 1
+    assert len(ideas) == 7
+
+
+def test_stray_llm_fields_are_tolerated(client, monkeypatch):
+    """ADR-029: providers occasionally add stray fields (e.g. title_note);
+    the call must succeed and drop them instead of failing with 502."""
+    headers = auth_headers(client)
+    essay = create_essay(client, headers)
+    payload = _outline_payload().model_dump()
+    payload["sections"][0]["paragraphs"][0]["title_note"] = ""
+    result = PlannerChatResult.model_validate(
+        {
+            "reply": "好的。",
+            "action": "propose",
+            "outline": payload,
+            "model_essay": "First sentence. Second sentence. Third sentence.",
+            "extra_top_level": 1,
+        }
+    )
+    _patch_llm(monkeypatch, result)
+
+    response = _chat(client, headers, essay["id"], "开始")
+    assert response.status_code == 200, response.text
+    outline = response.json()["data"]["outline"]
+    assert outline["model_essay"] == "First sentence. Second sentence. Third sentence."
+    paragraph = next(n for n in outline["nodes"] if n["node_type"] == "paragraph")
+    assert "title_note" not in paragraph
+
+
+def test_planner_chat_uses_prompt_v2(client, db):
+    headers = auth_headers(client)
+    essay = create_essay(client, headers)
+    # Real mock provider (not monkeypatched): deterministic propose.
+    assert _chat(client, headers, essay["id"], "我同意公共交通免费").status_code == 200
+
+    from app.modules.analytics.models import AiUsageLog
+
+    logs = db.query(AiUsageLog).filter(AiUsageLog.feature == "planner_chat").all()
+    assert len(logs) == 1
+    assert logs[0].prompt_version == "v2"

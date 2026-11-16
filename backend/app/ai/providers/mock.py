@@ -166,9 +166,19 @@ class MockProvider:
             instance = build_mock_instance(response_model, user)
             # Deterministic planner-chat special case: the generic builder
             # picks the first Literal value ("discuss"), which would never
-            # propose an outline. E2E needs the propose path.
+            # propose an outline. E2E needs the propose path plus a stable
+            # multi-sentence model essay for ghost guidance (ADR-029).
             if isinstance(instance, PlannerChatResult):
-                instance = instance.model_copy(update={"action": "propose"})
+                instance = instance.model_copy(
+                    update={
+                        "action": "propose",
+                        "model_essay": (
+                            "[mock] Public transport should be free in big cities. "
+                            "Free buses and trains reduce private car use. "
+                            "This also cuts air pollution and saves commuters money."
+                        ),
+                    }
+                )
             if isinstance(instance, SentenceCheckResult):
                 # Generic offsets would be invalid spans; the deterministic
                 # mock reports no sentence-level findings (rules still run).

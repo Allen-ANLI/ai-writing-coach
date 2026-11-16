@@ -229,6 +229,45 @@ test("polish acceptance keeps unrelated grammar, never re-underlines replaced wo
   await expect(page.locator(".awc-issue")).toHaveCount(0, { timeout: 15_000 });
 });
 
+test("spelling errors offer corrections without a teaching button (ADR-029)", async ({ page }) => {
+  await openEditor(page);
+  await typeAndWaitSaved(page, "I recieved a letter.");
+  await expect(page.locator(".awc-issue--spelling").first()).toBeVisible({ timeout: 30_000 });
+
+  await page.locator(".awc-issue--spelling").first().hover();
+  const card = page.getByTestId("grammar-hover-card");
+  await expect(card).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("revealed-answer")).toHaveText("received", { timeout: 15_000 });
+  // 拼写错误不需要详细解释：无按钮、无讲解区块。
+  await expect(page.getByTestId("request-teaching")).toHaveCount(0);
+  await expect(page.getByTestId("teaching-content")).toHaveCount(0);
+
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("editor-content")).toContainText("I received a letter.", {
+    timeout: 15_000,
+  });
+});
+
+test("alternative suggestions are selectable and replace via Tab (ADR-029)", async ({ page }) => {
+  await openEditor(page);
+  await typeAndWaitSaved(page, BAD_TEXT);
+  await waitForFirstIssue(page);
+
+  await page.locator(".awc-issue--grammar").first().hover();
+  await expect(page.getByTestId("grammar-hover-card")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("revealed-answer")).toBeVisible({ timeout: 15_000 });
+  // 推荐项默认选中；点选备选 "went" 后 Tab 替换为所选词。
+  const options = page.getByTestId("suggestion-options");
+  await expect(options.locator("button")).toHaveCount(2);
+  await options.getByRole("button", { name: "went" }).click();
+  await expect(page.getByTestId("revealed-answer")).toHaveText("went");
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("editor-content")).toContainText(
+    "He went to school yesterday.",
+    { timeout: 15_000 },
+  );
+});
+
 test("correct self-edit clears the highlight automatically", async ({ page }) => {
   await openEditor(page);
   await typeAndWaitSaved(page, BAD_TEXT);

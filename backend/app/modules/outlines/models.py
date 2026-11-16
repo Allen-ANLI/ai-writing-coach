@@ -49,6 +49,9 @@ class WritingOutline(Base):
     version_no: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="generating")
     thesis_statement: Mapped[str | None] = mapped_column(Text)
+    # ADR-029: complete model essay driving sentence-by-sentence ghost hints;
+    # null for legacy/workflow outlines (ghost falls back to outline ideas).
+    model_essay: Mapped[str | None] = mapped_column(Text)
     source_context: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     workflow_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("workflows.id", ondelete="SET NULL")

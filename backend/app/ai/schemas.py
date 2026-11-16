@@ -258,35 +258,41 @@ class RewriteResult(BaseModel):
 
 
 class OutlineParagraph(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # ADR-029: LLM output tolerance — providers occasionally add stray fields
+    # (e.g. title_note); drop them instead of failing the whole call.
+    model_config = ConfigDict(extra="ignore")
 
     title: str = Field(min_length=1, max_length=255)
-    sentence_ideas: list[str] = Field(min_length=1, max_length=4)
+    # Structure is the AI's choice (IELTS-appropriate), not a fixed template;
+    # bounds are sanity caps only.
+    sentence_ideas: list[str] = Field(min_length=1, max_length=10)
 
 
 class OutlineSection(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     title: str = Field(min_length=1, max_length=255)
-    paragraphs: list[OutlineParagraph] = Field(min_length=1, max_length=4)
+    paragraphs: list[OutlineParagraph] = Field(min_length=1, max_length=8)
 
 
 class OutlineGenerationResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     thesis_statement: str = Field(min_length=1, max_length=1000)
-    sections: list[OutlineSection] = Field(min_length=2, max_length=5)
+    sections: list[OutlineSection] = Field(min_length=1, max_length=8)
 
 
 class PlannerChatResult(BaseModel):
-    """Conversational planner turn (ADR-024): chat reply plus an optional
-    proposed/revised outline. outline is only honored for propose/revise."""
+    """Conversational planner turn (ADR-024/029): chat reply plus an optional
+    proposed/revised outline AND the complete model essay it outlines.
+    outline/model_essay are only honored for propose/revise."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     reply: str = Field(min_length=1, max_length=1000)
     action: Literal["discuss", "propose", "revise"]
     outline: OutlineGenerationResult | None = None
+    model_essay: str | None = Field(default=None, max_length=20000)
 
 
 class StudySuggestion(BaseModel):

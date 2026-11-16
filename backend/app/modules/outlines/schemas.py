@@ -51,6 +51,7 @@ class OutlineData(BaseModel):
     version_no: int
     status: str
     thesis_statement: str | None
+    model_essay: str | None = None
     source_context: dict
     workflow_id: uuid.UUID | None
     created_at: datetime

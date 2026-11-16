@@ -105,6 +105,8 @@ def _create_draft(
         result.outline.thesis_statement,
         [section.model_dump() for section in result.outline.sections],
     )
+    # ADR-029: the complete model essay drives sentence-level ghost hints.
+    outline.model_essay = result.model_essay
     return outline
 
 
@@ -126,7 +128,7 @@ def send_message(
     db.add(user_message)
     db.commit()  # no transaction held during the LLM call
 
-    prompt = get_prompt("planner_chat", "v1")
+    prompt = get_prompt("planner_chat", "v2")
     user_prompt = prompt.user_template.format(
         question_prompt=essay.question_prompt or "(free writing)",
         current_outline=_outline_json(confirmed),
@@ -212,7 +214,7 @@ def judge_progress(
 
     billing_service.guard_ai_call(db, user.id)
     db.commit()  # no transaction held during the LLM call
-    prompt = get_prompt("ghost_progress", "v1")
+    prompt = get_prompt("ghost_progress", "v2")
     user_prompt = prompt.user_template.format(idea=idea, sentence=sentence)
     try:
         result, usage = llm.call_llm(

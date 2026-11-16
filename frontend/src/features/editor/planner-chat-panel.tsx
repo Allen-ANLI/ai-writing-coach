@@ -89,6 +89,16 @@ function OutlineCard({ outlineId, essayId }: { outlineId: string; essayId: strin
       <div className="mt-1.5">
         <PlanBranch nodes={outline.nodes} parentId={null} />
       </div>
+      {outline.model_essay && (
+        <details className="mt-2" data-testid="model-essay-details">
+          <summary className="cursor-pointer text-[11px] font-medium text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200">
+            参考范文（写作指引来源）
+          </summary>
+          <p className="mt-1 whitespace-pre-wrap rounded bg-zinc-50 p-2 text-[11px] leading-relaxed text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+            {outline.model_essay}
+          </p>
+        </details>
+      )}
       {outline.status === "draft" && (
         <button
           type="button"
@@ -191,8 +201,8 @@ export function PlannerChatPanel({
       <div ref={scrollRef} className="awc-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
         {messages.length === 0 && !send.isPending && (
           <div className="rounded-lg bg-zinc-50 p-3 text-xs leading-relaxed text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
-            你好，我是写作构思助手。告诉我你对这篇作文的想法或立场，我会帮你拟出大纲；
-            确认后，写作时会在段落处给你灰色中文提示。开始写作后，也可以随时回来让我调整结构。
+            你好，我是写作构思助手。告诉我你对这篇作文的想法或立场，我会按雅思要求为你写一篇完整范文并给出它的大纲；
+            确认后，写作时文末会逐句显示灰色范文提示，你写出大意相符的句子就推进到下一句。开始写作后，也可以随时回来让我调整。
           </div>
         )}
         {messages.map((message) => (

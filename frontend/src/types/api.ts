@@ -870,6 +870,7 @@ export interface OutlineData {
   version_no: number;
   status: OutlineStatus;
   thesis_statement: string | null;
+  model_essay: string | null;
   source_context: Record<string, unknown>;
   workflow_id: string | null;
   created_at: string;

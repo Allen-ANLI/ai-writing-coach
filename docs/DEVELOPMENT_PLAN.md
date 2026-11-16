@@ -832,6 +832,30 @@ public deployment approval.
 - 测试：backend 400、E2E 73（+2：语法优先生命周期、润色接受保留无关语法/
   不残留旧词）、vitest 43、tsc/ESLint/build/ruff 干净。
 
+## 3y. ADR-029 — 范文驱动指引 + 自主结构构思 + 拼写/备选交互 (2026-11-16)
+
+**Status: DONE, verified, committed.**
+
+- 拼写错误（category=spelling）悬浮卡隐藏整个详细讲解区块；其他类别按需讲解不变。
+- 全部语法建议（含备选）为可点选芯片，推荐项默认选中；"接受修改"/Tab 替换
+  当前选中项（后端本就支持任意 suggestion_id）。
+- 构思助手 planner_chat v2：返回完整英文范文 model_essay + 该范文的大纲；
+  writing_outlines.model_essay（迁移 0020，可空）；大纲响应带出；左侧卡片
+  增可折叠"参考范文"。幽灵指引 = splitSentences(范文)，无范文回退大纲指引。
+- 推进判断 ghost_progress v2：英文句对范文句**大意匹配**（接受改写/细节增减/
+  小语法错误，不要求 100%）；未匹配时追赶判断下一句（服务端缓存），匹配则
+  跳位——写超前不卡死。诊断：v1 偏严 + 无追赶是真实 provider 下卡住根因。
+- 结构放宽：schema sections 1–8 / paragraphs 1–8 / ideas 1–10（仅 sanity 上限）；
+  planner_chat v2 与 outline_generate v3 明确"结构由 AI 按雅思要求自主决定"，
+  大纲须与范文逐段逐句对应以正确显示。
+- LLM 输出容错：outline/planner AI schema extra=ignore（真实 DeepSeek 偶发
+  杂散字段 title_note 在 forbid 下致 502）；未知字段丢弃不入库，必填仍严格。
+- 契约 1.9.0（104 操作）；backend 404、E2E 75（+2：拼写无讲解、备选可选）、
+  vitest 43、tsc/ESLint/build/ruff 干净；真实 DeepSeek 冒烟 PASS（322 词范文 +
+  AI 自主 5 段大纲；改写句 fulfilled=true、无关句 false）。
+- 下一轮（已分析确认）：上下文缓存——作文前缀 + DeepSeek 前缀缓存命中计量
+  （provider hit/miss token、迁移 0021、命中单价计费）。
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

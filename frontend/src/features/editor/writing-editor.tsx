@@ -111,7 +111,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     queryFn: async () => (await getOutline(confirmedPlan?.id as string)).data,
     enabled: confirmedPlan !== null,
   });
-  // ADR-025: 大纲展平为有序句子指引，按句循环、持续提示。
+  // ADR-025: 大纲展平为有序句子指引（无范文时的回退）。
   const flatIdeas = useMemo<string[]>(() => {
     const nodes = planQuery.data?.nodes ?? [];
     const byParent = (parentId: string | null) =>
@@ -126,6 +126,16 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     }
     return ideas;
   }, [planQuery.data]);
+  // ADR-029: 有范文时，幽灵指引 = 范文的逐句序列；否则回退大纲指引。
+  const modelEssay = planQuery.data?.model_essay ?? null;
+  const ghostHints = useMemo<string[]>(() => {
+    if (modelEssay && modelEssay.trim() !== "") {
+      return splitSentences(modelEssay)
+        .map((span) => span.text.trim())
+        .filter((text) => text !== "");
+    }
+    return flatIdeas;
+  }, [modelEssay, flatIdeas]);
 
   const preferencesQuery = useQuery({
     queryKey: ["preferences"],
@@ -139,7 +149,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     },
   });
   const [ghostIndex, setGhostIndexState] = useState(0);
-  const guidanceDone = flatIdeas.length > 0 && ghostIndex >= flatIdeas.length;
+  const guidanceDone = ghostHints.length > 0 && ghostIndex >= ghostHints.length;
 
   const suppressUpdateRef = useRef(false);
   const initializedRef = useRef(false);
@@ -205,19 +215,20 @@ export function WritingEditor({ essayId }: { essayId: string }) {
   const grammar = useGrammar({ essayId, editor, session: activeSession, autosave, applyContent });
   const polish = usePolish({ essayId, editor, session: activeSession, autosave, applyContent });
 
-  // ADR-025: 句点完成 → 判断是否达成当前指引 → 达成则推进到下一句。
+  // ADR-025/029: 句点完成 → 大意匹配当前范文句 → 达成则推进；
+  // 未达成时追赶判断下一句（写超前了也不卡死）。
   const ghostEnabledRef = useRef(ghostEnabled);
-  const flatIdeasRef = useRef(flatIdeas);
+  const ghostHintsRef = useRef(ghostHints);
   const processedSentencesRef = useRef(0);
   const judgingRef = useRef(false);
   useEffect(() => {
     ghostEnabledRef.current = ghostEnabled;
-    flatIdeasRef.current = flatIdeas;
+    ghostHintsRef.current = ghostHints;
   });
 
   const maybeJudgeProgress = useCallback(() => {
     const current = editorRef.current;
-    const ideas = flatIdeasRef.current;
+    const ideas = ghostHintsRef.current;
     if (!current || !ghostEnabledRef.current || judgingRef.current) {
       return;
     }
@@ -243,10 +254,33 @@ export function WritingEditor({ essayId }: { essayId: string }) {
       .then((response) => {
         processedSentencesRef.current = completed.length;
         const latest = editorRef.current;
-        if (response.data.fulfilled && latest && getGhostIndex(latest.view) === index) {
+        if (!latest || getGhostIndex(latest.view) !== index) {
+          return;
+        }
+        if (response.data.fulfilled) {
           advanceGhostHint(latest.view);
           setGhostIndexState(index + 1);
+          return;
         }
+        // ADR-029 追赶：当前句未匹配时，可能已写到下一句范文的内容；
+        // 再判一次下一句（服务端缓存防重复花费），匹配则跳到对应位置。
+        const nextIdea = ideas[index + 1];
+        if (!nextIdea) {
+          return;
+        }
+        void judgeGhostProgress(essayId, {
+          sentence,
+          idea_index: index + 1,
+          idea: nextIdea,
+        })
+          .then((next) => {
+            const now = editorRef.current;
+            if (next.data.fulfilled && now && getGhostIndex(now.view) === index) {
+              setGhostIndex(now.view, index + 2);
+              setGhostIndexState(index + 2);
+            }
+          })
+          .catch(() => undefined);
       })
       .catch(() => {
         // Provider/network failure: never block the writer; keep the hint.
@@ -272,23 +306,23 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     setTick((value) => value + 1);
   }, [editor, documentQuery.data, applyContent, autosave]);
 
-  // 已确认大纲 → 灰色中文指引（句子级循环，开关来自偏好设置）。
+  // 已确认大纲 → 灰色指引（范文逐句；无范文回退大纲指引）。
   // ADR-026：大纲更新后按已完成句数续接，不再从第一句重新开始。
   useEffect(() => {
     if (!editor) {
       return;
     }
-    setGhostConfig(editor.view, flatIdeas, ghostEnabled);
+    setGhostConfig(editor.view, ghostHints, ghostEnabled);
     let nextIndex = getGhostIndex(editor.view);
     const plain = editor.getText({ blockSeparator: BLOCK_SEPARATOR });
     const completedCount = splitSentences(plain).filter((s) => s.complete).length;
-    if (flatIdeas.length > 0 && completedCount > nextIndex) {
-      nextIndex = Math.min(completedCount, flatIdeas.length);
+    if (ghostHints.length > 0 && completedCount > nextIndex) {
+      nextIndex = Math.min(completedCount, ghostHints.length);
       setGhostIndex(editor.view, nextIndex);
     }
     processedSentencesRef.current = completedCount;
     queueMicrotask(() => setGhostIndexState(nextIndex));
-  }, [editor, flatIdeas, ghostEnabled]);
+  }, [editor, ghostHints, ghostEnabled]);
 
   // IME composition: save after composition ends, never mid-composition.
   useEffect(() => {
@@ -611,6 +645,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
       {grammar.hoverCard && (
         <GrammarHoverCard
           state={grammar.hoverCard}
+          onSelectSuggestion={grammar.selectSuggestion}
           onAccept={grammar.acceptCorrection}
           onIgnore={grammar.ignoreFromCard}
           onRequestTeaching={grammar.requestTeaching}

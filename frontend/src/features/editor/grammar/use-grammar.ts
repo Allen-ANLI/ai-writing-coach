@@ -55,6 +55,7 @@ export interface GrammarApi {
   hoverCard: HoverCardState | null;
   onCardMouseEnter: () => void;
   onCardMouseLeave: () => void;
+  selectSuggestion: (suggestionId: string) => void;
   acceptCorrection: () => void;
   ignoreFromCard: () => void;
   requestTeaching: () => void;
@@ -414,9 +415,14 @@ export function useGrammar({
             issueId: item.issue.id,
             suggestions: response.data.suggestions,
           });
+          const defaultSelection =
+            response.data.suggestions.find((s) => s.is_recommended) ??
+            response.data.suggestions[0] ??
+            null;
           patchHover(item.issue.id, {
             suggestions: response.data.suggestions,
             suggestionsLoading: false,
+            selectedSuggestionId: defaultSelection?.id ?? null,
           });
         })
         .catch(() => patchHover(item.issue.id, { suggestionsLoading: false }));
@@ -503,13 +509,17 @@ export function useGrammar({
       // ADR-026: teaching is requested explicitly via the card button,
       // never auto-loaded on hover (cost control).
       const cachedTeaching = teachingCacheRef.current.get(item.issue.id) ?? null;
+      const defaultSelection =
+        item.revealed?.find((s) => s.is_recommended) ?? item.revealed?.[0] ?? null;
       setHover({
         issueId: detail.issueId,
+        category: item.issue.category,
         top: detail.top,
         left: detail.left,
         explanation: item.issue.short_explanation,
         suggestions: item.revealed,
         suggestionsLoading: !item.revealed,
+        selectedSuggestionId: defaultSelection?.id ?? null,
         teaching: cachedTeaching,
         teachingLoading: false,
         teachingError: null,
@@ -544,6 +554,16 @@ export function useGrammar({
     hoverGraceRef.current = setTimeout(() => setHover(null), 200);
   }, [setHover]);
 
+  const selectSuggestion = useCallback(
+    (suggestionId: string) => {
+      const card = hoverRef.current;
+      if (card) {
+        patchHover(card.issueId, { selectedSuggestionId: suggestionId });
+      }
+    },
+    [patchHover],
+  );
+
   // --- Accept / ignore --------------------------------------------------------
 
   const acceptCorrection = useCallback(() => {
@@ -559,12 +579,17 @@ export function useGrammar({
     ) {
       return;
     }
-    const recommended = card.suggestions.find((s) => s.is_recommended) ?? card.suggestions[0];
+    // ADR-029: accept the SELECTED suggestion (any alternative), not only
+    // the recommended one.
+    const chosen =
+      card.suggestions.find((s) => s.id === card.selectedSuggestionId) ??
+      card.suggestions.find((s) => s.is_recommended) ??
+      card.suggestions[0];
     const oldPlain = current.getText({ blockSeparator: BLOCK_SEPARATOR });
     void acceptIssue(essayId, card.issueId, {
       base_revision: save.serverRevision,
       client_revision: save.clientRevision,
-      suggestion_id: recommended?.id ?? null,
+      suggestion_id: chosen?.id ?? null,
     })
       .then((response) => {
         applyContentRef.current(response.data.content_json);
@@ -702,6 +727,7 @@ export function useGrammar({
     hoverCard,
     onCardMouseEnter,
     onCardMouseLeave,
+    selectSuggestion,
     acceptCorrection,
     ignoreFromCard,
     requestTeaching,

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Writing Coach API
-  version: 1.8.0
+  version: 1.9.0
   description: Final API contract aligned with Database ERD V1.2. Working documents use server_revision; immutable
     snapshots use version_no. Refresh tokens are HttpOnly cookies. 1.1.1 adds the additive
     infrastructure endpoint GET /health (200 database reachable, 503 database unavailable);
@@ -28,7 +28,11 @@ info:
     (drop-in, sentence-context candidates); accepting one grammar correction
     or validating one self-edit now preserves other detected issues
     (range-scoped reconciliation with offset shifting, behavioral); additive
-    only.
+    only. 1.9.0 (ADR-029) planner chat (prompt v2) returns a complete
+    model_essay alongside the outline; outlines gain nullable model_essay
+    (migration 0020) driving sentence-level ghost guidance with rough-match
+    progress judgment (ghost_progress v2); outline structure bounds relaxed
+    (AI-chosen, IELTS-appropriate); additive only.
 servers:
 - url: https://api.example.com/api/v1
   description: Production placeholder
