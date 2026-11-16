@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiClientError } from "@/lib/api-client";
-import { confirmOutline, getOutline } from "@/services/outlines";
+import { confirmOutline, generateModelEssay, getOutline } from "@/services/outlines";
 import { listPlannerMessages, sendPlannerMessage } from "@/services/planner";
 import type { OutlineNodeData } from "@/types/api";
 
@@ -57,6 +57,15 @@ function OutlineCard({ outlineId, essayId }: { outlineId: string; essayId: strin
       void queryClient.invalidateQueries({ queryKey: ["outlines", essayId] });
     },
   });
+  // ADR-030: bootstrap the model essay for a confirmed outline that lacks one
+  // (legacy outlines), so ghost guidance can start.
+  const generateEssay = useMutation({
+    mutationFn: async () => generateModelEssay(outlineId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["outline", outlineId] });
+      void queryClient.invalidateQueries({ queryKey: ["outlines", essayId] });
+    },
+  });
   const outline = outlineQuery.data;
   if (!outline) {
     return null;
@@ -98,6 +107,29 @@ function OutlineCard({ outlineId, essayId }: { outlineId: string; essayId: strin
             {outline.model_essay}
           </p>
         </details>
+      )}
+      {outline.status === "confirmed" && !outline.model_essay && (
+        <div className="mt-2">
+          <button
+            type="button"
+            data-testid="generate-model-essay"
+            disabled={generateEssay.isPending}
+            onClick={() => generateEssay.mutate()}
+            className="rounded-md bg-sky-600 px-3 py-1 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+          >
+            {generateEssay.isPending ? "正在生成范文…" : "生成范文指引"}
+          </button>
+          <p className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
+            此大纲还没有范文，生成后即可按范文逐句提示。
+          </p>
+          {generateEssay.isError && (
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+              {generateEssay.error instanceof ApiClientError
+                ? generateEssay.error.message
+                : "生成范文失败，请重试。"}
+            </p>
+          )}
+        </div>
       )}
       {outline.status === "draft" && (
         <button

@@ -150,6 +150,7 @@ class MockProvider:
     ) -> LlmResult:
         started = time.monotonic()
         from app.ai.schemas import (
+            ModelEssayResult,
             PlannerChatResult,
             PolishSentenceResult,
             SentenceCheckResult,
@@ -162,6 +163,15 @@ class MockProvider:
             instance = _mock_polish(user)
         elif response_model is TranslationResult:
             instance = _mock_translation(user)
+        elif response_model is ModelEssayResult:
+            # ADR-030: deterministic multi-sentence essay for ghost guidance.
+            instance = ModelEssayResult(
+                model_essay=(
+                    "[mock] Public transport should be free in big cities. "
+                    "Free buses and trains reduce private car use. "
+                    "This also cuts air pollution and saves commuters money."
+                )
+            )
         else:
             instance = build_mock_instance(response_model, user)
             # Deterministic planner-chat special case: the generic builder

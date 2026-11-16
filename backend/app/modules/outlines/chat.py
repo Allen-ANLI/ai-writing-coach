@@ -8,7 +8,6 @@ rules are reused unchanged. Every call is quota-guarded and usage-logged.
 """
 
 import hashlib
-import json
 import uuid
 from collections import OrderedDict
 
@@ -50,31 +49,6 @@ def _current_confirmed(db: Session, essay_id: uuid.UUID) -> WritingOutline | Non
         .order_by(WritingOutline.version_no.desc())
         .limit(1)
     ).scalar_one_or_none()
-
-
-def _outline_json(outline: WritingOutline | None) -> str:
-    if outline is None:
-        return "(none)"
-    sections = []
-    for section in sorted(
-        (n for n in outline.nodes if n.parent_id is None), key=lambda n: n.sort_order
-    ):
-        paragraphs = []
-        for paragraph in sorted(
-            (n for n in outline.nodes if n.parent_id == section.id), key=lambda n: n.sort_order
-        ):
-            ideas = [
-                n.title
-                for n in sorted(
-                    (n for n in outline.nodes if n.parent_id == paragraph.id),
-                    key=lambda n: n.sort_order,
-                )
-            ]
-            paragraphs.append({"title": paragraph.title, "sentence_ideas": ideas})
-        sections.append({"title": section.title, "paragraphs": paragraphs})
-    return json.dumps(
-        {"thesis_statement": outline.thesis_statement, "sections": sections}, ensure_ascii=False
-    )
 
 
 def _create_draft(
@@ -128,10 +102,10 @@ def send_message(
     db.add(user_message)
     db.commit()  # no transaction held during the LLM call
 
-    prompt = get_prompt("planner_chat", "v2")
+    prompt = get_prompt("planner_chat", "v3")
     user_prompt = prompt.user_template.format(
         question_prompt=essay.question_prompt or "(free writing)",
-        current_outline=_outline_json(confirmed),
+        current_outline=service.outline_json(confirmed),
         history=history_text,
         user_message=message,
         previously_learned=previously_learned,

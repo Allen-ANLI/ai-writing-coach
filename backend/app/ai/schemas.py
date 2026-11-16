@@ -295,6 +295,16 @@ class PlannerChatResult(BaseModel):
     model_essay: str | None = Field(default=None, max_length=20000)
 
 
+class ModelEssayResult(BaseModel):
+    """ADR-030: a complete model essay generated from an outline (used to
+    bootstrap/refresh ghost guidance for workflow, legacy or manually-edited
+    outlines). Tolerates stray provider fields."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    model_essay: str = Field(min_length=1, max_length=20000)
+
+
 class StudySuggestion(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

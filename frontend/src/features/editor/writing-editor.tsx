@@ -111,22 +111,8 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     queryFn: async () => (await getOutline(confirmedPlan?.id as string)).data,
     enabled: confirmedPlan !== null,
   });
-  // ADR-025: 大纲展平为有序句子指引（无范文时的回退）。
-  const flatIdeas = useMemo<string[]>(() => {
-    const nodes = planQuery.data?.nodes ?? [];
-    const byParent = (parentId: string | null) =>
-      nodes
-        .filter((node) => node.parent_id === parentId)
-        .sort((a, b) => a.sort_order - b.sort_order);
-    const ideas: string[] = [];
-    for (const section of byParent(null)) {
-      for (const paragraph of byParent(section.id)) {
-        ideas.push(...byParent(paragraph.id).map((idea) => idea.title));
-      }
-    }
-    return ideas;
-  }, [planQuery.data]);
-  // ADR-029: 有范文时，幽灵指引 = 范文的逐句序列；否则回退大纲指引。
+  // ADR-030: 幽灵指引只来自范文逐句（大纲是范文的派生视图，不再作兜底）。
+  // 确认大纲必带范文；无范文时不显示指引，面板提供"生成范文指引"。
   const modelEssay = planQuery.data?.model_essay ?? null;
   const ghostHints = useMemo<string[]>(() => {
     if (modelEssay && modelEssay.trim() !== "") {
@@ -134,8 +120,8 @@ export function WritingEditor({ essayId }: { essayId: string }) {
         .map((span) => span.text.trim())
         .filter((text) => text !== "");
     }
-    return flatIdeas;
-  }, [modelEssay, flatIdeas]);
+    return [];
+  }, [modelEssay]);
 
   const preferencesQuery = useQuery({
     queryKey: ["preferences"],

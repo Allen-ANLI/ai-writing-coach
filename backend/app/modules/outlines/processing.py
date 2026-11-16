@@ -16,6 +16,7 @@ from app.modules.essays.models import Essay
 from app.modules.expressions import knowledge
 from app.modules.outlines import service
 from app.modules.outlines.models import WritingOutline
+from app.modules.users.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,15 @@ def process_outline_generation(session_factory: sessionmaker, outline_id: uuid.U
             status="success",
         )
         db.commit()
+
+        # ADR-030: workflow outlines also carry a model essay for ghost guidance.
+        # Failure leaves the draft essay-less; confirmation regenerates it.
+        user = db.get(User, outline.user_id)
+        if user is not None:
+            try:
+                service.ensure_model_essay(db, user, outline.id)
+            except ApiError:
+                logger.info("outline %s model essay deferred to confirmation", outline_id)
 
 
 def _error_usage() -> LlmUsage:

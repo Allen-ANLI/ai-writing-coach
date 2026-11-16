@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Writing Coach API
-  version: 1.9.0
+  version: 1.10.0
   description: Final API contract aligned with Database ERD V1.2. Working documents use server_revision; immutable
     snapshots use version_no. Refresh tokens are HttpOnly cookies. 1.1.1 adds the additive
     infrastructure endpoint GET /health (200 database reachable, 503 database unavailable);
@@ -32,7 +32,12 @@ info:
     model_essay alongside the outline; outlines gain nullable model_essay
     (migration 0020) driving sentence-level ghost guidance with rough-match
     progress judgment (ghost_progress v2); outline structure bounds relaxed
-    (AI-chosen, IELTS-appropriate); additive only.
+    (AI-chosen, IELTS-appropriate); additive only. 1.10.0 (ADR-030) adds POST
+    /outlines/{outline_id}/model-essay (generate the model essay for an outline
+    that lacks one); planner_chat v3 writes the essay first then derives the
+    outline from it; confirmation guarantees a model essay and manual outline
+    edits expire it for regeneration; ghost guidance is essay-only (outline
+    fallback removed); additive only.
 servers:
 - url: https://api.example.com/api/v1
   description: Production placeholder
@@ -2410,6 +2415,30 @@ paths:
       responses:
         '200':
           description: Confirmed
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
+        '429':
+          description: Rate limit exceeded
+      parameters:
+      - name: outline_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /outlines/{outline_id}/model-essay:
+    post:
+      tags:
+      - Outlines
+      summary: Generate the model essay for an outline that lacks one (ADR-030)
+      responses:
+        '200':
+          description: Outline with model essay
         '401':
           description: Authentication required or token invalid
         '403':

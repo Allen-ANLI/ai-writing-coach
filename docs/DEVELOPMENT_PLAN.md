@@ -856,6 +856,29 @@ public deployment approval.
 - 下一轮（已分析确认）：上下文缓存——作文前缀 + DeepSeek 前缀缓存命中计量
   （provider hit/miss token、迁移 0021、命中单价计费）。
 
+## 3z. ADR-030 — 范文为唯一事实源，确认/编辑必保证范文一致 (2026-11-16)
+
+**Status: DONE, verified, committed.**
+
+- 诊断（查库证实）：用户确认大纲 pre-ADR-029，model_essay=NULL → 幽灵走"大纲
+  中文指引"兜底。范文存储代码本身正确（回滚复现）。缺口：confirm 不生成范文、
+  手动改大纲不刷新、工作流/旧大纲无范文。
+- planner_chat v3（一段式）：明确 STEP1 写范文、STEP2 严格从范文逐句派生大纲；
+  propose/revise 均带范文，revise 重写范文+重派生大纲。（用户否决两段式，冗余。）
+- model_essay_generate v1 + ModelEssayResult：按大纲/论点写完整范文（补生成用）。
+- ensure_model_essay：缺范文时按大纲生成（LLM 事务外、quota、usage）；已有则
+  no-op；失败抛 ApiError 供降级。
+- confirm_outline 保证范文：确认后缺范文则生成；失败不阻断确认（面板重试）。
+  planner 草稿范文完好则确认仍快速无 LLM。
+- 手动改大纲（node CRUD/patch thesis）置空范文 → 下次 confirm 重生成匹配范文
+  （重生成集中在确认时刻，非每次改节点）。大纲既可走构思助手也可手动编辑。
+- 工作流大纲 processing.py 一并生成范文（失败延迟到确认）。
+- 新端点 POST /outlines/{id}/model-essay：为无范文（旧）大纲补生成；已有则 no-op。
+- 前端：幽灵指引只来自 splitSentences(范文)，**移除大纲兜底**（无范文则不提示）；
+  面板对已确认无范文大纲显示"生成范文指引"按钮，有范文显示"参考范文"折叠区。
+- 契约 1.10.0（105 操作）；backend 410、E2E 75、vitest 43、tsc/ESLint/build/ruff
+  干净；真实 DeepSeek 冒烟（范文优先构思、确认补范文、大意推进）。
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

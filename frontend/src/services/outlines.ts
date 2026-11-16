@@ -35,6 +35,10 @@ export function confirmOutline(outlineId: string): Promise<OutlineResponse> {
   return apiFetch<OutlineResponse>(`/outlines/${outlineId}/confirm`, { method: "POST" });
 }
 
+export function generateModelEssay(outlineId: string): Promise<OutlineResponse> {
+  return apiFetch<OutlineResponse>(`/outlines/${outlineId}/model-essay`, { method: "POST" });
+}
+
 export function createOutlineNode(
   outlineId: string,
   payload: {

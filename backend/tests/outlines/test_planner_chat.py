@@ -8,7 +8,7 @@ from essay_helpers import auth_headers, create_essay
 
 from app.ai import llm
 from app.ai.providers.base import LlmUsage
-from app.ai.schemas import OutlineGenerationResult, PlannerChatResult
+from app.ai.schemas import ModelEssayResult, OutlineGenerationResult, PlannerChatResult
 from app.core.exceptions import ApiError
 
 
@@ -45,8 +45,14 @@ def _outline_payload() -> OutlineGenerationResult:
 
 def _patch_llm(monkeypatch, result: PlannerChatResult):
     def fake_call_llm(*, system, user, response_model):
-        assert response_model is PlannerChatResult
-        return result, _usage()
+        if response_model is PlannerChatResult:
+            return result, _usage()
+        if response_model is ModelEssayResult:
+            # Confirmation may bootstrap a model essay (ADR-030).
+            return ModelEssayResult(
+                model_essay="Mock essay. Second sentence. Third sentence."
+            ), _usage()
+        raise AssertionError(f"unexpected response_model {response_model}")
 
     monkeypatch.setattr(llm, "call_llm", fake_call_llm)
 
@@ -289,7 +295,7 @@ def test_stray_llm_fields_are_tolerated(client, monkeypatch):
     assert "title_note" not in paragraph
 
 
-def test_planner_chat_uses_prompt_v2(client, db):
+def test_planner_chat_uses_prompt_v3(client, db):
     headers = auth_headers(client)
     essay = create_essay(client, headers)
     # Real mock provider (not monkeypatched): deterministic propose.
@@ -299,4 +305,4 @@ def test_planner_chat_uses_prompt_v2(client, db):
 
     logs = db.query(AiUsageLog).filter(AiUsageLog.feature == "planner_chat").all()
     assert len(logs) == 1
-    assert logs[0].prompt_version == "v2"
+    assert logs[0].prompt_version == "v3"

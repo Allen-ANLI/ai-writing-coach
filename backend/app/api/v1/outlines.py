@@ -146,6 +146,17 @@ def confirm_outline(
     return _outline_response(service.confirm_outline(db, user, outline_id))
 
 
+@router.post("/outlines/{outline_id}/model-essay", response_model=OutlineResponse)
+def generate_model_essay(
+    outline_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> OutlineResponse:
+    # ADR-030: bootstrap/refresh the model essay for an outline that lacks one
+    # (e.g. a legacy confirmed outline); no-op when an essay already exists.
+    return _outline_response(service.ensure_model_essay(db, user, outline_id))
+
+
 @router.post("/outlines/{outline_id}/nodes", status_code=201, response_model=NodeResponse)
 def create_node(
     outline_id: uuid.UUID,

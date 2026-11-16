@@ -202,3 +202,114 @@ def test_nodes_locked_after_confirm(client):
         headers=headers,
     )
     assert response.status_code == 409
+
+
+# --- ADR-030: model essay is the source of truth for ghost guidance ---------
+
+
+def test_workflow_outline_carries_model_essay(client):
+    headers = auth_headers(client)
+    essay = create_essay(client, headers, writing_type="ielts_task2")
+    outline_id = _generate(client, headers, essay["id"], viewpoint="Free public transport")
+    data = _get(client, headers, outline_id)
+    assert data["model_essay"]
+    assert "Public transport" in data["model_essay"]
+
+
+def test_manual_edit_expires_essay_and_confirm_regenerates(client):
+    headers = auth_headers(client)
+    essay = create_essay(client, headers)
+    outline_id = _generate(client, headers, essay["id"])
+    assert _get(client, headers, outline_id)["model_essay"]
+
+    # Editing a node expires the essay (outline changed).
+    client.post(
+        f"/api/v1/outlines/{outline_id}/nodes",
+        json={"node_type": "section", "title": "Extra", "sort_order": 99},
+        headers=headers,
+    )
+    assert _get(client, headers, outline_id)["model_essay"] is None
+
+    # Confirmation regenerates a matching essay.
+    confirmed = client.post(f"/api/v1/outlines/{outline_id}/confirm", headers=headers).json()[
+        "data"
+    ]
+    assert confirmed["status"] == "confirmed"
+    assert confirmed["model_essay"]
+
+
+def test_patch_thesis_expires_essay(client):
+    headers = auth_headers(client)
+    essay = create_essay(client, headers)
+    outline_id = _generate(client, headers, essay["id"])
+    client.patch(
+        f"/api/v1/outlines/{outline_id}",
+        json={"thesis_statement": "Refined."},
+        headers=headers,
+    )
+    assert _get(client, headers, outline_id)["model_essay"] is None
+
+
+def _confirmed_outline_without_essay(client, headers, essay_id, db):
+    from app.modules.essays.models import Essay
+    from app.modules.outlines.models import OutlineNode
+
+    owner = db.get(Essay, uuid.UUID(essay_id)).user_id
+    outline = WritingOutline(
+        essay_id=uuid.UUID(essay_id),
+        user_id=owner,
+        version_no=1,
+        status="confirmed",
+        thesis_statement="Free public transport benefits cities.",
+        source_context={},
+    )
+    db.add(outline)
+    db.flush()
+    db.add(
+        OutlineNode(
+            outline_id=outline.id, node_type="section", title="开头", sort_order=0
+        )
+    )
+    db.commit()
+    return outline.id
+
+
+def test_model_essay_endpoint_bootstraps_legacy_outline(client, db):
+    headers = auth_headers(client)
+    essay = create_essay(client, headers)
+    outline_id = _confirmed_outline_without_essay(client, headers, essay["id"], db)
+    assert _get(client, headers, outline_id)["model_essay"] is None
+
+    response = client.post(f"/api/v1/outlines/{outline_id}/model-essay", headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["model_essay"]
+
+    from app.modules.analytics.models import AiUsageLog
+
+    logs = db.query(AiUsageLog).filter(AiUsageLog.feature == "model_essay_generate").all()
+    assert len(logs) == 1
+    assert logs[0].prompt_version == "v1"
+    assert logs[0].status == "success"
+
+
+def test_model_essay_endpoint_noop_when_present(client):
+    headers = auth_headers(client)
+    essay = create_essay(client, headers)
+    outline_id = _generate(client, headers, essay["id"])
+    client.post(f"/api/v1/outlines/{outline_id}/confirm", headers=headers)
+    existing = _get(client, headers, outline_id)["model_essay"]
+
+    response = client.post(f"/api/v1/outlines/{outline_id}/model-essay", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["data"]["model_essay"] == existing
+
+
+def test_model_essay_endpoint_ownership(client, db):
+    headers = auth_headers(client, email="me-owner@example.com")
+    intruder = auth_headers(client, email="me-intruder@example.com")
+    essay = create_essay(client, headers)
+    outline_id = _confirmed_outline_without_essay(client, headers, essay["id"], db)
+    assert (
+        client.post(f"/api/v1/outlines/{outline_id}/model-essay", headers=intruder).status_code
+        == 404
+    )
