@@ -212,30 +212,35 @@ def test_workflow_outline_carries_model_essay(client):
     essay = create_essay(client, headers, writing_type="ielts_task2")
     outline_id = _generate(client, headers, essay["id"], viewpoint="Free public transport")
     data = _get(client, headers, outline_id)
-    assert data["model_essay"]
-    assert "公共交通" in data["model_essay"]  # ADR-031: Chinese model essay
+    # ADR-032: English source essay + sentence-aligned Chinese translation.
+    assert "Public transport" in data["model_essay"]
+    assert "公共交通" in data["model_essay_zh"]
 
 
 def test_manual_edit_expires_essay_and_confirm_regenerates(client):
     headers = auth_headers(client)
     essay = create_essay(client, headers)
     outline_id = _generate(client, headers, essay["id"])
-    assert _get(client, headers, outline_id)["model_essay"]
+    assert _get(client, headers, outline_id)["model_essay_zh"]
 
-    # Editing a node expires the essay (outline changed).
+    # Editing a node expires essay + translation + markdown (outline changed).
     client.post(
         f"/api/v1/outlines/{outline_id}/nodes",
         json={"node_type": "section", "title": "Extra", "sort_order": 99},
         headers=headers,
     )
-    assert _get(client, headers, outline_id)["model_essay"] is None
+    expired = _get(client, headers, outline_id)
+    assert expired["model_essay"] is None
+    assert expired["model_essay_zh"] is None
+    assert expired["outline_md"] is None
 
-    # Confirmation regenerates a matching essay.
+    # Confirmation regenerates a matching essay (English + Chinese).
     confirmed = client.post(f"/api/v1/outlines/{outline_id}/confirm", headers=headers).json()[
         "data"
     ]
     assert confirmed["status"] == "confirmed"
     assert confirmed["model_essay"]
+    assert confirmed["model_essay_zh"]
 
 
 def test_patch_thesis_expires_essay(client):
@@ -288,7 +293,7 @@ def test_model_essay_endpoint_bootstraps_legacy_outline(client, db):
 
     logs = db.query(AiUsageLog).filter(AiUsageLog.feature == "model_essay_generate").all()
     assert len(logs) == 1
-    assert logs[0].prompt_version == "v2"
+    assert logs[0].prompt_version == "v3"
     assert logs[0].status == "success"
 
 

@@ -42,8 +42,9 @@ def process_outline_generation(session_factory: sessionmaker, outline_id: uuid.U
         previously_learned = "; ".join(e.english_text for e in recalled) or "(none)"
         db.commit()  # no transaction held during the LLM call
 
-        # v3: Chinese guidance, English thesis, AI-chosen structure (ADR-029).
-        prompt = get_prompt("outline_generate", "v3")
+        # v4: Chinese guidance, English thesis, AI-chosen structure + markdown
+        # outline (ADR-032).
+        prompt = get_prompt("outline_generate", "v4")
         user_message = prompt.user_template.format(
             question_prompt=question_prompt,
             viewpoint=viewpoint,
@@ -81,6 +82,7 @@ def process_outline_generation(session_factory: sessionmaker, outline_id: uuid.U
             result.thesis_statement,
             [section.model_dump() for section in result.sections],
         )
+        outline.outline_md = result.outline_md  # ADR-032: readable markdown outline
         llm.record_usage(
             db,
             user_id=outline.user_id,

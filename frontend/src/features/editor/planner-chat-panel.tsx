@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { OutlineMarkdown } from "@/features/editor/outline-markdown";
 import { ApiClientError } from "@/lib/api-client";
 import { confirmOutline, generateModelEssay, getOutline } from "@/services/outlines";
 import { listPlannerMessages, sendPlannerMessage } from "@/services/planner";
@@ -96,19 +97,40 @@ function OutlineCard({ outlineId, essayId }: { outlineId: string; essayId: strin
         </p>
       )}
       <div className="mt-1.5">
-        <PlanBranch nodes={outline.nodes} parentId={null} />
+        {outline.outline_md ? (
+          <OutlineMarkdown md={outline.outline_md} />
+        ) : (
+          <PlanBranch nodes={outline.nodes} parentId={null} />
+        )}
       </div>
-      {outline.model_essay && (
+      {(outline.model_essay || outline.model_essay_zh) && (
         <details className="mt-2" data-testid="model-essay-details">
           <summary className="cursor-pointer text-[11px] font-medium text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200">
-            参考范文（中文·写作指引来源）
+            参考范文（英文 + 中文逐句对照）
           </summary>
-          <p className="mt-1 whitespace-pre-wrap rounded bg-zinc-50 p-2 text-[11px] leading-relaxed text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-            {outline.model_essay}
-          </p>
+          {outline.model_essay_zh && (
+            <div className="mt-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                中文翻译（写作指引来源）
+              </p>
+              <p className="mt-0.5 whitespace-pre-wrap rounded bg-zinc-50 p-2 text-[11px] leading-relaxed text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                {outline.model_essay_zh}
+              </p>
+            </div>
+          )}
+          {outline.model_essay && (
+            <div className="mt-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                英文范文
+              </p>
+              <p className="mt-0.5 whitespace-pre-wrap rounded bg-zinc-50 p-2 text-[11px] leading-relaxed text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                {outline.model_essay}
+              </p>
+            </div>
+          )}
         </details>
       )}
-      {outline.status === "confirmed" && !outline.model_essay && (
+      {outline.status === "confirmed" && !outline.model_essay_zh && (
         <div className="mt-2">
           <button
             type="button"

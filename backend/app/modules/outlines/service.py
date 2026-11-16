@@ -73,12 +73,13 @@ def _error_usage() -> LlmUsage:
 
 
 def ensure_model_essay(db: Session, user: User, outline_id: uuid.UUID) -> WritingOutline:
-    """ADR-030: guarantee a model essay consistent with the outline. Generates
-    one from the outline when missing (LLM outside any DB transaction); a
-    no-op when the essay already exists. Raises ApiError on provider failure
-    so callers can degrade gracefully (the outline stays usable)."""
+    """ADR-032: guarantee an English model essay + sentence-aligned Chinese
+    translation consistent with the outline. Generates from the outline when
+    the Chinese translation is missing (LLM outside any DB transaction); a
+    no-op when present. Raises ApiError on provider failure so callers can
+    degrade gracefully (the outline stays usable)."""
     outline = get_outline(db, user, outline_id)
-    if outline.model_essay and outline.model_essay.strip():
+    if outline.model_essay_zh and outline.model_essay_zh.strip():
         return outline
     essay = get_essay(db, user, outline.essay_id)
     question_prompt = essay.question_prompt or "(free writing)"
@@ -87,7 +88,7 @@ def ensure_model_essay(db: Session, user: User, outline_id: uuid.UUID) -> Writin
     billing_service.guard_ai_call(db, user.id)
     db.commit()  # no transaction held during the LLM call
 
-    prompt = get_prompt("model_essay_generate", "v2")
+    prompt = get_prompt("model_essay_generate", "v3")
     user_prompt = prompt.user_template.format(
         question_prompt=question_prompt, thesis=thesis, outline=structure
     )
@@ -109,6 +110,7 @@ def ensure_model_essay(db: Session, user: User, outline_id: uuid.UUID) -> Writin
 
     outline = get_outline(db, user, outline_id)
     outline.model_essay = result.model_essay
+    outline.model_essay_zh = result.model_essay_zh
     outline.updated_at = utcnow()
     llm.record_usage(
         db,
@@ -189,9 +191,11 @@ def patch_outline(
     _require_draft(outline)
     if payload.thesis_statement is not None:
         outline.thesis_statement = payload.thesis_statement
-    # ADR-030: editing the outline expires the model essay; confirmation
-    # regenerates a matching one so guidance stays consistent.
+    # ADR-032: editing the outline expires essay/translation/markdown;
+    # confirmation regenerates a matching essay so guidance stays consistent.
     outline.model_essay = None
+    outline.model_essay_zh = None
+    outline.outline_md = None
     outline.updated_at = utcnow()
     db.commit()
     db.refresh(outline)
@@ -221,11 +225,11 @@ def confirm_outline(db: Session, user: User, outline_id: uuid.UUID) -> WritingOu
     outline.updated_at = utcnow()
     db.commit()
     db.refresh(outline)
-    # ADR-030: a confirmed outline must carry a model essay for ghost guidance.
-    # Generate one from the outline when missing (e.g. manual edits expired it,
-    # workflow/legacy outlines). Failure does not block confirmation — the
+    # ADR-032: a confirmed outline must carry a Chinese model essay for ghost
+    # guidance. Generate from the outline when missing (manual edits expired
+    # it, workflow/legacy outlines). Failure does not block confirmation — the
     # panel offers a retry button.
-    if not (outline.model_essay and outline.model_essay.strip()):
+    if not (outline.model_essay_zh and outline.model_essay_zh.strip()):
         try:
             outline = ensure_model_essay(db, user, outline_id)
         except ApiError:
@@ -251,7 +255,10 @@ def create_node(
         sort_order=payload.sort_order,
     )
     db.add(node)
-    outline.model_essay = None  # ADR-030: outline changed, essay expires
+    # ADR-032: outline changed — essay, translation and markdown all expire.
+    outline.model_essay = None
+    outline.model_essay_zh = None
+    outline.outline_md = None
     outline.updated_at = utcnow()
     db.commit()
     db.refresh(node)
@@ -277,7 +284,10 @@ def patch_node(
         node.content = payload.content
     if payload.sort_order is not None:
         node.sort_order = payload.sort_order
-    outline.model_essay = None  # ADR-030: outline changed, essay expires
+    # ADR-032: outline changed — essay, translation and markdown all expire.
+    outline.model_essay = None
+    outline.model_essay_zh = None
+    outline.outline_md = None
     outline.updated_at = utcnow()
     db.commit()
     db.refresh(node)
@@ -289,7 +299,10 @@ def delete_node(db: Session, user: User, outline_id: uuid.UUID, node_id: uuid.UU
     _require_draft(outline)
     node = _get_node(db, outline, node_id)
     db.delete(node)
-    outline.model_essay = None  # ADR-030: outline changed, essay expires
+    # ADR-032: outline changed — essay, translation and markdown all expire.
+    outline.model_essay = None
+    outline.model_essay_zh = None
+    outline.outline_md = None
     outline.updated_at = utcnow()
     db.commit()
 

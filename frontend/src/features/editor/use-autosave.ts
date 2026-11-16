@@ -22,9 +22,10 @@ import type { TipTapDocument, WorkingDocumentData } from "@/types/api";
 
 export type SaveStatus = "saved" | "dirty" | "saving" | "conflict" | "error";
 
-// ADR-027: checks are gated on a completed save, so this debounce is the
-// floor of the underline latency; 600ms keeps writes cheap but responsive.
-const DEBOUNCE_MS = 600;
+// ADR-027/032: checks are gated on a completed save, so this debounce is the
+// floor of the underline latency; 450ms keeps writes cheap but responsive.
+// (The dominant latency is the LLM call itself, not this debounce.)
+const DEBOUNCE_MS = 450;
 
 export interface AutosaveApi {
   status: SaveStatus;

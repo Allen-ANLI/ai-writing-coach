@@ -5,19 +5,19 @@ release. The product launches once, complete and verified. Items marked
 🔒 require explicit user approval; nothing here auto-activates paid services
 or deploys publicly.
 
-## Engineering (complete — re-verified 2026-11-16, ADR-031)
+## Engineering (complete — re-verified 2026-11-16, ADR-032)
 - [x] All PRD loops implemented (Writing / Learning / Improvement).
 - [x] Full API contract implemented — 105/105 operations (1.10.0).
 - [x] Reconciliations R1–R12 resolved and documented.
-- [x] Backend 410 tests, Playwright 75 E2E, vitest 47 — all green (ADR-031 +
+- [x] Backend 410 tests, Playwright 75 E2E, vitest 51 — all green (ADR-032 +
       free-tier quota exemption).
 - [x] Temporary free-tier AI quota exemption active (2026-11-16 user
       directive): FREE_PLAN_QUOTAS_DISABLED=true by default; metering intact;
       paid plans unchanged. Restore enforcement with =false before launch
       pricing goes live.
 - [x] tsc / ESLint / production build (13 routes) / ruff (197 files) clean.
-- [x] Migrations 0001–0020 additive; backup/restore round-trip re-verified
-      (40 tables, identical row counts; re-verify after 0020 at next drill).
+- [x] Migrations 0001–0021 additive; backup/restore round-trip re-verified
+      (40 tables, identical row counts; re-verify after 0021 at next drill).
 - [x] Structured logging, request tracing, health check, auth + general
       per-IP rate limiting (limiter trip observed live during probing).
 - [x] Deployment stack (Dockerfiles + .dockerignore, prod compose validated,

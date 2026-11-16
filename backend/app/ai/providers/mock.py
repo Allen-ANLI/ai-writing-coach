@@ -164,13 +164,18 @@ class MockProvider:
         elif response_model is TranslationResult:
             instance = _mock_translation(user)
         elif response_model is ModelEssayResult:
-            # ADR-031: deterministic CHINESE multi-sentence essay for ghost guidance.
+            # ADR-032: deterministic English essay + 1:1 sentence-aligned Chinese.
             instance = ModelEssayResult(
                 model_essay=(
+                    "Public transport should be free in big cities. "
+                    "Free buses and trains reduce private car use. "
+                    "This also cuts air pollution and saves commuters money."
+                ),
+                model_essay_zh=(
                     "[mock] 大城市的公共交通应该免费。"
                     "免费的公交和地铁能减少私家车使用。"
                     "这还能减少空气污染，并为通勤者省钱。"
-                )
+                ),
             )
         else:
             instance = build_mock_instance(response_model, user)
@@ -183,12 +188,25 @@ class MockProvider:
                     update={
                         "action": "propose",
                         "model_essay": (
+                            "Public transport should be free in big cities. "
+                            "Free buses and trains reduce private car use. "
+                            "This also cuts air pollution and saves commuters money."
+                        ),
+                        "model_essay_zh": (
                             "[mock] 大城市的公共交通应该免费。"
                             "免费的公交和地铁能减少私家车使用。"
                             "这还能减少空气污染，并为通勤者省钱。"
                         ),
                     }
                 )
+                if instance.outline is not None:
+                    instance.outline.outline_md = (
+                        "## 引言\n### 背景与立场\n- 1. 大城市交通问题严重\n"
+                        "- 2. 主张公共交通免费\n## 主体：免费的好处\n"
+                        "### 减少私家车与污染\n- 1. 免费降低开车意愿\n"
+                        "- 2. 减少污染并省钱\n## 结论\n### 重申立场\n"
+                        "- 1. 免费公交利大于弊"
+                    )
             if isinstance(instance, SentenceCheckResult):
                 # Generic offsets would be invalid spans; the deterministic
                 # mock reports no sentence-level findings (rules still run).

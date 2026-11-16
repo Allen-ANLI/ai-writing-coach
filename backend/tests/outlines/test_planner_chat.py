@@ -48,9 +48,10 @@ def _patch_llm(monkeypatch, result: PlannerChatResult):
         if response_model is PlannerChatResult:
             return result, _usage()
         if response_model is ModelEssayResult:
-            # Confirmation may bootstrap a model essay (ADR-030).
+            # Confirmation may bootstrap a model essay (ADR-032: EN + ZH).
             return ModelEssayResult(
-                model_essay="Mock essay. Second sentence. Third sentence."
+                model_essay="Mock essay. Second sentence. Third sentence.",
+                model_essay_zh="模拟范文。第二句。第三句。",
             ), _usage()
         raise AssertionError(f"unexpected response_model {response_model}")
 
@@ -295,14 +296,26 @@ def test_stray_llm_fields_are_tolerated(client, monkeypatch):
     assert "title_note" not in paragraph
 
 
-def test_planner_chat_uses_prompt_v4(client, db):
+def test_planner_chat_uses_prompt_v5(client, db):
     headers = auth_headers(client)
     essay = create_essay(client, headers)
     # Real mock provider (not monkeypatched): deterministic propose.
-    assert _chat(client, headers, essay["id"], "我同意公共交通免费").status_code == 200
+    response = _chat(client, headers, essay["id"], "我同意公共交通免费")
+    assert response.status_code == 200
+    outline = response.json()["data"]["outline"]
+    # ADR-032: English essay + sentence-aligned Chinese + markdown outline.
+    assert "Public transport" in outline["model_essay"]
+    assert "公共交通" in outline["model_essay_zh"]
+    assert outline["outline_md"].startswith("## ")
+    # 1:1 sentence alignment: same sentence count in English and Chinese.
+    import re
+
+    en_count = len(re.findall(r"[.!?]", outline["model_essay"]))
+    zh_count = len(re.findall(r"[。！？]", outline["model_essay_zh"]))
+    assert en_count == zh_count
 
     from app.modules.analytics.models import AiUsageLog
 
     logs = db.query(AiUsageLog).filter(AiUsageLog.feature == "planner_chat").all()
     assert len(logs) == 1
-    assert logs[0].prompt_version == "v4"
+    assert logs[0].prompt_version == "v5"

@@ -353,7 +353,7 @@ export function useGrammar({
     }
     const timer = setTimeout(() => {
       void runValidations().then(() => scheduleCheckForEdit());
-    }, 100);
+    }, 70);
     return () => clearTimeout(timer);
   }, [enabled, autosave.status, autosave.serverRevision, runValidations, scheduleCheckForEdit]);
 

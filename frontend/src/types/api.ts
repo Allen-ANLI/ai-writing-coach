@@ -871,6 +871,8 @@ export interface OutlineData {
   status: OutlineStatus;
   thesis_statement: string | null;
   model_essay: string | null;
+  model_essay_zh: string | null;
+  outline_md: string | null;
   source_context: Record<string, unknown>;
   workflow_id: string | null;
   created_at: string;

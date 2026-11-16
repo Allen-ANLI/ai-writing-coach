@@ -111,17 +111,17 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     queryFn: async () => (await getOutline(confirmedPlan?.id as string)).data,
     enabled: confirmedPlan !== null,
   });
-  // ADR-030: 幽灵指引只来自范文逐句（大纲是范文的派生视图，不再作兜底）。
-  // 确认大纲必带范文；无范文时不显示指引，面板提供"生成范文指引"。
-  const modelEssay = planQuery.data?.model_essay ?? null;
+  // ADR-032: 幽灵指引来自范文的中文翻译逐句（与英文范文 1:1 对齐）。
+  // 确认大纲必带中文翻译；无则不显示指引，面板提供"生成范文指引"。
+  const modelEssayZh = planQuery.data?.model_essay_zh ?? null;
   const ghostHints = useMemo<string[]>(() => {
-    if (modelEssay && modelEssay.trim() !== "") {
-      return splitSentences(modelEssay)
+    if (modelEssayZh && modelEssayZh.trim() !== "") {
+      return splitSentences(modelEssayZh)
         .map((span) => span.text.trim())
         .filter((text) => text !== "");
     }
     return [];
-  }, [modelEssay]);
+  }, [modelEssayZh]);
 
   const preferencesQuery = useQuery({
     queryKey: ["preferences"],

@@ -280,12 +280,14 @@ class OutlineGenerationResult(BaseModel):
 
     thesis_statement: str = Field(min_length=1, max_length=1000)
     sections: list[OutlineSection] = Field(min_length=1, max_length=8)
+    # ADR-032: clean markdown rendering of the outline for readable display.
+    outline_md: str | None = Field(default=None, max_length=20000)
 
 
 class PlannerChatResult(BaseModel):
-    """Conversational planner turn (ADR-024/029): chat reply plus an optional
-    proposed/revised outline AND the complete model essay it outlines.
-    outline/model_essay are only honored for propose/revise."""
+    """Conversational planner turn (ADR-024/032): chat reply plus, for
+    propose/revise, the ENGLISH model essay, its sentence-aligned CHINESE
+    translation (drives ghost hints), and the outline (structured + markdown)."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -293,16 +295,18 @@ class PlannerChatResult(BaseModel):
     action: Literal["discuss", "propose", "revise"]
     outline: OutlineGenerationResult | None = None
     model_essay: str | None = Field(default=None, max_length=20000)
+    model_essay_zh: str | None = Field(default=None, max_length=20000)
 
 
 class ModelEssayResult(BaseModel):
-    """ADR-030: a complete model essay generated from an outline (used to
-    bootstrap/refresh ghost guidance for workflow, legacy or manually-edited
-    outlines). Tolerates stray provider fields."""
+    """ADR-032: an English model essay generated from an outline plus its
+    sentence-by-sentence Chinese translation (1:1 sentence alignment). Used to
+    bootstrap/refresh ghost guidance. Tolerates stray provider fields."""
 
     model_config = ConfigDict(extra="ignore")
 
     model_essay: str = Field(min_length=1, max_length=20000)
+    model_essay_zh: str = Field(min_length=1, max_length=20000)
 
 
 class StudySuggestion(BaseModel):

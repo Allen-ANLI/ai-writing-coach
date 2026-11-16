@@ -46,10 +46,17 @@ test("chat planner proposes an outline; confirmation drives ghost hints", async 
   await expect(page.getByTestId("planner-message-assistant").first()).toBeVisible({ timeout: 20_000 });
   const card = page.getByTestId("planner-outline-card").first();
   await expect(card).toBeVisible({ timeout: 20_000 });
+  // ADR-032：大纲以结构化 Markdown 渲染（章节/段落/条目清晰）。
+  const outlineMd = card.getByTestId("outline-markdown");
+  await expect(outlineMd).toBeVisible();
+  await expect(outlineMd).toContainText("背景与立场");
+  await expect(outlineMd).toContainText("主张公共交通免费");
   const essayDetails = card.getByTestId("model-essay-details");
   await expect(essayDetails).toBeVisible();
   await essayDetails.locator("summary").click();
+  // 中文翻译（幽灵来源）+ 英文范文均展示。
   await expect(essayDetails).toContainText("大城市的公共交通应该免费。");
+  await expect(essayDetails).toContainText("Public transport should be free in big cities.");
   await page.getByTestId("confirm-outline").first().click();
   await expect(card).toContainText("已确认", { timeout: 15_000 });
 

@@ -79,8 +79,11 @@ def _create_draft(
         result.outline.thesis_statement,
         [section.model_dump() for section in result.outline.sections],
     )
-    # ADR-029: the complete model essay drives sentence-level ghost hints.
+    # ADR-032: English source essay + sentence-aligned Chinese translation
+    # (drives ghost hints) + markdown outline for readable display.
     outline.model_essay = result.model_essay
+    outline.model_essay_zh = result.model_essay_zh
+    outline.outline_md = result.outline.outline_md
     return outline
 
 
@@ -102,7 +105,7 @@ def send_message(
     db.add(user_message)
     db.commit()  # no transaction held during the LLM call
 
-    prompt = get_prompt("planner_chat", "v4")
+    prompt = get_prompt("planner_chat", "v5")
     user_prompt = prompt.user_template.format(
         question_prompt=essay.question_prompt or "(free writing)",
         current_outline=service.outline_json(confirmed),

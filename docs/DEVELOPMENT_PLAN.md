@@ -898,6 +898,28 @@ public deployment approval.
 - backend 410、E2E 75、vitest 47（+4 中文分句）、tsc/ESLint/build/ruff 干净；
   真实 DeepSeek 冒烟（中文范文生成、跨语言推进）。
 
+## 3ab. ADR-032 — 英文范文+逐句对齐中文+Markdown 大纲；时序说明 (2026-11-16)
+
+**Status: DONE, verified, committed.**
+
+- 三产物：model_essay（英文源）、model_essay_zh（逐句对齐中文翻译，驱动幽灵）、
+  outline_md（Markdown 大纲）。迁移 0021（additive）。OutlineData/PlannerChatResult/
+  OutlineGenerationResult/ModelEssayResult schema 更新。
+- 句对齐关键：中文翻译必须按英文句号逐句切分（1 中文句↔1 英文句，绝不合并/拆分），
+  否则幽灵会在学习者写完第一句英文时提前跳到尚未完成的提示。planner_chat v5
+  强制 EXACTLY 同句数；model_essay_generate v3 同法；outline_generate v4 加 outline_md。
+- 幽灵=splitSentences(model_essay_zh)；confirm 保证中文翻译；手动改大纲置空
+  essay+zh+outline_md（confirm 重生成 essay；outline_md 回退节点树直到重新构思）。
+- 前端：无依赖 OutlineMarkdown 渲染器（parseOutlineMarkdown 纯函数+样式块：
+  章节/段落/条目、**加粗**）；面板渲染 outline_md（回退 PlanBranch），参考范文
+  展示中文翻译+英文范文。
+- 时序说明+优化：检查门控于已完成自动保存（后端校验 text_range 对已保存文档）。
+  地板=自动保存防抖+saved-effect+检查防抖；主要延迟是 LLM 本身（1–3s）非防抖。
+  自动保存 600→450ms、语法 saved-effect 100→70、润色 120→80（省约 200ms）；
+  快路径防抖（语法 120/润色 150）不变。LLM 延迟由下一轮上下文缓存解决。
+- backend 410、E2E 75、vitest 51（+4 markdown 解析）、tsc/ESLint/build/ruff 干净；
+  真实 DeepSeek 冒烟（逐句对齐中文+Markdown 大纲）。
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

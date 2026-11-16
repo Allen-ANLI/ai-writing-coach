@@ -251,7 +251,7 @@ export function usePolish({
     if (!enabled || autosave.status !== "saved") {
       return;
     }
-    const timer = setTimeout(() => scheduleScan(), 120);
+    const timer = setTimeout(() => scheduleScan(), 80);
     return () => clearTimeout(timer);
   }, [enabled, autosave.status, autosave.serverRevision, scheduleScan]);
 
