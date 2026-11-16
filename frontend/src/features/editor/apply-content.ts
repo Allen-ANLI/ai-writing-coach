@@ -116,11 +116,18 @@ export function computeContentDiff(
   };
 }
 
+/** Meta flag: programmatic server-content application (not user typing).
+ * Plugins reconcile stale decorations only for these transactions, so the
+ * user's own edits keep the underline-then-validate flow intact. */
+export const SERVER_APPLY_META = "awcServerApply";
+
 export function applyServerContent(editor: Editor, content: TipTapDocument): void {
   const newDoc = ProseMirrorNode.fromJSON(editor.schema, content);
   const diff = computeContentDiff(editor.state.doc, newDoc);
   if (!diff) {
     return;
   }
-  editor.view.dispatch(editor.state.tr.replaceWith(diff.from, diff.to, diff.slice.content));
+  const tr = editor.state.tr.replaceWith(diff.from, diff.to, diff.slice.content);
+  tr.setMeta(SERVER_APPLY_META, true);
+  editor.view.dispatch(tr);
 }

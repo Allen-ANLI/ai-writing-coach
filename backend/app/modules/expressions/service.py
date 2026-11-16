@@ -46,6 +46,7 @@ from app.modules.expressions.schemas import (
     PolishSentenceRequest,
     TranslationRequest,
 )
+from app.modules.grammar.models import WritingIssue
 from app.modules.users.models import User
 from app.modules.writing_sessions import repository as session_repository
 from app.modules.writing_sessions.service import enabled_features
@@ -400,6 +401,30 @@ def accept_suggestion(
     for other in suggestion.items:
         if other.id != item.id and other.status == "pending":
             other.status = "dismissed"
+
+    # ADR-028: the replacement edits the document, so grammar findings must
+    # be reconciled against the changed range instead of carried over:
+    # anchors intersecting it go stale, later anchors shift, survivors bump
+    # their source revision (the region is re-checked by the client).
+    rep_start = payload.modified_range.get("start", 0)
+    rep_end = payload.modified_range.get("end", rep_start)
+    delta = len(new_text) - len(before_text)
+    grammar_others = db.execute(
+        select(WritingIssue).where(
+            WritingIssue.essay_id == essay_id,
+            WritingIssue.status == "detected",
+            WritingIssue.source_server_revision == old_revision,
+        )
+    ).scalars()
+    for issue in grammar_others:
+        if issue.start_offset < rep_end and issue.end_offset > rep_start:
+            issue.status = "stale"
+        else:
+            if issue.start_offset >= rep_end:
+                issue.start_offset += delta
+                issue.end_offset += delta
+            issue.source_server_revision = document.server_revision
+        issue.updated_at = now
 
     db.add(
         EssayEditEvent(

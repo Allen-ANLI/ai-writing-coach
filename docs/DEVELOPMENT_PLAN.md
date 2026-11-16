@@ -817,6 +817,21 @@ public deployment approval.
   保留、付费仍受限）。backend 399、E2E 71、vitest 41、tsc/ESLint/ruff 干净；
   dev 实时探针 PASS。
 
+## 3x. ADR-028 — 润色空格 + 语法优先 + 变更感知高亮 (2026-11-16)
+
+**Status: DONE, verified, committed.**
+
+- 润色选项空格丢失：wordDiff 跨 changed/unchanged 段边界丢空格 → 分词保留
+  词后空白，段拼接精确还原选项文本（不变量单测，含多空格/前导空格）。
+- 语法优先：与活跃语法 issue 重叠的润色片段被抑制（扫描过滤 + 语法 merge
+  移除）；语法修正后 revision 提升触发润色重扫；忽略语法 issue 派发重扫事件。
+- 变更感知：applyServerContent 事务打 awcServerApply 标记，两插件丢弃锚点
+  文本不再匹配的装饰（用户手动编辑保留"下划线→保存验证"流程）；表达接受
+  后端按 modified_range reconcile writing_issues（相交 stale、其后平移、
+  幸存 bump revision），与语法接受一致；修改处由客户端重新检测。
+- 测试：backend 400、E2E 73（+2：语法优先生命周期、润色接受保留无关语法/
+  不残留旧词）、vitest 43、tsc/ESLint/build/ruff 干净。
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

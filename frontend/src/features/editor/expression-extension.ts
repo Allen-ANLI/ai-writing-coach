@@ -9,6 +9,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 
+import { SERVER_APPLY_META } from "@/features/editor/apply-content";
 import type { PolishSentenceFragment } from "@/types/api";
 
 export interface PolishFragmentState {
@@ -24,6 +25,8 @@ interface PolishPluginState {
 export const POLISH_EVENTS = {
   hover: "awc-polish:hover",
   hoverEnd: "awc-polish:hover-end",
+  // ADR-028: grammar reconciliation releases suppressed fragments.
+  rescan: "awc-polish:rescan",
 } as const;
 
 function emit(name: string, detail: Record<string, unknown>) {
@@ -73,6 +76,13 @@ export function createExpressionExtension() {
                     to: tr.mapping.map(item.to, 1),
                   }))
                   .filter((item) => item.from < item.to);
+                // ADR-028: a server replacement invalidates any fragment
+                // whose anchor text changed; the region is re-scanned.
+                if (tr.getMeta(SERVER_APPLY_META)) {
+                  fragments = fragments.filter(
+                    (item) => tr.doc.textBetween(item.from, item.to) === item.fragment.anchor_text,
+                  );
+                }
               }
               const meta = tr.getMeta(polishPluginKey) as PolishMeta | undefined;
               if (meta?.type === "set") {

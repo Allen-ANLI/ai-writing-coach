@@ -11,6 +11,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 
+import { SERVER_APPLY_META } from "@/features/editor/apply-content";
 import type { IssueData, RevealedSuggestion } from "@/types/api";
 
 export interface GrammarIssueState {
@@ -87,6 +88,15 @@ export function createGrammarExtension() {
                     to: tr.mapping.map(item.to, 1),
                   }))
                   .filter((item) => item.from < item.to);
+                // ADR-028: after a programmatic server replacement, never
+                // keep an underline whose anchor text no longer matches —
+                // the changed region must be re-checked, not carried over.
+                // User typing keeps the underline-then-validate flow.
+                if (tr.getMeta(SERVER_APPLY_META)) {
+                  issues = issues.filter(
+                    (item) => tr.doc.textBetween(item.from, item.to) === item.issue.anchor_text,
+                  );
+                }
               }
               const meta = tr.getMeta(grammarPluginKey) as GrammarMeta | undefined;
               if (meta) {

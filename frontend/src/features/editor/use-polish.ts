@@ -17,6 +17,7 @@ import {
   type PolishFragmentState,
   type PolishMeta,
 } from "@/features/editor/expression-extension";
+import { getGrammarIssues } from "@/features/editor/grammar/grammar-extension";
 import type { AutosaveApi } from "@/features/editor/use-autosave";
 import { ApiClientError } from "@/lib/api-client";
 import { BLOCK_SEPARATOR, countWords, splitSentences } from "@/lib/document-text";
@@ -172,10 +173,16 @@ export function usePolish({
             states.push({ fragment, from: range.from, to: range.to });
           }
         }
+        // ADR-028: grammar first — a fragment covered by an active grammar
+        // issue is not underlined for polish until the grammar is fixed.
+        const grammar = getGrammarIssues(latest.view);
+        const visible = states.filter(
+          (item) => !grammar.some((g) => item.from < g.to && item.to > g.from),
+        );
         const kept = getPolishFragments(latest.view).filter(
           (item) => item.to <= pmRange.from || item.from >= pmRange.to,
         );
-        dispatchMeta(latest, { type: "set", fragments: [...kept, ...states] });
+        dispatchMeta(latest, { type: "set", fragments: [...kept, ...visible] });
       } catch {
         // network / 403 / 409 / quota: editor stays usable, no underline
       } finally {
@@ -247,6 +254,14 @@ export function usePolish({
     const timer = setTimeout(() => scheduleScan(), 120);
     return () => clearTimeout(timer);
   }, [enabled, autosave.status, autosave.serverRevision, scheduleScan]);
+
+  // ADR-028: when grammar reconciles (e.g. an issue is ignored), fragments
+  // previously suppressed by grammar priority become eligible again.
+  useEffect(() => {
+    const onRescan = () => scheduleScan();
+    document.addEventListener(POLISH_EVENTS.rescan, onRescan);
+    return () => document.removeEventListener(POLISH_EVENTS.rescan, onRescan);
+  }, [scheduleScan]);
 
   useEffect(() => {
     if (!editor) {

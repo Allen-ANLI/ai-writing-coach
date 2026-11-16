@@ -14,6 +14,11 @@ import type { Editor } from "@tiptap/react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import {
+  POLISH_EVENTS,
+  polishPluginKey,
+  getPolishFragments,
+} from "@/features/editor/expression-extension";
+import {
   GRAMMAR_EVENTS,
   grammarPluginKey,
   getGrammarIssues,
@@ -212,6 +217,21 @@ export function useGrammar({
           end: pmRange.to,
           issues: toIssueStates(latest, response.data.issues),
         });
+        // ADR-028: grammar first — polish fragments overlapping the grammar
+        // findings yield until the grammar is fixed (then a re-scan runs).
+        const grammarInSpan = getGrammarIssues(latest.view).filter(
+          (g) => g.to > pmRange.from && g.from < pmRange.to,
+        );
+        for (const fragment of getPolishFragments(latest.view)) {
+          if (grammarInSpan.some((g) => fragment.from < g.to && fragment.to > g.from)) {
+            latest.view.dispatch(
+              latest.state.tr.setMeta(polishPluginKey, {
+                type: "remove",
+                suggestionId: fragment.fragment.suggestion_id,
+              }),
+            );
+          }
+        }
         syncCount();
       } catch {
         // aborted / 403 independent / 409 stale / network: editor stays usable
@@ -601,6 +621,8 @@ export function useGrammar({
             setHover(null);
           }
           syncCount();
+          // ADR-028: polish suppressed by this grammar issue may now show.
+          document.dispatchEvent(new CustomEvent(POLISH_EVENTS.rescan));
         })
         .catch(() => undefined);
     },

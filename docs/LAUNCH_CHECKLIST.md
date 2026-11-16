@@ -9,7 +9,7 @@ or deploys publicly.
 - [x] All PRD loops implemented (Writing / Learning / Improvement).
 - [x] Full API contract implemented — 104/104 operations (1.8.0).
 - [x] Reconciliations R1–R12 resolved and documented.
-- [x] Backend 399 tests, Playwright 71 E2E, vitest 41 — all green (ADR-027 +
+- [x] Backend 400 tests, Playwright 73 E2E, vitest 43 — all green (ADR-028 +
       free-tier quota exemption).
 - [x] Temporary free-tier AI quota exemption active (2026-11-16 user
       directive): FREE_PLAN_QUOTAS_DISABLED=true by default; metering intact;

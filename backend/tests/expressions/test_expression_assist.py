@@ -216,3 +216,67 @@ def test_accept_foreign_suggestion_not_found(client):
 
     response = _accept(client, intruder, essay, suggestion, suggestion["items"][0])
     assert response.status_code == 404
+
+
+def test_accept_reconciles_grammar_issues_by_range(client):
+    """ADR-028: an expression replacement edits the document — grammar issues
+    whose anchor it touches go stale; later ones shift and stay acceptable."""
+    from essay_helpers import create_essay
+    from grammar_helpers import all_issues, start_session
+
+    headers = auth_headers(client)
+    essay = create_essay(client, headers)
+    text = "I very liek this book. He run fast."
+    assert (
+        save_document(client, headers, essay["id"], base_revision=1, paragraphs=(text,)).status_code
+        == 200
+    )
+    session = start_session(client, headers, essay["id"])
+    issues = all_issues(client, headers, essay["id"], session["id"], text)
+    by_anchor = {i["anchor_text"]: i for i in issues}
+    assert "liek" in by_anchor
+    assert "run" in by_anchor
+
+    suggestion = client.post(
+        f"/api/v1/essays/{essay['id']}/expression-suggestions",
+        json={
+            "session_id": session["id"],
+            "server_revision": 2,
+            "client_revision": 1,
+            "selected_text": "very liek",
+            "sentence": text,
+            "paragraph_context": text,
+            "max_suggestions": 3,
+        },
+        headers=headers,
+    ).json()["data"]
+    item = suggestion["items"][0]
+    new_text = text.replace("very liek", item["english_text"])
+    response = client.post(
+        f"/api/v1/essays/{essay['id']}/expression-suggestions/{suggestion['id']}/accept",
+        json={
+            "item_id": item["id"],
+            "base_revision": 2,
+            "client_revision": 2,
+            "content_json": tiptap_doc(new_text),
+            "plain_text": new_text,
+            "word_count": len(new_text.split()),
+            "modified_range": {"start": 2, "end": 11, "offset_unit": "unicode_codepoint"},
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+
+    liek = client.get(
+        f"/api/v1/essays/{essay['id']}/issues/{by_anchor['liek']['id']}", headers=headers
+    ).json()["data"]
+    assert liek["status"] == "stale"
+
+    delta = len(item["english_text"]) - len("very liek")
+    run = client.get(
+        f"/api/v1/essays/{essay['id']}/issues/{by_anchor['run']['id']}", headers=headers
+    ).json()["data"]
+    assert run["status"] == "detected"
+    assert run["source_server_revision"] == 3
+    assert run["start_offset"] == by_anchor["run"]["start_offset"] + delta
+    assert run["end_offset"] == by_anchor["run"]["end_offset"] + delta

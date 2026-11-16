@@ -166,6 +166,69 @@ test("accepting one correction keeps the other sentence's underline (ADR-027)", 
   await expect(page.getByTestId("editor-content")).toContainText(/He (runs|ran) fast\./);
 });
 
+test("grammar takes priority over polish on the same fragment (ADR-028)", async ({ page }) => {
+  await openEditor(page);
+  await typeAndWaitSaved(page, "He very like apples.");
+  // 语法错误（HE_LIKE）覆盖 "very like"：同一片段的润色必须被抑制。
+  await expect(page.locator(".awc-issue")).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.locator(".awc-expression")).toHaveCount(0);
+
+  // 自行修正语法（like → likes）后，润色才接管同一片段。
+  await page.getByTestId("editor-content").click();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.type("He very likes apples.");
+  await expect(page.getByTestId("save-status")).toContainText("已保存", { timeout: 15_000 });
+  await expect(page.locator(".awc-expression")).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.locator(".awc-issue")).toHaveCount(0);
+
+  // 接受润色后不得残留旧词的语法下划线。
+  await page.locator(".awc-expression").first().hover();
+  await expect(page.getByTestId("polish-card")).toBeVisible({ timeout: 10_000 });
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("editor-content")).toContainText("He really likes apples.", {
+    timeout: 15_000,
+  });
+  await expect(page.locator(".awc-issue")).toHaveCount(0);
+  await expect(page.locator(".awc-expression")).toHaveCount(0);
+});
+
+test("polish acceptance keeps unrelated grammar, never re-underlines replaced words (ADR-028)", async ({ page }) => {
+  await openEditor(page);
+  await typeAndWaitSaved(page, "I recieved very like this book.");
+  // 拼写错误 recieved 与润色片段 very like 互不重叠：两者同时显示。
+  await expect(page.locator(".awc-issue")).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.locator(".awc-expression")).toHaveCount(1, { timeout: 30_000 });
+
+  await page.locator(".awc-expression").first().hover();
+  const card = page.getByTestId("polish-card");
+  await expect(card).toBeVisible({ timeout: 10_000 });
+  // ADR-028：选项词之间必须保留空格（修复 reallylike 粘连）。
+  await expect(page.locator("[data-testid^='polish-option-']").first()).toContainText(
+    "really like",
+  );
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("editor-content")).toContainText(
+    "I recieved really like this book.",
+    { timeout: 15_000 },
+  );
+
+  // 未修改的拼写错误保留下划线；被替换的片段不再有任何旧下划线。
+  await expect(page.locator(".awc-issue")).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.locator(".awc-issue").first()).toHaveText("recieved");
+  await expect(page.locator(".awc-expression")).toHaveCount(0);
+
+  // 接着修正拼写错误。
+  await page.locator(".awc-issue").first().hover();
+  await expect(page.getByTestId("grammar-hover-card")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("revealed-answer")).toBeVisible({ timeout: 15_000 });
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("editor-content")).toContainText(
+    "I received really like this book.",
+    { timeout: 15_000 },
+  );
+  await expect(page.locator(".awc-issue")).toHaveCount(0, { timeout: 15_000 });
+});
+
 test("correct self-edit clears the highlight automatically", async ({ page }) => {
   await openEditor(page);
   await typeAndWaitSaved(page, BAD_TEXT);
