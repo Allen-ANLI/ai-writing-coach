@@ -8,6 +8,7 @@ rules are reused unchanged. Every call is quota-guarded and usage-logged.
 """
 
 import hashlib
+import math
 import uuid
 from collections import OrderedDict
 
@@ -15,6 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ai import llm
+from app.ai.embeddings import embed_texts
 from app.ai.prompts.registry import get_prompt
 from app.ai.providers.base import LlmUsage
 from app.ai.schemas import GhostProgressResult, PlannerChatResult
@@ -105,7 +107,7 @@ def send_message(
     db.add(user_message)
     db.commit()  # no transaction held during the LLM call
 
-    prompt = get_prompt("planner_chat", "v5")
+    prompt = get_prompt("planner_chat", "v6")
     user_prompt = prompt.user_template.format(
         question_prompt=essay.question_prompt or "(free writing)",
         current_outline=service.outline_json(confirmed),
@@ -225,3 +227,43 @@ def judge_progress(
     while len(_PROGRESS_CACHE) > _PROGRESS_CACHE_MAX:
         _PROGRESS_CACHE.popitem(last=False)
     return data
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    na = math.sqrt(sum(x * x for x in a)) or 1.0
+    nb = math.sqrt(sum(y * y for y in b)) or 1.0
+    return dot / (na * nb)
+
+
+def match_position(
+    db: Session, user: User, essay_id: uuid.UUID, *, sentences: list[str], hints: list[str]
+) -> dict:
+    """ADR-033: locate the writer by position + embedding content match.
+
+    Returns the number of LEADING user sentences that match the corresponding
+    model sentence (cosine >= threshold). Position-based so deleting sentences
+    retreats the index; the embedding gate only advances past a sentence whose
+    gist matches. The mock embedding provider carries no semantics, so it
+    degrades to pure position (matched = sentence count); a real embedding
+    endpoint enables semantic gating. Embedding failure also degrades to
+    position so the writer is never blocked."""
+    get_essay(db, user, essay_id)
+    n = min(len(sentences), len(hints))
+    if n == 0:
+        return {"matched": 0, "degraded": False}
+    settings = get_settings()
+    if settings.embedding_provider == "mock":
+        return {"matched": n, "degraded": True}
+    db.commit()  # no transaction held during the embedding call
+    try:
+        result = embed_texts(sentences[:n] + hints[:n])
+    except ApiError:
+        return {"matched": n, "degraded": True}
+    threshold = settings.ghost_match_threshold
+    matched = n
+    for i in range(n):
+        if _cosine(result.vectors[i], result.vectors[n + i]) < threshold:
+            matched = i
+            break
+    return {"matched": matched, "degraded": False}

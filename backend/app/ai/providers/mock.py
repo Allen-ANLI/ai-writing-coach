@@ -201,11 +201,14 @@ class MockProvider:
                 )
                 if instance.outline is not None:
                     instance.outline.outline_md = (
-                        "## 引言\n### 背景与立场\n- 1. 大城市交通问题严重\n"
-                        "- 2. 主张公共交通免费\n## 主体：免费的好处\n"
-                        "### 减少私家车与污染\n- 1. 免费降低开车意愿\n"
-                        "- 2. 减少污染并省钱\n## 结论\n### 重申立场\n"
-                        "- 1. 免费公交利大于弊"
+                        "## 引言\n### 背景与立场\n"
+                        "- **背景1：城市病**：拥堵与污染严重。例如：通勤高峰。\n"
+                        "- **立场**：主张公共交通免费。\n"
+                        "## 主体：免费的好处\n### 减少私家车与污染\n"
+                        "- **好处1：少开车**：免费降低开车意愿。例如：改乘地铁。\n"
+                        "  - 通勤成本下降\n  - 拥堵缓解\n"
+                        "- **好处2：减污染**：空气改善并省钱。\n"
+                        "## 结论\n### 重申立场\n- **结论**：免费公交利大于弊。"
                     )
             if isinstance(instance, SentenceCheckResult):
                 # Generic offsets would be invalid spans; the deterministic

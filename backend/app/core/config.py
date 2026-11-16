@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # Must match the VECTOR(n) column (migration 0010 uses 1536).
     embedding_dimensions: int = 1536
     embedding_timeout_seconds: float = 30.0
+    # ADR-033: ghost position+embedding match — cosine threshold for considering
+    # a learner sentence a gist-match of the model sentence (lenient).
+    ghost_match_threshold: float = 0.55
 
     # --- Email / password reset (Slice 11, R7) ---
     # console: development-only log delivery. Real providers need approval.

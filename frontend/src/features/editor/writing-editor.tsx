@@ -18,9 +18,7 @@ import { EvaluationDialog } from "@/features/editor/evaluation-dialog";
 import { ExpressionAssist } from "@/features/editor/expression-assist";
 import { createExpressionExtension } from "@/features/editor/expression-extension";
 import {
-  advanceGhostHint,
   createGhostHintExtension,
-  getGhostIndex,
   setGhostConfig,
   setGhostIndex,
 } from "@/features/editor/ghost-hint-extension";
@@ -38,7 +36,7 @@ import { BLOCK_SEPARATOR, countWords, splitSentences } from "@/lib/document-text
 import { getEssay } from "@/services/essays";
 import { getWorkingDocument } from "@/services/documents";
 import { getOutline, listOutlines } from "@/services/outlines";
-import { judgeGhostProgress } from "@/services/planner";
+import { matchGhostPosition } from "@/services/planner";
 import { getPreferences, patchPreferences } from "@/services/preferences";
 import { createSession, listSessions } from "@/services/sessions";
 import type { TipTapDocument } from "@/types/api";
@@ -184,7 +182,7 @@ export function WritingEditor({ essayId }: { essayId: string }) {
       }
       autosaveRef.current?.markDirty();
       setTick((value) => value + 1);
-      maybeJudgeProgressRef.current();
+      syncGhostPositionRef.current();
     },
   });
 
@@ -201,85 +199,68 @@ export function WritingEditor({ essayId }: { essayId: string }) {
   const grammar = useGrammar({ essayId, editor, session: activeSession, autosave, applyContent });
   const polish = usePolish({ essayId, editor, session: activeSession, autosave, applyContent });
 
-  // ADR-025/029: 句点完成 → 大意匹配当前范文句 → 达成则推进；
-  // 未达成时追赶判断下一句（写超前了也不卡死）。
+  // ADR-033: 幽灵定位 = 位置 + 嵌入内容匹配。索引 = 从头连续匹配范文句的
+  // 已完成句数——删句则回退、重写则重新定位（修复删除后提示错位）。
+  // mock 嵌入无语义 → 后端降级为纯位置；真实嵌入端点启用语义门控。
   const ghostEnabledRef = useRef(ghostEnabled);
   const ghostHintsRef = useRef(ghostHints);
-  const processedSentencesRef = useRef(0);
-  const judgingRef = useRef(false);
+  const ghostMatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ghostMatchAbortRef = useRef<AbortController | null>(null);
+  const ghostMatchKeyRef = useRef<string | null>(null);
   useEffect(() => {
     ghostEnabledRef.current = ghostEnabled;
     ghostHintsRef.current = ghostHints;
   });
 
-  const maybeJudgeProgress = useCallback(() => {
-    const current = editorRef.current;
-    const ideas = ghostHintsRef.current;
-    if (!current || !ghostEnabledRef.current || judgingRef.current) {
-      return;
-    }
-    const index = getGhostIndex(current.view);
-    if (index >= ideas.length) {
-      return;
-    }
-    const plain = current.getText({ blockSeparator: BLOCK_SEPARATOR });
-    const completed = splitSentences(plain).filter((s) => s.complete);
-    if (completed.length <= processedSentencesRef.current) {
-      return;
-    }
-    const sentence = completed[completed.length - 1].text.trim();
-    if (!sentence) {
-      return;
-    }
-    judgingRef.current = true;
-    void judgeGhostProgress(essayId, {
-      sentence,
-      idea_index: index,
-      idea: ideas[index],
-    })
-      .then((response) => {
-        processedSentencesRef.current = completed.length;
-        const latest = editorRef.current;
-        if (!latest || getGhostIndex(latest.view) !== index) {
+  const syncGhostPosition = useCallback(
+    (delay = 400) => {
+      if (ghostMatchTimerRef.current) {
+        clearTimeout(ghostMatchTimerRef.current);
+      }
+      ghostMatchTimerRef.current = setTimeout(() => {
+        const current = editorRef.current;
+        const hints = ghostHintsRef.current;
+        if (!current || !ghostEnabledRef.current || hints.length === 0) {
           return;
         }
-        if (response.data.fulfilled) {
-          advanceGhostHint(latest.view);
-          setGhostIndexState(index + 1);
-          return;
+        const plain = current.getText({ blockSeparator: BLOCK_SEPARATOR });
+        const sentences = splitSentences(plain)
+          .filter((s) => s.complete)
+          .map((s) => s.text.trim())
+          .filter((text) => text !== "");
+        const key = `${sentences.join("\u0001")}|${hints.length}`;
+        if (ghostMatchKeyRef.current === key) {
+          return; // unchanged writing position; skip redundant call
         }
-        // ADR-029 追赶：当前句未匹配时，可能已写到下一句范文的内容；
-        // 再判一次下一句（服务端缓存防重复花费），匹配则跳到对应位置。
-        const nextIdea = ideas[index + 1];
-        if (!nextIdea) {
-          return;
-        }
-        void judgeGhostProgress(essayId, {
-          sentence,
-          idea_index: index + 1,
-          idea: nextIdea,
-        })
-          .then((next) => {
-            const now = editorRef.current;
-            if (next.data.fulfilled && now && getGhostIndex(now.view) === index) {
-              setGhostIndex(now.view, index + 2);
-              setGhostIndexState(index + 2);
+        ghostMatchKeyRef.current = key;
+        ghostMatchAbortRef.current?.abort();
+        const controller = new AbortController();
+        ghostMatchAbortRef.current = controller;
+        void matchGhostPosition(essayId, { sentences, hints }, controller.signal)
+          .then((response) => {
+            if (controller.signal.aborted) {
+              return;
             }
+            const now = editorRef.current;
+            if (!now) {
+              return;
+            }
+            const idx = Math.max(
+              0,
+              Math.min(response.data.matched, ghostHintsRef.current.length),
+            );
+            setGhostIndex(now.view, idx);
+            setGhostIndexState(idx);
           })
           .catch(() => undefined);
-      })
-      .catch(() => {
-        // Provider/network failure: never block the writer; keep the hint.
-        processedSentencesRef.current = completed.length;
-      })
-      .finally(() => {
-        judgingRef.current = false;
-      });
-  }, [essayId]);
-  const maybeJudgeProgressRef = useRef(maybeJudgeProgress);
+      }, delay);
+    },
+    [essayId],
+  );
+  const syncGhostPositionRef = useRef(syncGhostPosition);
   useEffect(() => {
-    maybeJudgeProgressRef.current = maybeJudgeProgress;
-  }, [maybeJudgeProgress]);
+    syncGhostPositionRef.current = syncGhostPosition;
+  }, [syncGhostPosition]);
 
   // Initialize once per essay when both the editor and the document are ready.
   useEffect(() => {
@@ -290,25 +271,19 @@ export function WritingEditor({ essayId }: { essayId: string }) {
     applyContent(documentQuery.data.content_json);
     autosave.initialize(documentQuery.data);
     setTick((value) => value + 1);
+    // Locate the ghost hint against the loaded content (ADR-033).
+    syncGhostPositionRef.current(0);
   }, [editor, documentQuery.data, applyContent, autosave]);
 
-  // 已确认大纲 → 灰色指引（范文逐句；无范文回退大纲指引）。
-  // ADR-026：大纲更新后按已完成句数续接，不再从第一句重新开始。
+  // 已确认大纲 → 灰色中文指引（范文逐句）。计划/开关变化时立即重新定位。
   useEffect(() => {
     if (!editor) {
       return;
     }
     setGhostConfig(editor.view, ghostHints, ghostEnabled);
-    let nextIndex = getGhostIndex(editor.view);
-    const plain = editor.getText({ blockSeparator: BLOCK_SEPARATOR });
-    const completedCount = splitSentences(plain).filter((s) => s.complete).length;
-    if (ghostHints.length > 0 && completedCount > nextIndex) {
-      nextIndex = Math.min(completedCount, ghostHints.length);
-      setGhostIndex(editor.view, nextIndex);
-    }
-    processedSentencesRef.current = completedCount;
-    queueMicrotask(() => setGhostIndexState(nextIndex));
-  }, [editor, ghostHints, ghostEnabled]);
+    ghostMatchKeyRef.current = null; // force a fresh position match
+    syncGhostPosition(0);
+  }, [editor, ghostHints, ghostEnabled, syncGhostPosition]);
 
   // IME composition: save after composition ends, never mid-composition.
   useEffect(() => {

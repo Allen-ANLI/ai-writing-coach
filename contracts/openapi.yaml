@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Writing Coach API
-  version: 1.10.0
+  version: 1.11.0
   description: Final API contract aligned with Database ERD V1.2. Working documents use server_revision; immutable
     snapshots use version_no. Refresh tokens are HttpOnly cookies. 1.1.1 adds the additive
     infrastructure endpoint GET /health (200 database reachable, 503 database unavailable);
@@ -37,7 +37,11 @@ info:
     that lacks one); planner_chat v3 writes the essay first then derives the
     outline from it; confirmation guarantees a model essay and manual outline
     edits expire it for regeneration; ghost guidance is essay-only (outline
-    fallback removed); additive only.
+    fallback removed); additive only. 1.11.0 (ADR-033) adds POST
+    /essays/{essay_id}/planner/match (ghost location by position + embedding
+    content match; mock degrades to pure position); planner_chat v6 /
+    outline_generate v5 produce a rich hierarchical markdown outline; additive
+    only.
 servers:
 - url: https://api.example.com/api/v1
   description: Production placeholder
@@ -2344,6 +2348,38 @@ paths:
           description: Request validation error
         '429':
           description: Rate limit or AI quota exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /essays/{essay_id}/planner/match:
+    post:
+      tags:
+      - Outlines
+      summary: Locate ghost guidance by position + embedding match (ADR-033)
+      description: >-
+        Returns the number of leading learner sentences that match the
+        corresponding model sentences (cosine >= threshold). Position-based so
+        deleting sentences retreats the ghost index; degraded=true means the
+        embedding provider is mock/unavailable and the result is pure position.
+      responses:
+        '200':
+          description: Matched leading sentence count
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '422':
+          description: Request validation error
       requestBody:
         required: true
         content:

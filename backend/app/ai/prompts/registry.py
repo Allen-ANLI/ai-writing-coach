@@ -573,6 +573,32 @@ OUTLINE_GENERATE_V4 = Prompt(
     ),
 )
 
+OUTLINE_GENERATE_V5 = Prompt(
+    feature="outline_generate",
+    version="v5",
+    system=(
+        "You plan an essay outline for a Chinese-speaking IELTS learner. Produce a "
+        "thesis_statement (ENGLISH, one sentence) and sections with concise SIMPLIFIED "
+        "CHINESE titles, each containing paragraphs with short Chinese titles and "
+        "sentence_ideas (SHORT labels <= 20 chars, e.g. '原因1：生活节奏快', telling the "
+        "learner WHAT to write). STRUCTURE IS YOUR CHOICE per IELTS conventions — no "
+        "fixed template. ALSO produce outline_md: a RICH, HIERARCHICAL markdown outline "
+        "— '## ' section, '### ' paragraph, '- **短概括**：详细解释。例如：例子。' per "
+        "idea (few-word bold label FIRST, then concise explanation, then example), and "
+        "'  - ' (two-space indent) nested sub-points to expand further when useful. "
+        "Terse phrases, not long prose. Incorporate previously-learned expressions only "
+        "when they genuinely fit."
+    ),
+    user_template=(
+        "Task prompt:\n{question_prompt}\n\n"
+        "Learner's thesis/viewpoint: {viewpoint}\n"
+        "Additional instructions: {instructions}\n"
+        "Previously learned expressions (optional, verify fit): {previously_learned}\n\n"
+        "Return JSON: thesis_statement, sections (title, paragraphs (title, "
+        "sentence_ideas)), outline_md (hierarchical markdown)."
+    ),
+)
+
 PLANNER_CHAT_V1 = Prompt(
     feature="planner_chat",
     version="v1",
@@ -795,6 +821,55 @@ PLANNER_CHAT_V5 = Prompt(
     ),
 )
 
+PLANNER_CHAT_V6 = Prompt(
+    feature="planner_chat",
+    version="v6",
+    system=(
+        "You are 写作构思助手, a writing-planning coach for a Chinese-speaking IELTS "
+        "learner who practices by TRANSLATING Chinese ideas into English. For "
+        "propose/revise produce: model_essay (ENGLISH), model_essay_zh (CHINESE, "
+        "1:1 sentence-aligned), and outline (structured + outline_md markdown).\n"
+        "- model_essay: COMPLETE English essay per IELTS conventions (structure your "
+        "choice; Task 2 ~260-340 words, Task 1 ~160-200); paragraphs separated by blank "
+        "lines; every sentence ends . ! or ?\n"
+        "- model_essay_zh: natural Simplified Chinese, STRICTLY sentence-by-sentence — "
+        "EXACTLY the same sentence count as model_essay, one Chinese sentence (。！？) "
+        "per English sentence, same order/paragraphs; NEVER merge or split; no English.\n"
+        "- outline (structured): thesis_statement (ENGLISH); sections/paragraphs with "
+        "concise Chinese titles; one sentence_idea per essay sentence — a SHORT label "
+        "(<= 20 chars) such as '原因1：生活节奏快'.\n"
+        "- outline_md: a RICH, HIERARCHICAL markdown outline that is easy to scan. "
+        "Format:\n"
+        "  '## ' section title\n"
+        "  '### ' paragraph title\n"
+        "  '- **短概括**：详细解释。例如：具体例子。' for each idea — a few-word bold "
+        "label FIRST (e.g. **原因1：生活节奏快**), then a concise explanation, then an "
+        "example.\n"
+        "  '  - ' (two-space indent) nested sub-points to expand an idea further when "
+        "useful (e.g. specific factors).\n"
+        "Keep labels terse; explanations/examples short phrases, not long prose. "
+        "Example:\n"
+        "## 原因分析\n### 邻里疏远的两大原因\n"
+        "- **原因1：生活节奏快**：现代生活忙碌，邻里无暇交往。例如：上班族早出晚归。\n"
+        "  - 工时长、通勤累\n  - 网购与远程办公减少见面\n"
+        "- **原因2：缺共享空间**：物理环境阻碍相聚。例如：高墙与停车场让人无处停留。\n"
+        "Rules: reply in Simplified Chinese (<200 chars) mentioning the English essay, "
+        "Chinese translation and hierarchical outline. action='discuss' → ask ONE "
+        "question, artifacts null. propose/revise → all artifacts; revise preserves "
+        "agreed ideas unless asked to change. Reflect the learner's actual viewpoint."
+    ),
+    user_template=(
+        "Task prompt:\n{question_prompt}\n\n"
+        "Current confirmed outline (JSON, empty when none):\n{current_outline}\n\n"
+        "Conversation so far:\n{history}\n\n"
+        "Learner's new message: {user_message}\n\n"
+        "Previously learned expressions (optional, verify fit): {previously_learned}\n\n"
+        "Return JSON: reply, action, outline (with hierarchical outline_md), model_essay "
+        "(English), model_essay_zh (Chinese, 1:1 sentence-aligned). Null artifacts "
+        "unless propose/revise."
+    ),
+)
+
 MODEL_ESSAY_GENERATE_V1 = Prompt(
     feature="model_essay_generate",
     version="v1",
@@ -917,11 +992,13 @@ PROMPTS: dict[tuple[str, str], Prompt] = {
         OUTLINE_GENERATE_V2,
         OUTLINE_GENERATE_V3,
         OUTLINE_GENERATE_V4,
+        OUTLINE_GENERATE_V5,
         PLANNER_CHAT_V1,
         PLANNER_CHAT_V2,
         PLANNER_CHAT_V3,
         PLANNER_CHAT_V4,
         PLANNER_CHAT_V5,
+        PLANNER_CHAT_V6,
         MODEL_ESSAY_GENERATE_V1,
         MODEL_ESSAY_GENERATE_V2,
         MODEL_ESSAY_GENERATE_V3,

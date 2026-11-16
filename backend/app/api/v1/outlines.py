@@ -19,6 +19,8 @@ from app.modules.outlines.schemas import (
     PatchOutlineRequest,
     PlannerChatRequest,
     PlannerChatResponse,
+    PlannerMatchRequest,
+    PlannerMatchResponse,
     PlannerMessagesResponse,
     PlannerProgressRequest,
     PlannerProgressResponse,
@@ -114,6 +116,22 @@ def planner_progress(
         idea=payload.idea,
     )
     return PlannerProgressResponse.model_validate(
+        {"data": data, "meta": {"request_id": new_request_id()}}
+    )
+
+
+@router.post("/essays/{essay_id}/planner/match", response_model=PlannerMatchResponse)
+def planner_match(
+    essay_id: uuid.UUID,
+    payload: PlannerMatchRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PlannerMatchResponse:
+    # ADR-033: position + embedding content match for ghost guidance location.
+    data = chat.match_position(
+        db, user, essay_id, sentences=payload.sentences, hints=payload.hints
+    )
+    return PlannerMatchResponse.model_validate(
         {"data": data, "meta": {"request_id": new_request_id()}}
     )
 

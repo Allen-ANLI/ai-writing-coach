@@ -149,3 +149,22 @@ class PlannerProgressData(BaseModel):
 class PlannerProgressResponse(BaseModel):
     data: PlannerProgressData
     meta: RequestMeta
+
+
+class PlannerMatchRequest(BaseModel):
+    """ADR-033: locate the writer by position + embedding content match."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sentences: list[str] = Field(default_factory=list, max_length=200)
+    hints: list[str] = Field(default_factory=list, max_length=200)
+
+
+class PlannerMatchData(BaseModel):
+    matched: int
+    degraded: bool
+
+
+class PlannerMatchResponse(BaseModel):
+    data: PlannerMatchData
+    meta: RequestMeta

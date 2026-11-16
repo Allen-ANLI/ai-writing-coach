@@ -920,6 +920,27 @@ public deployment approval.
 - backend 410、E2E 75、vitest 51（+4 markdown 解析）、tsc/ESLint/build/ruff 干净；
   真实 DeepSeek 冒烟（逐句对齐中文+Markdown 大纲）。
 
+## 3ac. ADR-033 — 幽灵位置+嵌入匹配定位 + 层级化大纲 (2026-11-16)
+
+**Status: DONE, verified, committed.**
+
+- 幽灵定位 bug 根因：索引只增不减（maybeJudgeProgress 仅完成句数增加时触发，
+  processedSentencesRef 高水位），删除不回退。改为**位置+嵌入匹配**：
+  新端点 POST /essays/{id}/planner/match（chat.match_position）返回从头连续
+  匹配范文句的句数（余弦≥ghost_match_threshold 0.55）；位置式→删句回退、重写
+  重定位。mock 嵌入无语义→降级纯位置；真实嵌入端点启用语义门控；失败也降级。
+- 前端：删除单调递增机制，改防抖(~400ms) syncGhostPosition（读当前完成句→调
+  match→设索引=clamp(matched)）；编辑/计划变化/初始加载均触发；按句文本缓存。
+  ghost_progress LLM 端点退出编辑器（后端保留未用）。
+- 技术说明：提示文本=LLM 范文中文翻译（构思时一次生成）；显示=纯代码 widget；
+  推进=位置+嵌入（原 LLM 逐句判断）。RAG 不适合（固定范文逐句展示，无检索需求）。
+- 层级大纲：planner_chat v6 / outline_generate v5 的 outline_md 用嵌套 Markdown
+  （## 章节 / ### 段落 / - **短概括**：详解+例如 / 缩进子要点）；前端
+  parseOutlineMarkdown 解析缩进 depth，始终展开嵌套缩进渲染（粗体概括+详解）。
+- 契约 1.11.0（106 操作）；backend 416、E2E 75、vitest 52（+1 嵌套解析）、
+  tsc/ESLint/build/ruff 干净。注：LT 冷启动/并发负载会致 grammar 测试瞬时超时，
+  预热后重跑即绿。
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

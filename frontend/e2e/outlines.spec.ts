@@ -46,11 +46,12 @@ test("chat planner proposes an outline; confirmation drives ghost hints", async 
   await expect(page.getByTestId("planner-message-assistant").first()).toBeVisible({ timeout: 20_000 });
   const card = page.getByTestId("planner-outline-card").first();
   await expect(card).toBeVisible({ timeout: 20_000 });
-  // ADR-032：大纲以结构化 Markdown 渲染（章节/段落/条目清晰）。
+  // ADR-033：大纲以嵌套 Markdown 渲染（粗体概括+详解+子要点缩进）。
   const outlineMd = card.getByTestId("outline-markdown");
   await expect(outlineMd).toBeVisible();
   await expect(outlineMd).toContainText("背景与立场");
   await expect(outlineMd).toContainText("主张公共交通免费");
+  await expect(outlineMd).toContainText("通勤成本下降"); // 嵌套子要点
   const essayDetails = card.getByTestId("model-essay-details");
   await expect(essayDetails).toBeVisible();
   await essayDetails.locator("summary").click();
@@ -77,8 +78,19 @@ test("chat planner proposes an outline; confirmation drives ghost hints", async 
   await page.getByTestId("ghost-toggle").click();
   await expect(page.getByTestId("ghost-hint")).toBeVisible({ timeout: 15_000 });
 
-  // 用户把中文意思译成英文并完成一句 → mock 判定 fulfilled=true → 推进。
+  // ADR-033：位置定位——完成一句英文 → 索引推进到 1。
   await page.getByTestId("editor-content").click();
+  await page.keyboard.type("Public transport should be free.");
+  await expect(page.getByTestId("ghost-hint")).toHaveAttribute("data-ghost-index", "1", {
+    timeout: 20_000,
+  });
+  // 再写一句 → 索引推进到 2。
+  await page.keyboard.type(" Free buses and trains reduce private car use.");
+  await expect(page.getByTestId("ghost-hint")).toHaveAttribute("data-ghost-index", "2", {
+    timeout: 20_000,
+  });
+  // 删除回退到一句（Ctrl+A 重写）→ 索引回退到 1（修复删除后定位错）。
+  await page.keyboard.press("Control+a");
   await page.keyboard.type("Public transport should be free.");
   await expect(page.getByTestId("ghost-hint")).toHaveAttribute("data-ghost-index", "1", {
     timeout: 20_000,

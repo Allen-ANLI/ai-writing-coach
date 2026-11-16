@@ -1,8 +1,8 @@
 import { apiFetch } from "@/lib/api-client";
 import type {
   PlannerChatResponse,
+  PlannerMatchResponse,
   PlannerMessagesResponse,
-  PlannerProgressResponse,
 } from "@/types/api";
 
 export function sendPlannerMessage(
@@ -19,12 +19,14 @@ export function listPlannerMessages(essayId: string): Promise<PlannerMessagesRes
   return apiFetch<PlannerMessagesResponse>(`/essays/${essayId}/planner/messages`);
 }
 
-export function judgeGhostProgress(
+export function matchGhostPosition(
   essayId: string,
-  payload: { sentence: string; idea_index: number; idea: string },
-): Promise<PlannerProgressResponse> {
-  return apiFetch<PlannerProgressResponse>(`/essays/${essayId}/planner/progress`, {
+  payload: { sentences: string[]; hints: string[] },
+  signal?: AbortSignal,
+): Promise<PlannerMatchResponse> {
+  return apiFetch<PlannerMatchResponse>(`/essays/${essayId}/planner/match`, {
     method: "POST",
     body: payload,
+    signal,
   });
 }

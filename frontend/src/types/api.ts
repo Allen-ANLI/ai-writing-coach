@@ -934,6 +934,16 @@ export interface PlannerProgressResponse {
   meta?: RequestMeta;
 }
 
+export interface PlannerMatchData {
+  matched: number;
+  degraded: boolean;
+}
+
+export interface PlannerMatchResponse {
+  data: PlannerMatchData;
+  meta?: RequestMeta;
+}
+
 // Fragment-level sentence polish (ADR-026, contract 1.7.0)
 
 export interface PolishSentenceItem {
