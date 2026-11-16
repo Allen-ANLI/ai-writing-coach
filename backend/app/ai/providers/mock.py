@@ -164,12 +164,12 @@ class MockProvider:
         elif response_model is TranslationResult:
             instance = _mock_translation(user)
         elif response_model is ModelEssayResult:
-            # ADR-030: deterministic multi-sentence essay for ghost guidance.
+            # ADR-031: deterministic CHINESE multi-sentence essay for ghost guidance.
             instance = ModelEssayResult(
                 model_essay=(
-                    "[mock] Public transport should be free in big cities. "
-                    "Free buses and trains reduce private car use. "
-                    "This also cuts air pollution and saves commuters money."
+                    "[mock] 大城市的公共交通应该免费。"
+                    "免费的公交和地铁能减少私家车使用。"
+                    "这还能减少空气污染，并为通勤者省钱。"
                 )
             )
         else:
@@ -183,9 +183,9 @@ class MockProvider:
                     update={
                         "action": "propose",
                         "model_essay": (
-                            "[mock] Public transport should be free in big cities. "
-                            "Free buses and trains reduce private car use. "
-                            "This also cuts air pollution and saves commuters money."
+                            "[mock] 大城市的公共交通应该免费。"
+                            "免费的公交和地铁能减少私家车使用。"
+                            "这还能减少空气污染，并为通勤者省钱。"
                         ),
                     }
                 )

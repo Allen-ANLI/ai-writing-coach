@@ -55,7 +55,7 @@ def test_fulfilled_judgment_logged(client, monkeypatch, db):
     logs = db.query(AiUsageLog).filter(AiUsageLog.feature == "ghost_progress").all()
     assert len(logs) == 1
     assert logs[0].status == "success"
-    assert logs[0].prompt_version == "v2"
+    assert logs[0].prompt_version == "v3"
 
 
 def test_not_fulfilled_keeps_guidance(client, monkeypatch):

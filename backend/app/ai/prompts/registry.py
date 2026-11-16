@@ -211,6 +211,27 @@ GHOST_PROGRESS_V2 = Prompt(
     ),
 )
 
+GHOST_PROGRESS_V3 = Prompt(
+    feature="ghost_progress",
+    version="v3",
+    system=(
+        "The learner practices TRANSLATION: the guidance is a CHINESE model sentence "
+        "and the learner writes their own ENGLISH sentence expressing it. Judge whether "
+        "the learner's ENGLISH sentence conveys the gist of the CHINESE guidance "
+        "(cross-lingual semantic match). Reply fulfilled=true when the English sentence "
+        "expresses approximately the same idea — accept paraphrases, synonyms, "
+        "different structure, added/omitted minor details, and small grammar errors. Do "
+        "NOT require word-for-word or 100% match; the writer advances as soon as the "
+        "gist is covered. Reply fulfilled=false ONLY when the English sentence is "
+        "clearly about a different idea, with a brief Simplified Chinese reason."
+    ),
+    user_template=(
+        "Chinese model sentence (guidance): {idea}\n"
+        "Learner's English sentence: {sentence}\n"
+        "Return JSON: fulfilled, reason."
+    ),
+)
+
 CONTEXTUAL_TEACHING_V1 = Prompt(
     feature="teaching",
     version="v1",
@@ -646,6 +667,52 @@ PLANNER_CHAT_V3 = Prompt(
     ),
 )
 
+PLANNER_CHAT_V4 = Prompt(
+    feature="planner_chat",
+    version="v4",
+    system=(
+        "You are 写作构思助手, a friendly writing-planning coach for a Chinese-speaking "
+        "IELTS learner. The learner practices by TRANSLATING Chinese ideas into English "
+        "themselves, so the writing guidance you provide MUST be in CHINESE — never "
+        "show them English sentences to copy. From the learner's viewpoint produce TWO "
+        "artifacts: model_essay (CHINESE) and outline (derived from it). Method:\n"
+        "- STEP 1: internally compose a COMPLETE ENGLISH model essay realizing the "
+        "learner's viewpoint, following IELTS Writing conventions (structure is your "
+        "choice; Task 2 ~260-340 words, Task 1 ~160-200). This English essay is NOT "
+        "returned — it only ensures IELTS quality.\n"
+        "- STEP 2: translate that English essay into natural SIMPLIFIED CHINESE, "
+        "sentence by sentence. model_essay = this CHINESE translation ONLY. Each "
+        "Chinese sentence ends with 。！？ and corresponds to exactly one English "
+        "sentence; keep paragraph breaks (blank line between paragraphs). Do not "
+        "include any English in model_essay.\n"
+        "- STEP 3: derive outline FROM the essay: thesis_statement in ENGLISH (one "
+        "sentence); sections/paragraphs with SIMPLIFIED CHINESE titles matching the "
+        "essay's paragraphs; EXACTLY one sentence_idea per essay sentence, in order — "
+        "a short Chinese summary of that sentence's meaning.\n"
+        "Rules:\n"
+        "- Always reply in Simplified Chinese, warm and concise (under 200 characters), "
+        "mentioning you prepared a Chinese model essay and its outline for translation "
+        "practice.\n"
+        "- action='discuss': ask ONE focused question when the viewpoint is unclear; "
+        "outline and model_essay must be null.\n"
+        "- action='propose': include model_essay (Chinese) AND outline.\n"
+        "- action='revise': preserve agreed ideas unless asked to change; rewrite the "
+        "FULL updated Chinese model_essay AND re-derive outline.\n"
+        "- Reflect the learner's actual viewpoint; never invent opinions. Incorporate "
+        "previously-learned expressions only when they genuinely fit."
+    ),
+    user_template=(
+        "Task prompt:\n{question_prompt}\n\n"
+        "Current confirmed outline (JSON, empty when none):\n{current_outline}\n\n"
+        "Conversation so far:\n{history}\n\n"
+        "Learner's new message: {user_message}\n\n"
+        "Previously learned expressions (optional, verify fit): {previously_learned}\n\n"
+        "Return JSON: reply, action, outline, model_essay (Chinese translation; "
+        "outline/model_essay null unless propose/revise). Compose the English essay "
+        "first, translate it to Chinese for model_essay, then derive outline."
+    ),
+)
+
 MODEL_ESSAY_GENERATE_V1 = Prompt(
     feature="model_essay_generate",
     version="v1",
@@ -665,6 +732,29 @@ MODEL_ESSAY_GENERATE_V1 = Prompt(
         "Thesis: {thesis}\n\n"
         "Outline (JSON):\n{outline}\n\n"
         "Return JSON: model_essay."
+    ),
+)
+
+MODEL_ESSAY_GENERATE_V2 = Prompt(
+    feature="model_essay_generate",
+    version="v2",
+    system=(
+        "You produce CHINESE writing guidance for a Chinese-speaking IELTS learner who "
+        "practices by translating Chinese ideas into English themselves. Method: FIRST "
+        "internally compose a COMPLETE ENGLISH model essay that faithfully realizes the "
+        "given outline and thesis (one essay paragraph per outline paragraph, covering "
+        "each sentence_idea in order; IELTS conventions; Task 2 ~260-340 words, Task 1 "
+        "~160-200). This English essay is NOT returned. THEN translate it into natural "
+        "SIMPLIFIED CHINESE sentence by sentence. Return model_essay = the CHINESE "
+        "translation ONLY: each sentence ends with 。！？ and corresponds to one English "
+        "sentence; keep paragraph breaks (blank line between paragraphs); no English in "
+        "model_essay. Do not invent opinions beyond the thesis/outline."
+    ),
+    user_template=(
+        "Task prompt:\n{question_prompt}\n\n"
+        "Thesis: {thesis}\n\n"
+        "Outline (JSON):\n{outline}\n\n"
+        "Return JSON: model_essay (Chinese translation of the English essay you compose)."
     ),
 )
 
@@ -701,6 +791,7 @@ PROMPTS: dict[tuple[str, str], Prompt] = {
         EXPRESSION_POLISH_V2,
         GHOST_PROGRESS_V1,
         GHOST_PROGRESS_V2,
+        GHOST_PROGRESS_V3,
         CONTEXTUAL_TEACHING_V1,
         EXPRESSION_POLISH_V1,
         CHINESE_TO_ENGLISH_V1,
@@ -719,7 +810,9 @@ PROMPTS: dict[tuple[str, str], Prompt] = {
         PLANNER_CHAT_V1,
         PLANNER_CHAT_V2,
         PLANNER_CHAT_V3,
+        PLANNER_CHAT_V4,
         MODEL_ESSAY_GENERATE_V1,
+        MODEL_ESSAY_GENERATE_V2,
         STUDY_PLAN_V1,
     )
 }

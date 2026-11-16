@@ -42,23 +42,24 @@ test("chat planner proposes an outline; confirmation drives ghost hints", async 
   await page.getByTestId("planner-input").fill("我同意大城市公共交通应该免费。");
   await page.getByTestId("planner-send").click();
 
-  // mock 确定性返回 propose：助手消息 + 大纲卡片 + 完整范文（ADR-029）。
+  // mock 确定性返回 propose：助手消息 + 大纲卡片 + 中文范文（ADR-031）。
   await expect(page.getByTestId("planner-message-assistant").first()).toBeVisible({ timeout: 20_000 });
   const card = page.getByTestId("planner-outline-card").first();
   await expect(card).toBeVisible({ timeout: 20_000 });
   const essayDetails = card.getByTestId("model-essay-details");
   await expect(essayDetails).toBeVisible();
   await essayDetails.locator("summary").click();
-  await expect(essayDetails).toContainText("Public transport should be free in big cities.");
+  await expect(essayDetails).toContainText("大城市的公共交通应该免费。");
   await page.getByTestId("confirm-outline").first().click();
   await expect(card).toContainText("已确认", { timeout: 15_000 });
 
-  // 光标进入空段落 → 灰色范文句指引 widget 持续出现（不写入正文）。
+  // 光标进入空段落 → 灰色中文范文句指引 widget（不写入正文）。
   await page.getByTestId("editor-content").click();
   const hint = page.getByTestId("ghost-hint");
   await expect(hint).toBeVisible({ timeout: 15_000 });
   await expect(hint).toContainText("mock");
-  await expect(hint).toContainText("Public transport should be free in big cities.");
+  // ADR-031：幽灵提示是中文（让用户自行译成英文，而非抄英文）。
+  await expect(hint).toContainText("大城市的公共交通应该免费。");
   await expect(hint).toHaveAttribute("data-ghost-index", "0");
   // 指引只是 DOM widget：字数保持 0，绝不进入文档。
   await expect(page.getByTestId("word-count")).toHaveText("0 词");
@@ -69,7 +70,7 @@ test("chat planner proposes an outline; confirmation drives ghost hints", async 
   await page.getByTestId("ghost-toggle").click();
   await expect(page.getByTestId("ghost-hint")).toBeVisible({ timeout: 15_000 });
 
-  // 句点完成一句 → mock 判定 fulfilled=true → 推进到下一句指引。
+  // 用户把中文意思译成英文并完成一句 → mock 判定 fulfilled=true → 推进。
   await page.getByTestId("editor-content").click();
   await page.keyboard.type("Public transport should be free.");
   await expect(page.getByTestId("ghost-hint")).toHaveAttribute("data-ghost-index", "1", {

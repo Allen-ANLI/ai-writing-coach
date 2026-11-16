@@ -213,7 +213,7 @@ def test_workflow_outline_carries_model_essay(client):
     outline_id = _generate(client, headers, essay["id"], viewpoint="Free public transport")
     data = _get(client, headers, outline_id)
     assert data["model_essay"]
-    assert "Public transport" in data["model_essay"]
+    assert "公共交通" in data["model_essay"]  # ADR-031: Chinese model essay
 
 
 def test_manual_edit_expires_essay_and_confirm_regenerates(client):
@@ -288,7 +288,7 @@ def test_model_essay_endpoint_bootstraps_legacy_outline(client, db):
 
     logs = db.query(AiUsageLog).filter(AiUsageLog.feature == "model_essay_generate").all()
     assert len(logs) == 1
-    assert logs[0].prompt_version == "v1"
+    assert logs[0].prompt_version == "v2"
     assert logs[0].status == "success"
 
 

@@ -74,3 +74,36 @@ describe("splitSentences (sentence-completion detection)", () => {
     expect(spans[0].text).toBe("Really?!");
   });
 });
+
+describe("splitSentences (Chinese model essay, ADR-031)", () => {
+  it("splits on full-width terminators without requiring a following space", () => {
+    const spans = splitSentences("大城市的公共交通应该免费。免费的公交能减少私家车。这还能减少污染。");
+    expect(spans).toHaveLength(3);
+    expect(spans[0].text).toBe("大城市的公共交通应该免费。");
+    expect(spans[0].complete).toBe(true);
+    expect(spans[1].text).toBe("免费的公交能减少私家车。");
+    expect(spans[2].text).toBe("这还能减少污染。");
+  });
+
+  it("handles Chinese ！ and ？ and closing quotes", () => {
+    const spans = splitSentences("难道不该免费吗？当然应该！”");
+    expect(spans).toHaveLength(2);
+    expect(spans[0].text).toBe("难道不该免费吗？");
+    expect(spans[1].text).toBe("当然应该！”");
+    expect(spans[1].complete).toBe(true);
+  });
+
+  it("marks trailing Chinese without terminator incomplete", () => {
+    const spans = splitSentences("公共交通应该免费。因为这样");
+    expect(spans).toHaveLength(2);
+    expect(spans[0].complete).toBe(true);
+    expect(spans[1].complete).toBe(false);
+  });
+
+  it("splits Chinese paragraphs separated by blank lines", () => {
+    const spans = splitSentences("第一段意思。\n\n第二段意思。");
+    expect(spans).toHaveLength(2);
+    expect(spans[0].text).toBe("第一段意思。");
+    expect(spans[1].text).toBe("第二段意思。");
+  });
+});

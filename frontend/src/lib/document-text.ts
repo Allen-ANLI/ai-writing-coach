@@ -48,6 +48,13 @@ const ABBREVIATIONS = new Set([
 
 const CLOSERS = new Set(["\"", "'", "\u201D", "\u2019", ")", "]", "}", "\u00BB"]);
 
+// ADR-031: the model essay is Chinese; split on full-width terminators too.
+// Chinese sentences need no following space (unlike English).
+const CJK_TERMINATORS = new Set(["\u3002", "\uFF01", "\uFF1F"]); // 。！？
+const CJK_CLOSERS = new Set([
+  "\u300D", "\u300F", "\u201D", "\u2019", "\uFF09", "\u300B", "\u3011",
+]); // 」』”’）》】
+
 /**
  * Split text into sentence spans (code-point offsets), handling abbreviations,
  * decimals, initials, quoted sentences and paragraph breaks. A span is
@@ -74,6 +81,19 @@ export function splitSentences(text: string): SentenceSpan[] {
       push(i, true); // paragraph break: structurally complete
       i += 1;
       start = i + 1;
+      continue;
+    }
+    if (CJK_TERMINATORS.has(ch)) {
+      // ADR-031: Chinese sentence end — complete regardless of what follows.
+      let end = i + 1;
+      while (end < cps.length && CJK_TERMINATORS.has(cps[end])) {
+        end += 1;
+      }
+      while (end < cps.length && CJK_CLOSERS.has(cps[end])) {
+        end += 1;
+      }
+      push(end, true);
+      i = end - 1;
       continue;
     }
     if (ch !== "." && ch !== "!" && ch !== "?") {

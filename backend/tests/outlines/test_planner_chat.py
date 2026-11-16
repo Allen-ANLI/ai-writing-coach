@@ -295,7 +295,7 @@ def test_stray_llm_fields_are_tolerated(client, monkeypatch):
     assert "title_note" not in paragraph
 
 
-def test_planner_chat_uses_prompt_v3(client, db):
+def test_planner_chat_uses_prompt_v4(client, db):
     headers = auth_headers(client)
     essay = create_essay(client, headers)
     # Real mock provider (not monkeypatched): deterministic propose.
@@ -305,4 +305,4 @@ def test_planner_chat_uses_prompt_v3(client, db):
 
     logs = db.query(AiUsageLog).filter(AiUsageLog.feature == "planner_chat").all()
     assert len(logs) == 1
-    assert logs[0].prompt_version == "v3"
+    assert logs[0].prompt_version == "v4"

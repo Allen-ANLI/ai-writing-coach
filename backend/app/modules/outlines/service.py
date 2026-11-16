@@ -87,7 +87,7 @@ def ensure_model_essay(db: Session, user: User, outline_id: uuid.UUID) -> Writin
     billing_service.guard_ai_call(db, user.id)
     db.commit()  # no transaction held during the LLM call
 
-    prompt = get_prompt("model_essay_generate", "v1")
+    prompt = get_prompt("model_essay_generate", "v2")
     user_prompt = prompt.user_template.format(
         question_prompt=question_prompt, thesis=thesis, outline=structure
     )

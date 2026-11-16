@@ -102,7 +102,7 @@ def send_message(
     db.add(user_message)
     db.commit()  # no transaction held during the LLM call
 
-    prompt = get_prompt("planner_chat", "v3")
+    prompt = get_prompt("planner_chat", "v4")
     user_prompt = prompt.user_template.format(
         question_prompt=essay.question_prompt or "(free writing)",
         current_outline=service.outline_json(confirmed),
@@ -188,7 +188,7 @@ def judge_progress(
 
     billing_service.guard_ai_call(db, user.id)
     db.commit()  # no transaction held during the LLM call
-    prompt = get_prompt("ghost_progress", "v2")
+    prompt = get_prompt("ghost_progress", "v3")
     user_prompt = prompt.user_template.format(idea=idea, sentence=sentence)
     try:
         result, usage = llm.call_llm(

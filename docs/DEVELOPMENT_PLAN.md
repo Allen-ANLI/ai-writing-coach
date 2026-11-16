@@ -879,6 +879,25 @@ public deployment approval.
 - 契约 1.10.0（105 操作）；backend 410、E2E 75、vitest 43、tsc/ESLint/build/ruff
   干净；真实 DeepSeek 冒烟（范文优先构思、确认补范文、大意推进）。
 
+## 3aa. ADR-031 — 范文为中文，幽灵提示是翻译练习 (2026-11-16)
+
+**Status: DONE, verified, committed.**
+
+- 用户纠正 pedagogy：幽灵提示必须中文（给中文意思让用户自译英文，才是翻译
+  练习；显示英文=抄作文）。范文存中文版本。
+- planner_chat v4（一段式）：STEP1 内部按雅思写英文范文（不返回）→ STEP2 逐句
+  译成简体中文（model_essay 仅中文，每句 。！？、对应一句英文、保留分段、无
+  英文）→ STEP3 从范文派生大纲。propose/revise 带中文范文。
+- model_essay_generate v2：同英文→中文方法（补生成/刷新无范文大纲）。
+- ghost_progress v3：跨语言大意匹配（用户英文句 vs 中文范文句），大意相符即
+  推进，不要求 100%。
+- splitSentences 支持中文全角终止符 。！？（及闭合 」』”’）》】），无需后随空格
+  （中文句间无空格）；英文 .!? 逻辑不变。幽灵=splitSentences(中文范文)。
+- mock  planner/model-essay 返回确定性中文范文；面板文案/参考范文标签注明中文
+  翻译练习。
+- backend 410、E2E 75、vitest 47（+4 中文分句）、tsc/ESLint/build/ruff 干净；
+  真实 DeepSeek 冒烟（中文范文生成、跨语言推进）。
+
 ## 3a. Autonomous execution under Master Development Directive V2.0 (2026-11-15)
 
 The user's Directive V2.0 grants full autonomous engineering authority to complete the

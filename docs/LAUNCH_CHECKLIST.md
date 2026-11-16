@@ -5,11 +5,11 @@ release. The product launches once, complete and verified. Items marked
 🔒 require explicit user approval; nothing here auto-activates paid services
 or deploys publicly.
 
-## Engineering (complete — re-verified 2026-11-16, ADR-030)
+## Engineering (complete — re-verified 2026-11-16, ADR-031)
 - [x] All PRD loops implemented (Writing / Learning / Improvement).
 - [x] Full API contract implemented — 105/105 operations (1.10.0).
 - [x] Reconciliations R1–R12 resolved and documented.
-- [x] Backend 410 tests, Playwright 75 E2E, vitest 43 — all green (ADR-030 +
+- [x] Backend 410 tests, Playwright 75 E2E, vitest 47 — all green (ADR-031 +
       free-tier quota exemption).
 - [x] Temporary free-tier AI quota exemption active (2026-11-16 user
       directive): FREE_PLAN_QUOTAS_DISABLED=true by default; metering intact;
