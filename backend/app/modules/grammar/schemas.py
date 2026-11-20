@@ -35,6 +35,10 @@ class GrammarCheckRequest(BaseModel):
     # (possibly unsaved) cursor sentence. No revision/text_range-vs-doc gate,
     # no LLM, no persistence; issues are ephemeral display-only.
     live: bool = False
+    # ADR-035: whether the checked sentence is complete (terminator typed or
+    # paragraph break). Live mode only surfaces non-spelling findings when
+    # this is true; spelling stays instant once the word is finalized.
+    sentence_complete: bool = False
 
 
 class SuggestionStub(BaseModel):
@@ -149,6 +153,26 @@ class AcceptIssueRequest(BaseModel):
     base_revision: int = Field(ge=1)
     client_revision: int = Field(ge=0)
     suggestion_id: uuid.UUID | None = None
+
+
+class LiveAcceptRequest(BaseModel):
+    """ADR-035: accept an ephemeral live finding in one atomic call.
+
+    The server re-derives the deterministic rule hit (no LLM) and only applies
+    a replacement that is among its own suggestions — the client merely picks
+    an option the server already offered, never supplies free replacement text.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: uuid.UUID
+    base_revision: int = Field(ge=1)
+    client_revision: int = Field(ge=0)
+    rule_id: str = Field(min_length=1, max_length=200)
+    start_offset: int = Field(ge=0)
+    end_offset: int = Field(ge=1)
+    anchor_text: str = Field(min_length=1, max_length=2000)
+    replacement: str = Field(min_length=1, max_length=2000)
 
 
 class AcceptIssueData(BaseModel):

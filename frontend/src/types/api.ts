@@ -386,6 +386,9 @@ export interface GrammarCheckRequest {
   context?: { previous_sentence?: string | null; next_sentence?: string | null; paragraph_text?: string | null };
   /** ADR-034: Word-like instant rule-only check on the current cursor sentence. */
   live?: boolean;
+  /** ADR-035: live mode surfaces non-spelling findings only on complete sentences;
+   * spelling stays instant once the word is finalized (followed by whitespace/punctuation). */
+  sentence_complete?: boolean;
 }
 
 export interface GrammarCheckData {
@@ -484,6 +487,19 @@ export interface AcceptIssueRequest {
   base_revision: number;
   client_revision: number;
   suggestion_id?: string | null;
+}
+
+/** ADR-035: atomic acceptance of an ephemeral live finding. The replacement must
+ * be one of the server-derived suggestions (display_text of a live option). */
+export interface LiveAcceptRequest {
+  session_id: string;
+  base_revision: number;
+  client_revision: number;
+  rule_id: string;
+  start_offset: number;
+  end_offset: number;
+  anchor_text: string;
+  replacement: string;
 }
 
 export interface AcceptIssueData {

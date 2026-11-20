@@ -26,7 +26,7 @@ import {
   type GrammarMeta,
 } from "@/features/editor/grammar/grammar-extension";
 import type { HoverCardState } from "@/features/editor/grammar/grammar-hover-card";
-import type { AutosaveApi } from "@/features/editor/use-autosave";
+import type { AutosaveApi, SaveStatus } from "@/features/editor/use-autosave";
 import { ApiClientError } from "@/lib/api-client";
 import { BLOCK_SEPARATOR, splitSentences } from "@/lib/document-text";
 import {
@@ -39,6 +39,7 @@ import {
   getIssue,
   grammarCheck,
   ignoreIssue,
+  liveAccept,
   requestTeaching as requestTeachingApi,
   revealIssue,
   validateIssue,
@@ -113,6 +114,14 @@ function suppressOverlappingPolish(editor: Editor, from: number, to: number) {
       );
     }
   }
+}
+
+// ADR-035: acceptance failures must be visible, never a silent card closure.
+function saveFailureMessage(status: SaveStatus): string {
+  if (status === "conflict") {
+    return "文档存在保存冲突，请先解决冲突后再接受修改。";
+  }
+  return "保存未完成，修改未应用。请重试。";
 }
 
 function teachingErrorMessage(error: unknown): string {
@@ -325,7 +334,7 @@ export function useGrammar({
   // --- ADR-034: Word-like live check (rule-only, instant, no save gate) ------
 
   const runLiveCheck = useCallback(
-    async (span: { start: number; end: number; text: string }) => {
+    async (span: { start: number; end: number; text: string; complete: boolean }) => {
       const current = editorRef.current;
       const currentSession = sessionRef.current;
       if (!current || !currentSession || !enabledRef.current) {
@@ -350,6 +359,9 @@ export function useGrammar({
             },
             context: { paragraph_text: span.text },
             live: true,
+            // ADR-035: grammar waits for sentence completion; spelling stays
+            // instant once the word is finalized (server-side gate).
+            sentence_complete: span.complete,
           },
           controller.signal,
         );
@@ -771,14 +783,22 @@ export function useGrammar({
     });
   }, []);
 
-  // ADR-034: accept-after-save for an ephemeral live finding — save the text,
-  // run the full check to persist a real issue, then accept the chosen option.
+  // ADR-035: accept an ephemeral live finding via the atomic live-accept
+  // endpoint — flush the save, then ONE server call re-derives the rule hit
+  // (no LLM) and applies the chosen server suggestion. Replaces the old
+  // save→full-check→reveal→accept chain whose multi-second LLM window made
+  // acceptance silently fail whenever the user kept typing.
   const acceptLiveIssue = useCallback(
     async (item: GrammarIssueState, chosen: RevealedSuggestion | null) => {
       const currentSession = sessionRef.current;
-      if (!currentSession) {
+      const current = editorRef.current;
+      const issueId = item.issue.id;
+      const replacement = chosen?.suggested_text ?? item.revealed?.[0]?.suggested_text ?? null;
+      if (!currentSession || !current || !replacement || !item.issue.rule_id) {
+        setHover(null);
         return;
       }
+      patchHover(issueId, { accepting: true, acceptError: null });
       if (autosaveRef.current.status !== "saved") {
         const beforeRev = autosaveRef.current.serverRevision;
         autosaveRef.current.saveNow();
@@ -788,7 +808,10 @@ export function useGrammar({
             autosaveRef.current.serverRevision > beforeRev,
         );
         if (!ok) {
-          setHover(null);
+          patchHover(issueId, {
+            accepting: false,
+            acceptError: saveFailureMessage(autosaveRef.current.status),
+          });
           return;
         }
       }
@@ -796,75 +819,96 @@ export function useGrammar({
       if (!latest) {
         return;
       }
-      const plainText = latest.getText({ blockSeparator: BLOCK_SEPARATOR });
-      const cp = pmRangeToCodepoints(latest.state.doc, item.from, item.from).start;
-      const spans = splitSentences(plainText);
-      const span =
-        spans.find((s) => cp >= s.start && cp <= s.end) ??
-        [...spans].reverse().find((s) => s.complete && s.end <= cp);
-      if (!span) {
-        setHover(null);
-        return;
-      }
+      const cp = pmRangeToCodepoints(latest.state.doc, item.from, item.to);
+      const anchor = latest.state.doc.textBetween(item.from, item.to);
+      const oldPlain = latest.getText({ blockSeparator: BLOCK_SEPARATOR });
       try {
-        const response = await grammarCheck(essayId, {
+        const response = await liveAccept(essayId, {
           session_id: currentSession.id,
-          server_revision: autosaveRef.current.serverRevision,
-          client_revision: autosaveRef.current.clientRevision,
-          text: span.text,
-          text_range: {
-            start: span.start,
-            end: span.end,
-            offset_unit: "unicode_codepoint",
-          },
-          context: { paragraph_text: span.text },
-        });
-        const persisted = response.data.issues.find(
-          (i) => i.rule_id === item.issue.rule_id && i.anchor_text === item.issue.anchor_text,
-        );
-        const pmRange = codepointRangeToPm(latest.state.doc, span.start, span.end);
-        if (pmRange) {
-          dispatchMeta(latest, {
-            type: "merge",
-            start: pmRange.from,
-            end: pmRange.to,
-            issues: toIssueStates(latest, response.data.issues),
-          });
-          suppressOverlappingPolish(latest, pmRange.from, pmRange.to);
-        }
-        if (!persisted) {
-          setHover(null);
-          syncCount();
-          return;
-        }
-        const revealed = await revealIssue(essayId, persisted.id);
-        const suggestion =
-          revealed.data.suggestions.find((s) => s.suggested_text === chosen?.suggested_text) ??
-          revealed.data.suggestions.find((s) => s.is_recommended) ??
-          revealed.data.suggestions[0];
-        const oldPlain = latest.getText({ blockSeparator: BLOCK_SEPARATOR });
-        const acceptResponse = await acceptIssue(essayId, persisted.id, {
           base_revision: autosaveRef.current.serverRevision,
           client_revision: autosaveRef.current.clientRevision,
-          suggestion_id: suggestion?.id ?? null,
+          rule_id: item.issue.rule_id,
+          start_offset: cp.start,
+          end_offset: cp.end,
+          anchor_text: anchor,
+          replacement,
         });
-        reconcileAfterAccept(oldPlain, acceptResponse.data, persisted.id);
+        reconcileAfterAccept(oldPlain, response.data, issueId);
       } catch (error) {
         if (error instanceof ApiClientError && error.status === 409) {
-          setHover(null);
-          scheduleCheckForEdit();
+          patchHover(issueId, {
+            accepting: false,
+            acceptError: "文档已更新，修改未应用。请重试。",
+          });
+          scheduleLiveCheck();
         } else {
-          setHover(null);
+          patchHover(issueId, { accepting: false, acceptError: "修改未应用，请稍后重试。" });
         }
       }
     },
-    [essayId, waitForSaved, reconcileAfterAccept, setHover, syncCount, scheduleCheckForEdit],
+    [essayId, waitForSaved, reconcileAfterAccept, patchHover, setHover, scheduleLiveCheck],
+  );
+
+  // ADR-035: a persisted issue accepts even while autosave is pending — flush
+  // the save first instead of silently doing nothing (the old early return
+  // was the most common "click accept, nothing happens" case).
+  const acceptPersistedIssue = useCallback(
+    async (card: HoverCardState, chosen: RevealedSuggestion | null) => {
+      const issueId = card.issueId;
+      patchHover(issueId, { accepting: true, acceptError: null });
+      if (autosaveRef.current.status !== "saved") {
+        const beforeRev = autosaveRef.current.serverRevision;
+        autosaveRef.current.saveNow();
+        const ok = await waitForSaved(
+          () =>
+            autosaveRef.current.status === "saved" &&
+            autosaveRef.current.serverRevision > beforeRev,
+        );
+        if (!ok) {
+          patchHover(issueId, {
+            accepting: false,
+            acceptError: saveFailureMessage(autosaveRef.current.status),
+          });
+          return;
+        }
+      }
+      const current = editorRef.current;
+      if (!current) {
+        return;
+      }
+      const oldPlain = current.getText({ blockSeparator: BLOCK_SEPARATOR });
+      try {
+        const response = await acceptIssue(essayId, issueId, {
+          base_revision: autosaveRef.current.serverRevision,
+          client_revision: autosaveRef.current.clientRevision,
+          suggestion_id: chosen?.id ?? null,
+        });
+        reconcileAfterAccept(oldPlain, response.data, issueId);
+      } catch (error) {
+        if (error instanceof ApiClientError && error.status === 409) {
+          patchHover(issueId, {
+            accepting: false,
+            acceptError: "文档已更新，修改未应用。请重试。",
+          });
+          scheduleCheckForEdit();
+        } else {
+          patchHover(issueId, { accepting: false, acceptError: "修改未应用，请稍后重试。" });
+        }
+      }
+    },
+    [essayId, waitForSaved, reconcileAfterAccept, patchHover, scheduleCheckForEdit],
   );
 
   const acceptCorrection = useCallback(() => {
     const current = editorRef.current;
     const card = hoverRef.current;
-    if (!current || !card || !card.suggestions || card.suggestions.length === 0) {
+    if (
+      !current ||
+      !card ||
+      card.accepting ||
+      !card.suggestions ||
+      card.suggestions.length === 0
+    ) {
       return;
     }
     // ADR-029: accept the SELECTED suggestion (any alternative), not only
@@ -873,34 +917,19 @@ export function useGrammar({
       card.suggestions.find((s) => s.id === card.selectedSuggestionId) ??
       card.suggestions.find((s) => s.is_recommended) ??
       card.suggestions[0];
-    // ADR-034: live findings accept after save (no DB row yet).
+    // ADR-034/035: live findings accept via the atomic live-accept endpoint.
     if (card.live) {
       const item = getGrammarIssues(current.view).find((i) => i.issue.id === card.issueId);
       if (item) {
         void acceptLiveIssue(item, chosen ?? null);
+      } else {
+        patchHover(card.issueId, { acceptError: "该提示已更新，请重新悬浮后重试。" });
+        scheduleLiveCheck();
       }
       return;
     }
-    const save = autosaveRef.current;
-    if (save.status !== "saved") {
-      return;
-    }
-    const oldPlain = current.getText({ blockSeparator: BLOCK_SEPARATOR });
-    void acceptIssue(essayId, card.issueId, {
-      base_revision: save.serverRevision,
-      client_revision: save.clientRevision,
-      suggestion_id: chosen?.id ?? null,
-    })
-      .then((response) => reconcileAfterAccept(oldPlain, response.data, card.issueId))
-      .catch((error) => {
-        // ADR-027: a genuinely stale finding self-heals — close the card and
-        // re-check the sentence instead of failing silently.
-        if (error instanceof ApiClientError && error.status === 409) {
-          setHover(null);
-          scheduleCheckForEdit();
-        }
-      });
-  }, [essayId, acceptLiveIssue, reconcileAfterAccept, setHover, scheduleCheckForEdit]);
+    void acceptPersistedIssue(card, chosen ?? null);
+  }, [acceptLiveIssue, acceptPersistedIssue, patchHover, scheduleLiveCheck]);
 
   const ignore = useCallback(
     (issueId: string) => {
@@ -960,7 +989,7 @@ export function useGrammar({
       if (!card) {
         return;
       }
-      if (event.key === "Tab" && card.suggestions && card.suggestions.length > 0) {
+      if (event.key === "Tab" && !card.accepting && card.suggestions && card.suggestions.length > 0) {
         event.preventDefault();
         event.stopPropagation();
         acceptCorrection();

@@ -41,8 +41,10 @@ from app.modules.essays.service import get_essay
 from app.modules.grammar import rules
 from app.modules.grammar.models import IssueSuggestion, IssueTeaching, WritingIssue
 from app.modules.grammar.schemas import (
+    AcceptIssueRequest,
     GrammarCheckRequest,
     IssueValidationRequest,
+    LiveAcceptRequest,
     TeachingRequest,
 )
 from app.modules.learning import service as learning_service
@@ -238,13 +240,30 @@ def _deep_check_uncertain(
 _LIVE_ID_NAMESPACE = uuid.UUID("6f9619ff-8b86-d011-b42d-00c04fc964ff")
 
 
+# ADR-035: a misspelled word is only judgeable once it is finalized — the
+# writer may still be typing it. A following letter/digit/apostrophe/hyphen
+# means the token can still grow; whitespace or punctuation finalizes it.
+_WORD_CONTINUATION_CHARS = "'’-"
+
+
+def _spelling_word_finalized(text: str, end_offset: int) -> bool:
+    if end_offset >= len(text):
+        return False
+    ch = text[end_offset]
+    return not (ch.isalnum() or ch in _WORD_CONTINUATION_CHARS)
+
+
 def _live_check(essay_id: uuid.UUID, payload: GrammarCheckRequest) -> dict:
     """Word-like instant grammar: deterministic rule hits only, ephemeral.
 
     Offsets are absolute in the document (text_range.start + relative). No
     revision/text_range-vs-saved-doc validation: the text may be unsaved. No
     LLM call, no billing, no persistence — suggestions are exposed inline so
-    they display instantly; acceptance happens after save via the full check.
+    they display instantly; acceptance uses the atomic live-accept endpoint.
+
+    ADR-035 gating: an incomplete sentence is still being composed, so only
+    finalized-word spelling findings surface mid-sentence; grammar and other
+    categories wait until the sentence is complete (payload.sentence_complete).
     """
     start, end = payload.text_range.start, payload.text_range.end
     if end <= start:
@@ -254,6 +273,17 @@ def _live_check(essay_id: uuid.UUID, payload: GrammarCheckRequest) -> dict:
     for d in detected:
         if d.needs_llm:
             continue  # uncertain hits wait for the save-time LLM deep check
+        if d.category == "spelling":
+            # A complete span also finalizes its last word: a paragraph break
+            # ends the span before the separator, so the following character
+            # is not visible in the submitted text.
+            if not (
+                payload.sentence_complete
+                or _spelling_word_finalized(payload.text, d.end_offset)
+            ):
+                continue
+        elif not payload.sentence_complete:
+            continue  # never judge an incomplete sentence prematurely
         abs_start = start + d.start_offset
         abs_end = start + d.end_offset
         issue_id = uuid.uuid5(
@@ -618,6 +648,147 @@ def accept_issue_suggestion(
         "plain_text": new_text,
         "word_count": word_count,
     }
+
+
+def live_accept_issue(
+    db: Session, user: User, essay_id: uuid.UUID, payload: LiveAcceptRequest
+) -> dict:
+    """ADR-035: atomic acceptance of an ephemeral live finding.
+
+    Replaces the fragile save→full-check→reveal→accept chain: re-derive the
+    deterministic rule hit server-side (rule engine only, no LLM, no billing),
+    verify the chosen replacement is among the server-derived suggestions,
+    find-or-create the issue row, then reuse the atomic acceptance transaction
+    (revision increment, resolution, Edit Event, range-scoped reconciliation).
+    """
+    get_essay(db, user, essay_id)
+    session = _active_session(db, user, essay_id, payload.session_id)
+    if not enabled_features(session.mode).realtime_grammar:
+        raise ApiError(
+            403,
+            "RESOURCE_ACCESS_DENIED",
+            "Real-time grammar assistance is disabled in independent writing mode.",
+        )
+    document = essay_repository.lock_working_document(db, essay_id)
+    if document.server_revision != payload.base_revision:
+        raise ApiError(
+            409, "WORKING_DOCUMENT_CONFLICT", "The working document changed; reload and retry."
+        )
+    text = document.plain_text
+    start, end = payload.start_offset, payload.end_offset
+    anchor = payload.anchor_text
+    if end > len(text) or text[start:end] != anchor:
+        found = _nearest_occurrence(text, anchor, start)
+        if found is None:
+            raise ApiError(
+                409,
+                "STALE_AI_RESULT",
+                "The finding's anchor is no longer in the document; re-check first.",
+            )
+        start, end = found, found + len(anchor)
+    db.commit()  # close the read transaction before the rule-engine call
+
+    sentence, s_start = _sentence_around(text, start)
+    detected, _lt_ok = _run_rule_engine(sentence)
+    match = next(
+        (
+            d
+            for d in detected
+            if not d.needs_llm
+            and d.rule_id == payload.rule_id
+            and d.anchor_text == anchor
+            and s_start + d.start_offset == start
+            and s_start + d.end_offset == end
+        ),
+        None,
+    )
+    if match is None:
+        raise ApiError(
+            409,
+            "STALE_AI_RESULT",
+            "The finding no longer reproduces at this position; re-check the sentence.",
+        )
+    if payload.replacement not in match.suggestions:
+        raise ApiError(
+            422,
+            "VALIDATION_ERROR",
+            "The chosen replacement is not among the server-derived suggestions.",
+        )
+
+    # Short write transaction: re-check the revision after the network call,
+    # find-or-create the issue, then apply through the shared atomic path.
+    document = essay_repository.lock_working_document(db, essay_id)
+    if document.server_revision != payload.base_revision:
+        raise ApiError(
+            409, "WORKING_DOCUMENT_CONFLICT", "The working document changed during the check."
+        )
+    issue = db.execute(
+        select(WritingIssue).where(
+            WritingIssue.essay_id == essay_id,
+            WritingIssue.status == "detected",
+            WritingIssue.rule_id == match.rule_id,
+            WritingIssue.start_offset == start,
+            WritingIssue.end_offset == end,
+        )
+    ).scalars().first()
+    now = utcnow()
+    if issue is None:
+        issue = WritingIssue(
+            essay_id=essay_id,
+            user_id=user.id,
+            source_server_revision=document.server_revision,
+            category=match.category,
+            sub_category=match.sub_category,
+            source=match.source,
+            rule_id=match.rule_id,
+            severity=match.severity,
+            confidence=match.confidence,
+            start_offset=start,
+            end_offset=end,
+            offset_unit="unicode_codepoint",
+            anchor_text=match.anchor_text,
+            prefix_context=text[max(0, start - 60) : start],
+            suffix_context=text[end : end + 60],
+            short_explanation=match.short_explanation,
+            status="detected",
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(issue)
+        db.flush()
+        learning_service.record_weakness_occurrence(db, user.id, match.category, match.sub_category)
+        for order, suggestion_text in enumerate(match.suggestions):
+            db.add(
+                IssueSuggestion(
+                    issue_id=issue.id,
+                    suggested_text=suggestion_text,
+                    is_recommended=order == 0,
+                    sort_order=order,
+                    source="rule_engine",
+                    created_at=now,
+                )
+            )
+        db.flush()
+    suggestion = next(
+        (s for s in issue.suggestions if s.suggested_text == payload.replacement), None
+    )
+    if suggestion is None:
+        raise ApiError(
+            422,
+            "VALIDATION_ERROR",
+            "The chosen replacement is not among the server-derived suggestions.",
+        )
+    return accept_issue_suggestion(
+        db,
+        user,
+        essay_id,
+        issue.id,
+        AcceptIssueRequest(
+            base_revision=payload.base_revision,
+            client_revision=payload.client_revision,
+            suggestion_id=suggestion.id,
+        ),
+    )
 
 
 def _resolve_replacement_range(

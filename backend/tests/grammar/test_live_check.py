@@ -23,7 +23,9 @@ pytestmark = pytest.mark.skipif(
 TEXT = "He go to school yesterday."
 
 
-def live_check(client, headers, essay_id, session_id, text, *, revision=2, start=0):
+def live_check(
+    client, headers, essay_id, session_id, text, *, revision=2, start=0, sentence_complete=True
+):
     return client.post(
         f"/api/v1/essays/{essay_id}/grammar-check",
         json={
@@ -38,6 +40,7 @@ def live_check(client, headers, essay_id, session_id, text, *, revision=2, start
             },
             "context": {"paragraph_text": text},
             "live": True,
+            "sentence_complete": sentence_complete,
         },
         headers=headers,
     )
@@ -130,3 +133,109 @@ def test_live_foreign_session_rejected(client):
 
     response = live_check(client, intruder, essay["id"], session["id"], TEXT)
     assert response.status_code == 404
+
+
+# --- ADR-035: incomplete sentences are never judged prematurely -------------
+
+
+def test_live_incomplete_sentence_suppresses_grammar(client):
+    """Word + space mid-sentence must not produce a grammar verdict: the
+    writer is still composing (e.g. "He go…" on the way to "He goes…")."""
+    headers = auth_headers(client)
+    essay, session = setup_essay_with_text(client, headers)
+
+    response = live_check(
+        client, headers, essay["id"], session["id"], "He go to school", sentence_complete=False
+    )
+    assert response.status_code == 200, response.text
+    issues = response.json()["data"]["issues"]
+    assert [i for i in issues if i["category"] != "spelling"] == []
+
+
+def test_live_complete_sentence_shows_grammar(client):
+    headers = auth_headers(client)
+    essay, session = setup_essay_with_text(client, headers)
+
+    response = live_check(
+        client, headers, essay["id"], session["id"], "He go to school", sentence_complete=True
+    )
+    assert response.status_code == 200, response.text
+    issues = response.json()["data"]["issues"]
+    assert any(i["anchor_text"] == "go" and i["category"] == "grammar" for i in issues)
+
+
+def test_live_sentence_complete_defaults_to_false(client):
+    """Omitting the flag (older clients) must not judge incomplete input."""
+    headers = auth_headers(client)
+    essay, session = setup_essay_with_text(client, headers)
+
+    response = client.post(
+        f"/api/v1/essays/{essay['id']}/grammar-check",
+        json={
+            "session_id": session["id"],
+            "server_revision": 2,
+            "client_revision": 1,
+            "text": "He go to school",
+            "text_range": {"start": 0, "end": 15, "offset_unit": "unicode_codepoint"},
+            "live": True,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    issues = response.json()["data"]["issues"]
+    assert [i for i in issues if i["category"] != "spelling"] == []
+
+
+def test_live_spelling_finalized_word_shows_mid_sentence(client):
+    """A misspelled word followed by a space is finalized — Word-like instant
+    spelling feedback even though the sentence is incomplete."""
+    headers = auth_headers(client)
+    essay, session = setup_essay_with_text(client, headers)
+
+    response = live_check(
+        client, headers, essay["id"], session["id"], "I recieve the letter", sentence_complete=False
+    )
+    assert response.status_code == 200, response.text
+    issues = response.json()["data"]["issues"]
+    assert any(i["category"] == "spelling" and i["anchor_text"] == "recieve" for i in issues)
+
+
+def test_live_spelling_unfinalized_word_suppressed(client):
+    """Cursor right after the word (no space yet): the writer may still be
+    typing it, so no spelling verdict."""
+    headers = auth_headers(client)
+    essay, session = setup_essay_with_text(client, headers)
+
+    response = live_check(
+        client, headers, essay["id"], session["id"], "I recieve", sentence_complete=False
+    )
+    assert response.status_code == 200, response.text
+    issues = response.json()["data"]["issues"]
+    assert all(i["anchor_text"] != "recieve" for i in issues)
+
+
+def test_live_spelling_finalized_by_punctuation(client):
+    headers = auth_headers(client)
+    essay, session = setup_essay_with_text(client, headers)
+
+    response = live_check(
+        client, headers, essay["id"], session["id"], "I recieve.", sentence_complete=False
+    )
+    assert response.status_code == 200, response.text
+    issues = response.json()["data"]["issues"]
+    assert any(i["category"] == "spelling" and i["anchor_text"] == "recieve" for i in issues)
+
+
+def test_live_spelling_last_word_of_complete_span_shows(client):
+    """Paragraph break: the span ends before the separator, so the last word
+    has no following character in the submitted text — a complete span still
+    finalizes it."""
+    headers = auth_headers(client)
+    essay, session = setup_essay_with_text(client, headers)
+
+    response = live_check(
+        client, headers, essay["id"], session["id"], "I recieve", sentence_complete=True
+    )
+    assert response.status_code == 200, response.text
+    issues = response.json()["data"]["issues"]
+    assert any(i["category"] == "spelling" and i["anchor_text"] == "recieve" for i in issues)

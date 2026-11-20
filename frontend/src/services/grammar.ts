@@ -8,6 +8,7 @@ import type {
   IssueResponse,
   IssueValidationRequest,
   IssueValidationResponse,
+  LiveAcceptRequest,
   RevealResponse,
   TeachingRequest,
   TeachingResponse,
@@ -81,6 +82,16 @@ export function acceptIssue(
   payload: AcceptIssueRequest,
 ): Promise<AcceptIssueResponse> {
   return apiFetch<AcceptIssueResponse>(`/essays/${essayId}/issues/${issueId}/accept`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function liveAccept(
+  essayId: string,
+  payload: LiveAcceptRequest,
+): Promise<AcceptIssueResponse> {
+  return apiFetch<AcceptIssueResponse>(`/essays/${essayId}/issues/live-accept`, {
     method: "POST",
     body: payload,
   });

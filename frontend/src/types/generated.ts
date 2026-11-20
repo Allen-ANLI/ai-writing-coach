@@ -1,4 +1,4 @@
-// AUTO-GENERATED from contracts/openapi.yaml (info.version 1.1.1).
+// AUTO-GENERATED from contracts/openapi.yaml (info.version 1.13.0).
 // Do not edit by hand: run `npm run generate:api` after contract changes.
 // Open response bodies the contract does not define are mirrored in ./api.ts.
 
@@ -65,16 +65,17 @@ export interface GrammarIssue {
   "suggestions"?: {
     "id"?: string;
     "display_text"?: string;
-    "answer_revealed"?: false;
+    "answer_revealed"?: boolean;
   }[];
   "status"?: "detected" | "resolved" | "ignored" | "stale";
+  "live"?: boolean;
 }
 
 export interface GrammarCheckResponse {
   "data": {
     "server_revision"?: number;
     "client_revision"?: number;
-    "check_status"?: "completed" | "partial";
+    "check_status"?: "completed" | "partial" | "live";
     "issues"?: GrammarIssue[];
   };
 }
@@ -87,6 +88,23 @@ export interface IssueValidationRequest {
   "plain_text": string;
   "word_count"?: number;
   "modified_range": TextRange;
+}
+
+export interface IssueAcceptRequest {
+  "base_revision": number;
+  "client_revision": number;
+  "suggestion_id"?: string | null;
+}
+
+export interface LiveAcceptRequest {
+  "session_id": string;
+  "base_revision": number;
+  "client_revision": number;
+  "rule_id": string;
+  "start_offset": number;
+  "end_offset": number;
+  "anchor_text": string;
+  "replacement": string;
 }
 
 export interface TeachingRequest {

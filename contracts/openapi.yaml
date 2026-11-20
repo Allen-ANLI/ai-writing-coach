@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Writing Coach API
-  version: 1.12.0
+  version: 1.13.0
   description: Final API contract aligned with Database ERD V1.2. Working documents use server_revision; immutable
     snapshots use version_no. Refresh tokens are HttpOnly cookies. 1.1.1 adds the additive
     infrastructure endpoint GET /health (200 database reachable, 503 database unavailable);
@@ -46,7 +46,13 @@ info:
     no persistence); GrammarIssue gains live and check_status gains "live"; live
     suggestions are revealed inline (answer_revealed may be true). planner_chat v7
     / outline_generate v6 emit ordered-list numbering (1. **短概括**) in outline_md;
-    additive only.
+    additive only. 1.13.0 (ADR-035) adds POST /essays/{essay_id}/issues/live-accept
+    (atomic acceptance of an ephemeral live finding — the server re-derives the
+    deterministic rule hit, verifies the chosen replacement among its own
+    suggestions, persists and applies in one transaction — no LLM); grammar-check
+    gains an optional sentence_complete flag — live mode only surfaces non-spelling
+    findings on complete sentences, spelling stays instant once the word is
+    finalized (an incomplete sentence is never judged prematurely); additive only.
 servers:
 - url: https://api.example.com/api/v1
   description: Production placeholder
@@ -947,7 +953,14 @@ paths:
                     ADR-034 Word-like instant check: deterministic rule engine only on
                     the current (possibly unsaved) cursor sentence. No revision/text_range
                     gate, no LLM, no persistence; issues are ephemeral (live=true) with
-                    suggestions revealed inline. Acceptance happens after save.
+                    suggestions revealed inline. Acceptance uses issues/live-accept.
+                sentence_complete:
+                  type: boolean
+                  description: >-
+                    ADR-035: whether the checked sentence is complete (terminator typed
+                    or paragraph break). In live mode, non-spelling findings surface only
+                    when true; spelling findings surface once the misspelled word is
+                    finalized (followed by whitespace/punctuation), even mid-sentence.
               required:
               - session_id
               - server_revision
@@ -1107,6 +1120,45 @@ paths:
         schema:
           type: string
       - $ref: '#/components/parameters/IdempotencyKey'
+  /essays/{essay_id}/issues/live-accept:
+    post:
+      tags:
+      - Grammar
+      summary: Atomically accept an ephemeral live finding (server-derived correction only)
+      description: Added 1.13.0 (ADR-035). Re-derives the deterministic rule hit server-side
+        (rule engine only, no LLM, no billing), verifies the chosen replacement is among
+        the server-derived suggestions, find-or-creates the issue row and applies the
+        correction in one transaction with revision increment, issue resolution and an
+        Edit Event. The client only picks an option the server already offered; free
+        replacement text is rejected. 409 on revision conflict or a finding that no
+        longer reproduces.
+      responses:
+        '200':
+          description: Correction applied; returns the updated document
+        '401':
+          description: Authentication required or token invalid
+        '403':
+          description: Forbidden
+        '404':
+          description: Resource not found
+        '409':
+          description: Revision conflict, or the finding no longer reproduces
+        '422':
+          description: Request validation error (e.g. replacement not among server suggestions)
+        '429':
+          description: Rate limit exceeded
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LiveAcceptRequest'
+      parameters:
+      - name: essay_id
+        in: path
+        required: true
+        schema:
+          type: string
   /essays/{essay_id}/issues/{issue_id}/reveal:
     post:
       tags:
@@ -3242,6 +3294,48 @@ components:
       required:
       - base_revision
       - client_revision
+    LiveAcceptRequest:
+      type: object
+      description: Added 1.13.0 (ADR-035). Accepts an ephemeral live finding; the server
+        re-derives the rule hit and only applies a replacement among its own suggestions.
+        Offsets are unicode_codepoint, absolute in the working document.
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        base_revision:
+          type: integer
+          minimum: 1
+        client_revision:
+          type: integer
+          minimum: 0
+        rule_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+        start_offset:
+          type: integer
+          minimum: 0
+        end_offset:
+          type: integer
+          minimum: 1
+        anchor_text:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        replacement:
+          type: string
+          minLength: 1
+          maxLength: 2000
+      required:
+      - session_id
+      - base_revision
+      - client_revision
+      - rule_id
+      - start_offset
+      - end_offset
+      - anchor_text
+      - replacement
     TeachingRequest: *id004
     EvaluationCreate: *id005
     RewriteAccept: *id006

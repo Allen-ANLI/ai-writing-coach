@@ -334,12 +334,19 @@ test("records dialog reviews grammar errors and expression optimizations (ADR-02
   await expect(page.getByTestId("expression-records")).toBeVisible();
 });
 
-test("incomplete input is live-checked instantly like Word (ADR-034)", async ({ page }) => {
+test("incomplete sentence shows no grammar findings; completion triggers live check (ADR-035)", async ({
+  page,
+}) => {
   await openEditor(page);
   await page.getByTestId("editor-content").click();
-  // No sentence-final punctuation: the deterministic agreement error must
-  // still show immediately (Word-like live check, no completion/save gate).
+  // ADR-035: word + space mid-sentence must NOT produce a grammar verdict —
+  // the writer is still composing the sentence.
   await page.keyboard.type("He go to school");
+  await page.waitForTimeout(1500); // beyond the 300ms live debounce
+  await expect(page.locator(".awc-issue")).toHaveCount(0);
+
+  // Completing the sentence triggers the instant live check (no save gate).
+  await page.keyboard.type(".");
   const liveIssue = page.locator('.awc-issue[data-live="true"]').first();
   await expect(liveIssue).toBeVisible({ timeout: 10_000 });
   await expect(liveIssue).toHaveText("go");
@@ -350,4 +357,31 @@ test("incomplete input is live-checked instantly like Word (ADR-034)", async ({ 
   await expect(page.getByTestId("revealed-answer")).toHaveText(/went|goes/, { timeout: 10_000 });
   // Live findings have no persisted issue yet → no teaching button.
   await expect(page.getByTestId("request-teaching")).toHaveCount(0);
+});
+
+test("live spelling shows after word + space and accepts mid-sentence (ADR-035)", async ({
+  page,
+}) => {
+  await openEditor(page);
+  await page.getByTestId("editor-content").click();
+  // A finalized misspelled word (followed by a space) gets instant spelling
+  // feedback even though the sentence has no terminator yet.
+  await page.keyboard.type("I recieve ");
+  const spellingIssue = page.locator('.awc-issue--spelling[data-live="true"]').first();
+  await expect(spellingIssue).toBeVisible({ timeout: 10_000 });
+  await expect(spellingIssue).toHaveText("recieve");
+
+  await spellingIssue.hover();
+  await expect(page.getByTestId("grammar-hover-card")).toBeVisible({ timeout: 10_000 });
+  const options = page.getByTestId("suggestion-options");
+  await expect(options).toBeVisible({ timeout: 10_000 });
+  await options.getByRole("button", { name: /receive/ }).first().click();
+
+  // Accept while the sentence is still incomplete and autosave may be
+  // pending — the atomic live-accept path must apply the correction.
+  await page.getByTestId("accept-correction").click();
+  await expect(page.getByTestId("grammar-hover-card")).toBeHidden({ timeout: 15_000 });
+  const content = await page.getByTestId("editor-content").textContent();
+  expect(content).toContain("I receive");
+  expect(content).not.toContain("recieve");
 });

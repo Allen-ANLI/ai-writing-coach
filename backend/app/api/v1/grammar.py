@@ -19,6 +19,7 @@ from app.modules.grammar.schemas import (
     IssueResponse,
     IssueValidationRequest,
     IssueValidationResponse,
+    LiveAcceptRequest,
     RevealResponse,
     TeachingRequest,
     TeachingResponse,
@@ -65,6 +66,19 @@ def validate_issue(
 ) -> IssueValidationResponse:
     data = service.validate_issue(db, user, essay_id, payload)
     return IssueValidationResponse.model_validate(
+        {"data": data, "meta": {"request_id": new_request_id()}}
+    )
+
+
+@router.post("/essays/{essay_id}/issues/live-accept", response_model=AcceptIssueResponse)
+def live_accept_issue(
+    essay_id: uuid.UUID,
+    payload: LiveAcceptRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AcceptIssueResponse:
+    data = service.live_accept_issue(db, user, essay_id, payload)
+    return AcceptIssueResponse.model_validate(
         {"data": data, "meta": {"request_id": new_request_id()}}
     )
 

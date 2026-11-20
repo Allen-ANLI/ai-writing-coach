@@ -147,14 +147,20 @@ document is missing, do not invent its contents; report the missing dependency.
 2. The left panel is a **conversational planner chat** with the agent: agree on
    the outline before writing, revise it mid-writing. No Plan button, no
    document-outline tree in the editor. Confirmed outlines drive inline hints.
-3. Grammar checking is automatic on sentence completion (debounce +
-   cancellation); no manual check button, no numbered errors. Incomplete
-   input is never checked prematurely. The checked sentence is the completed
-   sentence at/before the cursor; findings merge per range so multi-sentence
-   underlines coexist (ADR-025). Rule-first still applies, plus a
-   whole-sentence LLM scan for errors rules miss (offsets validated, quota
-   metered). Opening the editor auto-creates an assisted session (unless the
-   user explicitly cancelled one), so feedback works without manual setup.
+3. Grammar checking is automatic (debounce + cancellation); no manual check
+   button, no numbered errors. Incomplete input is never judged prematurely
+   (ADR-035): a Word-like live rule-only check (ADR-034) surfaces spelling
+   findings once the misspelled word is finalized (followed by whitespace or
+   punctuation), while grammar and other categories wait for sentence
+   completion (terminator or paragraph break; `sentence_complete` flag). The
+   save-gated full check targets the completed sentence at/before the cursor
+   and adds a whole-sentence LLM scan for errors rules miss (offsets
+   validated, quota metered); findings merge per range so multi-sentence
+   underlines coexist (ADR-025). Accepting a live finding uses the atomic
+   `issues/live-accept` endpoint (server re-derives the rule hit, no LLM);
+   acceptance failures are visible and retryable, never silent. Opening the
+   editor auto-creates an assisted session (unless the user explicitly
+   cancelled one), so feedback works without manual setup.
 4. Hovering an underlined error floats a card (slightly transparent surface)
    that shows the short explanation and the **correction directly (no blur, no
    reveal click)**. The detailed explanation is requested via an explicit

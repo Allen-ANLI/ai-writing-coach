@@ -23,6 +23,9 @@ export interface HoverCardState {
   teachingError: string | null;
   /** ADR-034: ephemeral live finding — pre-revealed, no DB teaching available. */
   live?: boolean;
+  /** ADR-035: acceptance in flight / visible failure feedback (never silent). */
+  accepting?: boolean;
+  acceptError?: string | null;
 }
 
 export function GrammarHoverCard({
@@ -108,17 +111,32 @@ export function GrammarHoverCard({
               type="button"
               data-testid="accept-correction"
               onClick={onAccept}
-              className="rounded-md bg-emerald-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-emerald-700"
+              disabled={state.accepting}
+              className="rounded-md bg-emerald-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
             >
-              接受修改
+              {state.accepting ? "应用中…" : "接受修改"}
             </button>
             <button
               type="button"
               data-testid="ignore-issue"
               onClick={onIgnore}
-              className="rounded-md border border-zinc-300 px-2 py-0.5 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+              disabled={state.accepting}
+              className="rounded-md border border-zinc-300 px-2 py-0.5 text-xs text-zinc-500 hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
             >
               忽略
+            </button>
+          </div>
+        )}
+        {state.acceptError && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-2" data-testid="accept-error">
+            <p className="text-xs text-red-600 dark:text-red-400">{state.acceptError}</p>
+            <button
+              type="button"
+              data-testid="retry-accept"
+              onClick={onAccept}
+              className="rounded border border-zinc-300 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              重试
             </button>
           </div>
         )}
