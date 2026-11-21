@@ -58,6 +58,7 @@ class OpenAiCompatEmbeddingProvider:
                 headers={"Authorization": f"Bearer {settings.embedding_api_key}"},
                 json={"model": settings.embedding_model, "input": texts},
                 timeout=settings.embedding_timeout_seconds,
+                trust_env=False,
             )
             if response.status_code != 200:
                 raise ApiError(

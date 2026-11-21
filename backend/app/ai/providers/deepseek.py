@@ -96,6 +96,10 @@ class DeepSeekProvider:
                     headers={"Authorization": f"Bearer {settings.llm_api_key}"},
                     json=body,
                     timeout=settings.llm_timeout_seconds,
+                    # Domestic API: never route through a system proxy (httpx
+                    # reads the Windows registry proxy, which may be configured
+                    # but not running — requests then fail with WinError 10061).
+                    trust_env=False,
                 )
                 latency_ms = int((time.monotonic() - started) * 1000)
                 if response.status_code >= 500:
@@ -149,6 +153,7 @@ class DeepSeekProvider:
                     },
                     json=body,
                     timeout=settings.llm_timeout_seconds,
+                    trust_env=False,
                 )
                 latency_ms = int((time.monotonic() - started) * 1000)
                 if response.status_code >= 500:
