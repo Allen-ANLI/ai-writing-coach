@@ -293,7 +293,7 @@ def test_model_essay_endpoint_bootstraps_legacy_outline(client, db):
 
     logs = db.query(AiUsageLog).filter(AiUsageLog.feature == "model_essay_generate").all()
     assert len(logs) == 1
-    assert logs[0].prompt_version == "v3"
+    assert logs[0].prompt_version == "v4"  # ADR-037: annotations extracted at generation
     assert logs[0].status == "success"
 
 

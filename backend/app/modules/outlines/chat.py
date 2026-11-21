@@ -86,6 +86,10 @@ def _create_draft(
     outline.model_essay = result.model_essay
     outline.model_essay_zh = result.model_essay_zh
     outline.outline_md = result.outline.outline_md
+    # ADR-037: per-sentence expressions + pattern for the ghost-hint insight.
+    outline.model_essay_annotations = service.validate_annotations(
+        result.sentence_annotations, result.model_essay
+    )
     return outline
 
 
@@ -108,7 +112,8 @@ def send_message(
     db.commit()  # no transaction held during the LLM call
 
     # ADR-034: outline_md uses ordered-list numbering (1. **短概括**…).
-    prompt = get_prompt("planner_chat", "v7")
+    # ADR-037: v8 also extracts per-sentence expressions + pattern annotations.
+    prompt = get_prompt("planner_chat", "v8")
     user_prompt = prompt.user_template.format(
         question_prompt=essay.question_prompt or "(free writing)",
         current_outline=service.outline_json(confirmed),

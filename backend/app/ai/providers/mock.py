@@ -174,6 +174,71 @@ def _mock_translation(user: str):
     )
 
 
+def _mock_sentence_annotations() -> list[dict]:
+    """ADR-037: deterministic annotations 1:1 with the mock model essay's
+    three sentences; every expression is a verbatim substring of its sentence
+    so server-side grounding validation passes."""
+    return [
+        {
+            "expressions": [
+                {
+                    "text": "public transport",
+                    "meaning": "公共交通",
+                    "usage": "泛指公交、地铁等公共出行方式",
+                },
+                {
+                    "text": "should be free",
+                    "meaning": "应当免费",
+                    "usage": "用情态被动结构提出政策主张",
+                },
+            ],
+            "pattern": {
+                "label": "情态动词被动",
+                "skeleton": "主语 + should be + 形容词/过去分词…",
+                "explanation": "用 should be 提出建议或主张，语气委婉而明确。",
+            },
+        },
+        {
+            "expressions": [
+                {
+                    "text": "private car use",
+                    "meaning": "私家车使用",
+                    "usage": "讨论交通方式时的常见搭配",
+                },
+                {
+                    "text": "Free buses and trains",
+                    "meaning": "免费的公交与地铁",
+                    "usage": "并列主语覆盖多个对象",
+                },
+            ],
+            "pattern": {
+                "label": "并列主语 SVO",
+                "skeleton": "主语1 + and + 主语2 + 动词 + 宾语",
+                "explanation": "并列主语使论证覆盖多个对象，谓语用复数形式。",
+            },
+        },
+        {
+            "expressions": [
+                {
+                    "text": "cuts air pollution",
+                    "meaning": "减少空气污染",
+                    "usage": "cut 表示削减，环保话题常用",
+                },
+                {
+                    "text": "saves commuters money",
+                    "meaning": "为通勤者省钱",
+                    "usage": "save sb money 双宾语结构",
+                },
+            ],
+            "pattern": {
+                "label": "并列谓语",
+                "skeleton": "主语 + also + 动词1… + and + 动词2…",
+                "explanation": "并列谓语在一句中叠加两个好处，论证更紧凑。",
+            },
+        },
+    ]
+
+
 class MockProvider:
     def complete_json(
         self, *, system: str, user: str, response_model: type[BaseModel]
@@ -184,6 +249,7 @@ class MockProvider:
             PlannerChatResult,
             PolishSentenceResult,
             PolishVerifyResult,
+            SentenceAnnotation,
             SentenceCheckResult,
             TranslationResult,
         )
@@ -209,6 +275,7 @@ class MockProvider:
                     "免费的公交和地铁能减少私家车使用。"
                     "这还能减少空气污染，并为通勤者省钱。"
                 ),
+                sentence_annotations=_mock_sentence_annotations(),
             )
         else:
             instance = build_mock_instance(response_model, user)
@@ -230,6 +297,10 @@ class MockProvider:
                             "免费的公交和地铁能减少私家车使用。"
                             "这还能减少空气污染，并为通勤者省钱。"
                         ),
+                        "sentence_annotations": [
+                            SentenceAnnotation.model_validate(a)
+                            for a in _mock_sentence_annotations()
+                        ],
                     }
                 )
                 if instance.outline is not None:

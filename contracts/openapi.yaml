@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Writing Coach API
-  version: 1.14.0
+  version: 1.15.0
   description: Final API contract aligned with Database ERD V1.2. Working documents use server_revision; immutable
     snapshots use version_no. Refresh tokens are HttpOnly cookies. 1.1.1 adds the additive
     infrastructure endpoint GET /health (200 database reachable, 503 database unavailable);
@@ -58,7 +58,13 @@ info:
     judge), and every candidate option is substitution-re-checked by the SAME judge
     (polish_verify v1) before being offered or persisted; the judge re-checks its own
     flag and judges the option inserted back into the sentence; verify failure fails
-    closed; behavioral, same endpoint and schemas; additive only.
+    closed; behavioral, same endpoint and schemas; additive only. 1.15.0 (ADR-037)
+    outline responses gain model_essay_annotations — per-sentence expressions
+    (verbatim from the English model sentence, with Chinese meaning/usage) and
+    sentence pattern (label/skeleton/explanation), extracted at model-essay
+    generation time (planner_chat v8 / model_essay_generate v4), 1:1 with
+    model_essay sentences and server-validated (misaligned output degrades to
+    null); the ghost hint shows them on demand with zero LLM cost; additive only.
 servers:
 - url: https://api.example.com/api/v1
   description: Production placeholder

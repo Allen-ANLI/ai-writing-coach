@@ -1,4 +1,4 @@
-// AUTO-GENERATED from contracts/openapi.yaml (info.version 1.14.0).
+// AUTO-GENERATED from contracts/openapi.yaml (info.version 1.15.0).
 // Do not edit by hand: run `npm run generate:api` after contract changes.
 // Open response bodies the contract does not define are mirrored in ./api.ts.
 

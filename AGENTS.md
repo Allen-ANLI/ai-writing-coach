@@ -179,6 +179,10 @@ document is missing, do not invent its contents; report the missing dependency.
    count. On sentence completion the planner/progress endpoint judges
    fulfillment — fulfilled advances to the next idea, otherwise the hint stays.
    The on/off switch lives in the planner panel (preferences.ghost_hints_enabled).
+   Each hint can open a 表达·句式 card with the expressions and sentence pattern
+   pre-extracted from the matching English model-essay sentence at generation
+   time (ADR-037: 1:1 aligned, server-validated, zero LLM cost at hint time);
+   clicking an expression adds it to the knowledge base.
    Guidance only: never persisted, never counted, never auto-inserted.
 6a. Expression polish is fragment-level and automatic (ADR-026): sentence
    completion or editing a completed sentence triggers a scan; unnatural

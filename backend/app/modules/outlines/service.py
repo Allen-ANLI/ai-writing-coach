@@ -10,6 +10,7 @@ therefore carries a consistent model essay.
 """
 
 import json
+import re
 import uuid
 
 from sqlalchemy import func, select
@@ -60,6 +61,29 @@ def outline_json(outline: WritingOutline | None) -> str:
     )
 
 
+def validate_annotations(annotations: list | None, model_essay: str | None) -> list[dict] | None:
+    """ADR-037: store annotations only when they align 1:1 with the essay's
+    sentences and every expression is a verbatim substring of its sentence.
+    Misaligned or ungrounded output degrades to None (never blocks generation)."""
+    if not annotations or not model_essay:
+        return None
+    sentences = [s for s in re.split(r"(?<=[.!?])\s+", model_essay.strip()) if s.strip()]
+    if len(sentences) != len(annotations):
+        return None
+    out: list[dict] = []
+    for sentence, annotation in zip(sentences, annotations, strict=True):
+        data = annotation.model_dump() if hasattr(annotation, "model_dump") else dict(annotation)
+        lowered = sentence.lower()
+        expressions = [
+            e for e in data.get("expressions", []) if e.get("text", "").lower() in lowered
+        ]
+        if not expressions:
+            return None
+        data["expressions"] = expressions
+        out.append(data)
+    return out
+
+
 def _error_usage() -> LlmUsage:
     settings = get_settings()
     return LlmUsage(
@@ -88,7 +112,7 @@ def ensure_model_essay(db: Session, user: User, outline_id: uuid.UUID) -> Writin
     billing_service.guard_ai_call(db, user.id)
     db.commit()  # no transaction held during the LLM call
 
-    prompt = get_prompt("model_essay_generate", "v3")
+    prompt = get_prompt("model_essay_generate", "v4")
     user_prompt = prompt.user_template.format(
         question_prompt=question_prompt, thesis=thesis, outline=structure
     )
@@ -111,6 +135,9 @@ def ensure_model_essay(db: Session, user: User, outline_id: uuid.UUID) -> Writin
     outline = get_outline(db, user, outline_id)
     outline.model_essay = result.model_essay
     outline.model_essay_zh = result.model_essay_zh
+    outline.model_essay_annotations = validate_annotations(
+        result.sentence_annotations, result.model_essay
+    )
     outline.updated_at = utcnow()
     llm.record_usage(
         db,
@@ -193,9 +220,11 @@ def patch_outline(
         outline.thesis_statement = payload.thesis_statement
     # ADR-032: editing the outline expires essay/translation/markdown;
     # confirmation regenerates a matching essay so guidance stays consistent.
+    # ADR-037: annotations share the essay's lifecycle.
     outline.model_essay = None
     outline.model_essay_zh = None
     outline.outline_md = None
+    outline.model_essay_annotations = None
     outline.updated_at = utcnow()
     db.commit()
     db.refresh(outline)
@@ -256,9 +285,11 @@ def create_node(
     )
     db.add(node)
     # ADR-032: outline changed — essay, translation and markdown all expire.
+    # ADR-037: annotations share the essay's lifecycle.
     outline.model_essay = None
     outline.model_essay_zh = None
     outline.outline_md = None
+    outline.model_essay_annotations = None
     outline.updated_at = utcnow()
     db.commit()
     db.refresh(node)
@@ -285,9 +316,11 @@ def patch_node(
     if payload.sort_order is not None:
         node.sort_order = payload.sort_order
     # ADR-032: outline changed — essay, translation and markdown all expire.
+    # ADR-037: annotations share the essay's lifecycle.
     outline.model_essay = None
     outline.model_essay_zh = None
     outline.outline_md = None
+    outline.model_essay_annotations = None
     outline.updated_at = utcnow()
     db.commit()
     db.refresh(node)
@@ -300,9 +333,11 @@ def delete_node(db: Session, user: User, outline_id: uuid.UUID, node_id: uuid.UU
     node = _get_node(db, outline, node_id)
     db.delete(node)
     # ADR-032: outline changed — essay, translation and markdown all expire.
+    # ADR-037: annotations share the essay's lifecycle.
     outline.model_essay = None
     outline.model_essay_zh = None
     outline.outline_md = None
+    outline.model_essay_annotations = None
     outline.updated_at = utcnow()
     db.commit()
 

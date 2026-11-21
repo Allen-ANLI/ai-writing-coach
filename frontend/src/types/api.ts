@@ -884,6 +884,24 @@ export interface OutlineNodeData {
   sort_order: number;
 }
 
+/** ADR-037: per-sentence learning annotations, 1:1 with model_essay sentences. */
+export interface SentenceExpressionAnnotation {
+  text: string;
+  meaning: string;
+  usage: string;
+}
+
+export interface SentencePatternAnnotation {
+  label: string;
+  skeleton: string;
+  explanation: string;
+}
+
+export interface SentenceAnnotation {
+  expressions: SentenceExpressionAnnotation[];
+  pattern: SentencePatternAnnotation;
+}
+
 export interface OutlineData {
   id: string;
   essay_id: string;
@@ -893,6 +911,8 @@ export interface OutlineData {
   model_essay: string | null;
   model_essay_zh: string | null;
   outline_md: string | null;
+  /** ADR-037: null for legacy outlines or when alignment validation dropped them. */
+  model_essay_annotations: SentenceAnnotation[] | null;
   source_context: Record<string, unknown>;
   workflow_id: string | null;
   created_at: string;

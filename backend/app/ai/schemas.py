@@ -306,6 +306,37 @@ class OutlineGenerationResult(BaseModel):
     outline_md: str | None = Field(default=None, max_length=20000)
 
 
+class SentenceExpressionAnnotation(BaseModel):
+    """ADR-037: one learnable expression drawn VERBATIM from a model-essay
+    sentence, shown alongside the matching ghost hint."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    text: str = Field(min_length=1, max_length=200)
+    meaning: str = Field(min_length=1, max_length=200)
+    usage: str = Field(min_length=1, max_length=300)
+
+
+class SentencePatternAnnotation(BaseModel):
+    """ADR-037: the sentence pattern (句式) of one model-essay sentence."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    label: str = Field(min_length=1, max_length=50)
+    skeleton: str = Field(min_length=1, max_length=300)
+    explanation: str = Field(min_length=1, max_length=300)
+
+
+class SentenceAnnotation(BaseModel):
+    """ADR-037: per-sentence learning annotations, 1:1 with model_essay
+    sentences (same order, never merged/split)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    expressions: list[SentenceExpressionAnnotation] = Field(min_length=1, max_length=4)
+    pattern: SentencePatternAnnotation
+
+
 class PlannerChatResult(BaseModel):
     """Conversational planner turn (ADR-024/032): chat reply plus, for
     propose/revise, the ENGLISH model essay, its sentence-aligned CHINESE
@@ -318,6 +349,9 @@ class PlannerChatResult(BaseModel):
     outline: OutlineGenerationResult | None = None
     model_essay: str | None = Field(default=None, max_length=20000)
     model_essay_zh: str | None = Field(default=None, max_length=20000)
+    # ADR-037: optional so older prompt versions stay valid; server validates
+    # 1:1 alignment before storing (misaligned output degrades to None).
+    sentence_annotations: list[SentenceAnnotation] | None = Field(default=None, max_length=100)
 
 
 class ModelEssayResult(BaseModel):
@@ -329,6 +363,8 @@ class ModelEssayResult(BaseModel):
 
     model_essay: str = Field(min_length=1, max_length=20000)
     model_essay_zh: str = Field(min_length=1, max_length=20000)
+    # ADR-037: per-sentence expressions + pattern (optional, see above).
+    sentence_annotations: list[SentenceAnnotation] | None = Field(default=None, max_length=100)
 
 
 class StudySuggestion(BaseModel):

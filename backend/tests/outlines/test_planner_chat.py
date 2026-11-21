@@ -296,7 +296,7 @@ def test_stray_llm_fields_are_tolerated(client, monkeypatch):
     assert "title_note" not in paragraph
 
 
-def test_planner_chat_uses_prompt_v7(client, db):
+def test_planner_chat_uses_prompt_v8(client, db):
     headers = auth_headers(client)
     essay = create_essay(client, headers)
     # Real mock provider (not monkeypatched): deterministic propose.
@@ -317,9 +317,11 @@ def test_planner_chat_uses_prompt_v7(client, db):
     en_count = len(re.findall(r"[.!?]", outline["model_essay"]))
     zh_count = len(re.findall(r"[。！？]", outline["model_essay_zh"]))
     assert en_count == zh_count
+    # ADR-037: per-sentence annotations aligned 1:1 with the English essay.
+    assert len(outline["model_essay_annotations"]) == en_count
 
     from app.modules.analytics.models import AiUsageLog
 
     logs = db.query(AiUsageLog).filter(AiUsageLog.feature == "planner_chat").all()
     assert len(logs) == 1
-    assert logs[0].prompt_version == "v7"
+    assert logs[0].prompt_version == "v8"

@@ -97,6 +97,55 @@ test("chat planner proposes an outline; confirmation drives ghost hints", async 
   });
 });
 
+test("ghost insight card shows pre-extracted expressions + pattern; click adds to KB (ADR-037)", async ({
+  page,
+}) => {
+  await openNewEssay(page, "Ghost insight essay");
+  await page.getByTestId("planner-input").fill("我同意大城市公共交通应该免费。");
+  await page.getByTestId("planner-send").click();
+  await expect(page.getByTestId("planner-outline-card").first()).toBeVisible({ timeout: 20_000 });
+  await page.getByTestId("confirm-outline").first().click();
+  await expect(page.getByTestId("planner-outline-card").first()).toContainText("已确认", {
+    timeout: 15_000,
+  });
+
+  await page.getByTestId("editor-content").click();
+  await expect(page.getByTestId("ghost-hint")).toBeVisible({ timeout: 15_000 });
+
+  // 打开注释卡：注释在范文生成时预提取，打开零 LLM 调用。
+  await page.getByTestId("ghost-insight-open").click();
+  const insight = page.getByTestId("ghost-insight-card");
+  await expect(insight).toBeVisible({ timeout: 10_000 });
+  await expect(insight).toContainText("第 1 句");
+  const expressions = page.getByTestId("ghost-insight-expressions");
+  await expect(expressions).toContainText("public transport");
+  await expect(expressions).toContainText("公共交通");
+  const pattern = page.getByTestId("ghost-insight-pattern");
+  await expect(pattern).toContainText("情态动词被动");
+  await expect(pattern).toContainText("should be");
+
+  // 点击表达 → 加入知识库。
+  await page.getByTestId("ghost-expression-public transport").click();
+  await expect(page.getByTestId("ghost-expression-added")).toBeVisible({ timeout: 10_000 });
+  await page.goto("/knowledge");
+  await expect(page.getByTestId("kb-item").first()).toContainText("public transport", {
+    timeout: 10_000,
+  });
+
+  // 回到编辑器：指引推进后，旧句子的卡片自动消失（渲染条件失效）。
+  await page.goBack();
+  await expect(page.getByTestId("ghost-hint")).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId("ghost-insight-open").click();
+  await expect(page.getByTestId("ghost-insight-card")).toBeVisible({ timeout: 10_000 });
+  // 卡片悬浮在编辑器上方会拦截点击（Esc/✕ 可关）；用 focus 取得焦点继续输入。
+  await page.getByTestId("editor-content").focus();
+  await page.keyboard.type("Public transport should be free.");
+  await expect(page.getByTestId("ghost-hint")).toHaveAttribute("data-ghost-index", "1", {
+    timeout: 20_000,
+  });
+  await expect(page.getByTestId("ghost-insight-card")).toHaveCount(0);
+});
+
 test("study planner workflow confirms suggestions", async ({ page }) => {
   await register(page);
   await page.goto("/learning");

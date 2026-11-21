@@ -55,6 +55,9 @@ class WritingOutline(Base):
     model_essay: Mapped[str | None] = mapped_column(Text)
     model_essay_zh: Mapped[str | None] = mapped_column(Text)
     outline_md: Mapped[str | None] = mapped_column(Text)
+    # ADR-037: per-sentence expressions + pattern (1:1 with model_essay
+    # sentences), extracted at generation time for the ghost-hint insight card.
+    model_essay_annotations: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     source_context: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     workflow_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("workflows.id", ondelete="SET NULL")

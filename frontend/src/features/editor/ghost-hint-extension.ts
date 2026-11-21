@@ -19,6 +19,12 @@ interface GhostPluginState {
 
 export const ghostHintPluginKey = new PluginKey<GhostPluginState>("awcGhostHint");
 
+/** ADR-037: the widget's 表达·句式 button asks the React layer to open the
+ * pre-extracted annotation card for the current hint sentence. */
+export const GHOST_EVENTS = {
+  insight: "awc-ghost:insight",
+} as const;
+
 export type GhostHintMeta =
   | { type: "config"; ideas: string[]; enabled: boolean }
   | { type: "advance" }
@@ -107,7 +113,30 @@ export function createGhostHintExtension() {
                   span.contentEditable = "false";
                   span.setAttribute("data-testid", "ghost-hint");
                   span.setAttribute("data-ghost-index", String(hint.index));
-                  span.textContent = `💡 ${hint.text}`;
+                  const text = document.createElement("span");
+                  text.textContent = `💡 ${hint.text}`;
+                  span.appendChild(text);
+                  // ADR-037: annotations are pre-extracted at generation time;
+                  // the button only opens the card (no LLM call, no quota).
+                  const button = document.createElement("button");
+                  button.type = "button";
+                  button.className = "awc-ghost-insight-btn";
+                  button.setAttribute("data-testid", "ghost-insight-open");
+                  button.textContent = "表达·句式";
+                  button.addEventListener("mousedown", (event) => {
+                    event.preventDefault(); // keep caret/focus in the editor
+                  });
+                  button.addEventListener("click", (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const rect = button.getBoundingClientRect();
+                    document.dispatchEvent(
+                      new CustomEvent(GHOST_EVENTS.insight, {
+                        detail: { index: hint.index, top: rect.bottom, left: rect.left },
+                      }),
+                    );
+                  });
+                  span.appendChild(button);
                   return span;
                 },
                 { side: 1, ignoreSelection: true },

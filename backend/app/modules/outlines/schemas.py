@@ -54,6 +54,9 @@ class OutlineData(BaseModel):
     model_essay: str | None = None
     model_essay_zh: str | None = None
     outline_md: str | None = None
+    # ADR-037: per-sentence expressions + pattern (1:1 with model_essay
+    # sentences); null for legacy outlines or when validation dropped them.
+    model_essay_annotations: list[dict] | None = None
     source_context: dict
     workflow_id: uuid.UUID | None
     created_at: datetime

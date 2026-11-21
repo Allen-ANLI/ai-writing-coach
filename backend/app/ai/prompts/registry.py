@@ -1093,6 +1093,51 @@ MODEL_ESSAY_GENERATE_V3 = Prompt(
     ),
 )
 
+# ADR-037: per-sentence learning annotations shipped WITH the model essay so
+# the ghost hint can show the expressions and sentence pattern each sentence
+# uses — extracted once at generation time, zero cost/latency at hint time.
+_SENTENCE_ANNOTATION_SPEC = (
+    "- sentence_annotations: EXACTLY one annotation per model_essay sentence, same "
+    "order (1:1, never merge/split). Each annotation: expressions (2-4 learnable items "
+    "that are VERBATIM substrings of THAT English sentence — useful collocations or "
+    "phrases, each with text, meaning (Chinese), usage (when to use it, Chinese)) and "
+    "pattern (the sentence's 句式: label (short Chinese name, e.g. 部分倒装), skeleton "
+    "(structure with placeholders, e.g. 'Not only + 助动词 + 主语 + 动词…, but 主语 + "
+    "also…'), explanation (one Chinese sentence: why/when this pattern fits)). "
+    "Annotations are learning guidance for the ghost hint, not extra essay content."
+)
+
+PLANNER_CHAT_V8 = Prompt(
+    feature="planner_chat",
+    version="v8",
+    system=PLANNER_CHAT_V7.system + "\n" + _SENTENCE_ANNOTATION_SPEC,
+    user_template=(
+        PLANNER_CHAT_V7.user_template.replace(
+            "Return JSON: reply, action, outline (with hierarchical outline_md, ordered-list "
+            "numbering), model_essay (English), model_essay_zh (Chinese, 1:1 sentence-aligned). "
+            "Null artifacts unless propose/revise.",
+            "Return JSON: reply, action, outline (with hierarchical outline_md, ordered-list "
+            "numbering), model_essay (English), model_essay_zh (Chinese, 1:1 sentence-aligned), "
+            "sentence_annotations (1:1 with model_essay sentences). "
+            "Null artifacts unless propose/revise.",
+        )
+    ),
+)
+
+MODEL_ESSAY_GENERATE_V4 = Prompt(
+    feature="model_essay_generate",
+    version="v4",
+    system=MODEL_ESSAY_GENERATE_V3.system + "\n" + _SENTENCE_ANNOTATION_SPEC,
+    user_template=(
+        "Task prompt:\n{question_prompt}\n\n"
+        "Thesis: {thesis}\n\n"
+        "Outline (JSON):\n{outline}\n\n"
+        "Return JSON: model_essay (English), model_essay_zh (Chinese, 1:1 "
+        "sentence-aligned translation), sentence_annotations (1:1 with model_essay "
+        "sentences: expressions + pattern per sentence)."
+    ),
+)
+
 STUDY_PLAN_V1 = Prompt(
     feature="study_plan",
     version="v1",
@@ -1154,9 +1199,11 @@ PROMPTS: dict[tuple[str, str], Prompt] = {
         PLANNER_CHAT_V5,
         PLANNER_CHAT_V6,
         PLANNER_CHAT_V7,
+        PLANNER_CHAT_V8,
         MODEL_ESSAY_GENERATE_V1,
         MODEL_ESSAY_GENERATE_V2,
         MODEL_ESSAY_GENERATE_V3,
+        MODEL_ESSAY_GENERATE_V4,
         STUDY_PLAN_V1,
     )
 }

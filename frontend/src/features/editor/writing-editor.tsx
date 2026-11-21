@@ -18,10 +18,15 @@ import { EvaluationDialog } from "@/features/editor/evaluation-dialog";
 import { ExpressionAssist } from "@/features/editor/expression-assist";
 import { createExpressionExtension } from "@/features/editor/expression-extension";
 import {
+  GHOST_EVENTS,
   createGhostHintExtension,
   setGhostConfig,
   setGhostIndex,
 } from "@/features/editor/ghost-hint-extension";
+import {
+  GhostInsightCard,
+  type GhostInsightState,
+} from "@/features/editor/ghost-insight-card";
 import { createGrammarExtension } from "@/features/editor/grammar/grammar-extension";
 import { GrammarHoverCard } from "@/features/editor/grammar/grammar-hover-card";
 import { useGrammar } from "@/features/editor/grammar/use-grammar";
@@ -35,11 +40,12 @@ import { VersionHistory } from "@/features/editor/version-history";
 import { BLOCK_SEPARATOR, countWords, splitSentences } from "@/lib/document-text";
 import { getEssay } from "@/services/essays";
 import { getWorkingDocument } from "@/services/documents";
+import { createExpression } from "@/services/expressions";
 import { getOutline, listOutlines } from "@/services/outlines";
 import { matchGhostPosition } from "@/services/planner";
 import { getPreferences, patchPreferences } from "@/services/preferences";
 import { createSession, listSessions } from "@/services/sessions";
-import type { TipTapDocument } from "@/types/api";
+import type { SentenceExpressionAnnotation, TipTapDocument } from "@/types/api";
 
 const SAVE_STATUS_LABELS: Record<SaveStatus, string> = {
   saved: "已保存",
@@ -134,6 +140,46 @@ export function WritingEditor({ essayId }: { essayId: string }) {
   });
   const [ghostIndex, setGhostIndexState] = useState(0);
   const guidanceDone = ghostHints.length > 0 && ghostIndex >= ghostHints.length;
+
+  // ADR-037: 幽灵提示“表达·句式”卡——注释在范文生成时预提取（1:1 对齐），
+  // 打开卡片零 LLM 调用、零额度；点击表达加入知识库。仅引导，不写入正文。
+  const [ghostInsight, setGhostInsight] = useState<
+    (GhostInsightState & { planId: string | null }) | null
+  >(null);
+  const [kbAddedTexts, setKbAddedTexts] = useState<Record<string, boolean>>({});
+  const annotations = planQuery.data?.model_essay_annotations ?? null;
+
+  useEffect(() => {
+    const onInsight = (event: Event) => {
+      const detail = (event as CustomEvent).detail as GhostInsightState;
+      if (!annotations?.[detail.index]) {
+        return;
+      }
+      setGhostInsight({ ...detail, planId: confirmedPlan?.id ?? null });
+    };
+    document.addEventListener(GHOST_EVENTS.insight, onInsight);
+    return () => document.removeEventListener(GHOST_EVENTS.insight, onInsight);
+  }, [annotations, confirmedPlan?.id]);
+
+  const addGhostExpression = useCallback(
+    async (expression: SentenceExpressionAnnotation) => {
+      const modelEssay = planQuery.data?.model_essay ?? "";
+      const enSentence =
+        (ghostInsight ? splitSentences(modelEssay)[ghostInsight.index]?.text : null) ??
+        expression.text;
+      await createExpression({
+        english_text: expression.text,
+        chinese_meaning: expression.meaning,
+        usage_context: expression.usage,
+        source_type: "essay",
+        essay_id: essayId,
+        source_context: enSentence,
+      });
+      setKbAddedTexts((prev) => ({ ...prev, [expression.text]: true }));
+      void queryClient.invalidateQueries({ queryKey: ["expressions"] });
+    },
+    [essayId, ghostInsight, planQuery.data?.model_essay, queryClient],
+  );
 
   const suppressUpdateRef = useRef(false);
   const initializedRef = useRef(false);
@@ -627,6 +673,20 @@ export function WritingEditor({ essayId }: { essayId: string }) {
           onMouseLeave={polish.onCardMouseLeave}
         />
       )}
+
+      {/* 指引推进或计划变化时渲染条件失效 → 卡片自动消失，无需 effect 重置。 */}
+      {ghostInsight &&
+        ghostInsight.planId === (confirmedPlan?.id ?? null) &&
+        ghostInsight.index === ghostIndex &&
+        annotations?.[ghostInsight.index] && (
+          <GhostInsightCard
+            state={ghostInsight}
+            annotation={annotations[ghostInsight.index]}
+            addedTexts={kbAddedTexts}
+            onAddExpression={addGhostExpression}
+            onClose={() => setGhostInsight(null)}
+          />
+        )}
 
       {recordsOpen && (
         <RecordsDialog essayId={essayId} onClose={() => setRecordsOpen(false)} />
