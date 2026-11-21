@@ -110,6 +110,36 @@ def _mock_polish(user: str):
     )
 
 
+def _mock_polish_verify(user: str):
+    """Deterministic substitution re-check for E2E (ADR-036): the original
+    flag holds iff the original sentence contains 'very like'; a substituted
+    option is still unnatural iff it leaves 'very like' in the sentence."""
+    from app.ai.schemas import PolishVerifyCandidate, PolishVerifyResult
+
+    original = ""
+    for line in user.splitlines():
+        if line.startswith("Original sentence: "):
+            original = line[len("Original sentence: ") :]
+            break
+    results = []
+    index = None
+    for line in user.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and "] anchor:" in stripped:
+            index = int(stripped[1 : stripped.index("]")])
+        elif stripped.startswith("substituted: ") and index is not None:
+            substituted = stripped[len("substituted: ") :]
+            results.append(
+                PolishVerifyCandidate(
+                    candidate_index=index,
+                    original_unnatural="very like" in original,
+                    option_unnatural="very like" in substituted,
+                )
+            )
+            index = None
+    return PolishVerifyResult(results=results)
+
+
 def _mock_translation(user: str):
     """Deterministic translation for E2E: with a non-empty exclude list the
     second page returns distinct candidates; otherwise the generic builder
@@ -153,6 +183,7 @@ class MockProvider:
             ModelEssayResult,
             PlannerChatResult,
             PolishSentenceResult,
+            PolishVerifyResult,
             SentenceCheckResult,
             TranslationResult,
         )
@@ -161,6 +192,8 @@ class MockProvider:
         # generic builder only makes 2, so handle it before generic build.
         if response_model is PolishSentenceResult:
             instance = _mock_polish(user)
+        elif response_model is PolishVerifyResult:
+            instance = _mock_polish_verify(user)
         elif response_model is TranslationResult:
             instance = _mock_translation(user)
         elif response_model is ModelEssayResult:

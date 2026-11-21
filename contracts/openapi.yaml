@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Writing Coach API
-  version: 1.13.0
+  version: 1.14.0
   description: Final API contract aligned with Database ERD V1.2. Working documents use server_revision; immutable
     snapshots use version_no. Refresh tokens are HttpOnly cookies. 1.1.1 adds the additive
     infrastructure endpoint GET /health (200 database reachable, 503 database unavailable);
@@ -53,6 +53,12 @@ info:
     gains an optional sentence_complete flag — live mode only surfaces non-spelling
     findings on complete sentences, spelling stays instant once the word is
     finalized (an incomplete sentence is never judged prematurely); additive only.
+    1.14.0 (ADR-036) polish-sentence becomes a consistency loop — detection uses a
+    narrowed unnaturalness criterion (expression_polish v3, shared verbatim with the
+    judge), and every candidate option is substitution-re-checked by the SAME judge
+    (polish_verify v1) before being offered or persisted; the judge re-checks its own
+    flag and judges the option inserted back into the sentence; verify failure fails
+    closed; behavioral, same endpoint and schemas; additive only.
 servers:
 - url: https://api.example.com/api/v1
   description: Production placeholder

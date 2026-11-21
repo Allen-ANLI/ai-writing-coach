@@ -23,7 +23,14 @@ from sqlalchemy.orm import Session
 
 from app.ai import llm
 from app.ai.prompts.registry import get_prompt
-from app.ai.schemas import PolishResult, PolishSentenceResult, TranslationResult
+from app.ai.providers.base import LlmUsage
+from app.ai.schemas import (
+    PolishResult,
+    PolishSentenceResult,
+    PolishVerifyResult,
+    TranslationResult,
+)
+from app.core.config import get_settings
 from app.core.exceptions import ApiError
 from app.core.time import utcnow
 from app.modules.billing import service as billing_service
@@ -457,7 +464,12 @@ def polish_sentence(
 ) -> dict:
     """ADR-026 fragment-level polish: scan a completed sentence (or fetch more
     options for one fragment). Natural sentences yield zero fragments.
-    Offsets are validated against the sentence and stored absolute."""
+    Offsets are validated against the sentence and stored absolute.
+
+    ADR-036: detection uses the narrowed v3 criterion, and every candidate is
+    substitution-re-checked by the SAME judge before being offered or persisted
+    (the judge re-checks its own flag and judges the option inserted back into
+    the sentence). Verify failure fails closed."""
     get_essay(db, user, essay_id)
     session = _assisted_session(db, user, essay_id, payload.session_id)
     if not enabled_features(session.mode).expression_recommendations:
@@ -475,7 +487,7 @@ def polish_sentence(
     learned = _previously_learned_context(db, user, payload.sentence)
     db.commit()  # no transaction held during the LLM call
 
-    prompt = get_prompt("expression_polish", "v2")
+    prompt = get_prompt("expression_polish", "v3")
     user_prompt = prompt.user_template.format(
         sentence=payload.sentence,
         paragraph_context=payload.paragraph_context or payload.sentence,
@@ -490,12 +502,8 @@ def polish_sentence(
 
     now = utcnow()
     cps = len(payload.sentence)
-    learned_pool = knowledge.semantic_candidates(db, user.id, payload.sentence)
-    if not learned_pool:
-        learned_pool = repository.keyword_candidates(db, user.id, payload.sentence)
-    learned_texts = {c.english_text.lower() for c in learned_pool}
-
-    fragments_out: list[dict] = []
+    # Phase 1: validate model offsets and collect candidates (no persistence).
+    candidates: list[dict] = []
     for fragment in result.fragments:
         start, end = fragment.start_offset, fragment.end_offset
         if not (0 <= start < end <= cps):
@@ -509,11 +517,101 @@ def polish_sentence(
             anchor = fragment.anchor_text
         if payload.fragment_anchor and anchor != payload.fragment_anchor:
             continue
+        candidates.append(
+            {
+                "anchor": anchor,
+                "start": start,
+                "end": end,
+                "note": fragment.note,
+                "options": list(fragment.options),
+                "option_indices": [],
+            }
+        )
+
+    # Phase 2 (ADR-036): substitution re-check by the SAME judge before anything
+    # is offered or persisted. The judge re-checks its own flag (reject false
+    # positives) and judges each option substituted back into the sentence; only
+    # original_unnatural=true AND option_unnatural=false candidates survive. A
+    # verify failure fails closed — no unverified option is ever shown.
+    if candidates:
+        lines: list[str] = []
+        n = 0
+        for cand in candidates:
+            for option in cand["options"]:
+                n += 1
+                cand["option_indices"].append(n)
+                substituted = (
+                    payload.sentence[: cand["start"]]
+                    + option.text
+                    + payload.sentence[cand["end"] :]
+                )
+                lines.append(f"[{n}] anchor: {cand['anchor']} | option: {option.text}")
+                lines.append(f"    substituted: {substituted}")
+        verify_prompt = get_prompt("polish_verify", "v1")
+        verify_user = verify_prompt.user_template.format(
+            sentence=payload.sentence, candidates="\n".join(lines)
+        )
+        try:
+            billing_service.guard_ai_call(db, user.id)
+            verify_result, verify_usage = llm.call_llm(
+                system=verify_prompt.system,
+                user=verify_user,
+                response_model=PolishVerifyResult,
+            )
+        except ApiError:
+            llm.record_usage(
+                db,
+                user_id=user.id,
+                feature="polish_verify",
+                usage=_verify_error_usage(),
+                prompt_version=verify_prompt.version,
+                status="error",
+            )
+            llm.record_usage(
+                db,
+                user_id=user.id,
+                feature="expression_polish",
+                usage=usage,
+                prompt_version=prompt.version,
+                status="success",
+            )
+            db.commit()
+            return {"fragments": []}
+        verdicts = {r.candidate_index: r for r in verify_result.results}
+        for cand in candidates:
+            kept = []
+            for oi, option in enumerate(cand["options"]):
+                verdict = verdicts.get(cand["option_indices"][oi])
+                if (
+                    verdict is not None
+                    and verdict.original_unnatural
+                    and not verdict.option_unnatural
+                ):
+                    kept.append(option)
+            cand["options"] = kept
+        candidates = [cand for cand in candidates if cand["options"]]
+        llm.record_usage(
+            db,
+            user_id=user.id,
+            feature="polish_verify",
+            usage=verify_usage,
+            prompt_version=verify_prompt.version,
+            status="success",
+        )
+
+    # Phase 3: persist only the verified survivors.
+    learned_pool = knowledge.semantic_candidates(db, user.id, payload.sentence)
+    if not learned_pool:
+        learned_pool = repository.keyword_candidates(db, user.id, payload.sentence)
+    learned_texts = {c.english_text.lower() for c in learned_pool}
+
+    fragments_out: list[dict] = []
+    for cand in candidates:
         suggestion = ExpressionSuggestion(
             essay_id=essay_id,
             user_id=user.id,
             kind="polish",
-            selected_text=anchor,
+            selected_text=cand["anchor"],
             sentence_context=payload.sentence,
             paragraph_context=payload.paragraph_context,
             server_revision=payload.server_revision,
@@ -523,7 +621,7 @@ def polish_sentence(
         db.add(suggestion)
         db.flush()
         items_out: list[dict] = []
-        for order, option in enumerate(fragment.options):
+        for order, option in enumerate(cand["options"]):
             is_learned = option.text.strip().lower() in learned_texts
             expression_id = None
             if is_learned:
@@ -538,8 +636,8 @@ def polish_sentence(
                 source="previously_learned" if expression_id else "llm",
                 expression_id=expression_id,
                 sort_order=order,
-                start_offset=sentence_start + start,
-                end_offset=sentence_start + end,
+                start_offset=sentence_start + cand["start"],
+                end_offset=sentence_start + cand["end"],
                 created_at=now,
             )
             db.add(item)
@@ -562,10 +660,10 @@ def polish_sentence(
         fragments_out.append(
             {
                 "suggestion_id": suggestion.id,
-                "anchor_text": anchor,
-                "start_offset": sentence_start + start,
-                "end_offset": sentence_start + end,
-                "note": fragment.note,
+                "anchor_text": cand["anchor"],
+                "start_offset": sentence_start + cand["start"],
+                "end_offset": sentence_start + cand["end"],
+                "note": cand["note"],
                 "items": items_out,
             }
         )
@@ -579,6 +677,18 @@ def polish_sentence(
     )
     db.commit()
     return {"fragments": fragments_out}
+
+
+def _verify_error_usage() -> LlmUsage:
+    settings = get_settings()
+    return LlmUsage(
+        provider=settings.llm_provider,
+        model_name=settings.llm_model,
+        input_tokens=0,
+        output_tokens=0,
+        latency_ms=0,
+        estimated_cost=0.0,
+    )
 
 
 def list_essay_suggestions(db: Session, user: User, essay_id: uuid.UUID) -> list[dict]:

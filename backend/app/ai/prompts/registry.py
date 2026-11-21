@@ -17,6 +17,20 @@ class Prompt:
     user_template: str
 
 
+# ADR-036: ONE operational definition of "unnatural", shared verbatim by the
+# polish detector/generator (v3) and the substitution re-check judge (verify
+# v1) so generation and judgment cannot drift apart.
+_UNNATURAL_CRITERION = (
+    "UNNATURAL means genuinely non-native English a native reader would stumble on: "
+    "Chinglish / L1-transfer patterns (e.g. 'very like', 'suggest me to go', "
+    "'although...but'), wrong collocations, or awkward phrasing that breaks normal "
+    "usage. It does NOT include style, register, tone, vocabulary sophistication, "
+    "sentence variety, or personal preference — a plain, simple, native-quality "
+    "sentence (including text written by an AI or copied from a model essay) is "
+    "NATURAL and must be left alone. When in doubt, treat the text as natural."
+)
+
+
 GRAMMAR_DEEP_CHECK_V1 = Prompt(
     feature="grammar_deep_check",
     version="v1",
@@ -168,6 +182,65 @@ EXPRESSION_POLISH_V2 = Prompt(
         "Already offered options (do NOT repeat them): {exclude}\n"
         "Focus fragment (empty = whole sentence): {focus_fragment}\n"
         "Return JSON: fragments (may be empty)."
+    ),
+)
+
+# ADR-036: detector and generator share the SAME narrowed criterion; options
+# are minimal repairs that must pass the criterion when substituted back, not
+# stylistic improvements of already-natural wording.
+EXPRESSION_POLISH_V3 = Prompt(
+    feature="expression_polish",
+    version="v3",
+    system=(
+        "You are an English expression coach for Chinese-speaking learners. Analyze "
+        "ONE completed sentence and find fragments that are grammatically acceptable "
+        "but UNNATURAL. " + _UNNATURAL_CRITERION + " If the whole sentence reads "
+        "naturally, return an EMPTY fragments array — do not invent problems. For each "
+        "unnatural fragment give: anchor_text (the exact fragment), start_offset/"
+        "end_offset (unicode code-point offsets RELATIVE to the sentence, end "
+        "exclusive), note (one Chinese sentence: why it is unnatural), and EXACTLY 3 "
+        "options. Each option: text (a DROP-IN REPLACEMENT of the fragment only — "
+        "never a full sentence, never repeat surrounding words), meaning (Chinese), "
+        "usage (when to prefer it, Chinese), formality (formal/neutral/informal). "
+        "Options must be genuinely different from each other. Each option must be the "
+        "MINIMAL repair that makes the fragment natural under the SAME criterion — "
+        "never an improvement of already-natural wording. Before answering, substitute "
+        "each option back into the sentence and verify the result is natural under the "
+        "criterion; discard any option that is not. Prefer expressions the learner has "
+        "studied when they truly fit; never force them."
+    ),
+    user_template=(
+        "Sentence: {sentence}\n"
+        "Paragraph context: {paragraph_context}\n"
+        "Previously learned expressions (verify suitability): {previously_learned}\n"
+        "Already offered options (do NOT repeat them): {exclude}\n"
+        "Focus fragment (empty = whole sentence): {focus_fragment}\n"
+        "Return JSON: fragments (may be empty)."
+    ),
+)
+
+# ADR-036: the SAME judge re-checks its own flag and judges every option
+# substituted back into the sentence, BEFORE anything is offered to the user.
+POLISH_VERIFY_V1 = Prompt(
+    feature="polish_verify",
+    version="v1",
+    system=(
+        "You are an English expression judge applying this criterion. "
+        + _UNNATURAL_CRITERION
+        + " You receive candidate polish options already substituted into their "
+        "sentence. For EACH candidate judge two things independently: "
+        "(1) original_unnatural — is the ORIGINAL fragment (anchor) in the original "
+        "sentence genuinely unnatural under the criterion? Re-check the flag; reject "
+        "false positives. (2) option_unnatural — after substitution, is the replaced "
+        "fragment region in the resulting sentence still unnatural under the "
+        "criterion? Judge ONLY the fragment region, not the rest of the sentence. "
+        "Be consistent: native-quality wording is natural. Return one result per "
+        "candidate_index."
+    ),
+    user_template=(
+        "Original sentence: {sentence}\n"
+        "Candidates:\n{candidates}\n"
+        "Return JSON: results (candidate_index, original_unnatural, option_unnatural)."
     ),
 )
 
@@ -1051,6 +1124,8 @@ PROMPTS: dict[tuple[str, str], Prompt] = {
         GRAMMAR_SENTENCE_CHECK_V2,
         TEACHING_V2,
         EXPRESSION_POLISH_V2,
+        EXPRESSION_POLISH_V3,
+        POLISH_VERIFY_V1,
         GHOST_PROGRESS_V1,
         GHOST_PROGRESS_V2,
         GHOST_PROGRESS_V3,

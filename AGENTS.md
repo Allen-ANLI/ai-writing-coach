@@ -185,7 +185,10 @@ document is missing, do not invent its contents; report the missing dependency.
    fragments get amber dashed underlines; the option card offers 3 selectable
    drop-in replacements with replaced words highlighted, click/Tab one-key
    replace, pagination for more options, and add-to-knowledge-base. Natural
-   sentences produce nothing. Selection assist keeps only Chinese→English.
+   sentences produce nothing. Detection and generation share one narrowed
+   unnaturalness criterion, and every option is substitution-re-checked by the
+   same judge before being offered or persisted (ADR-036); verify failure
+   fails closed. Selection assist keeps only Chinese→English.
 6b. Completed essays expose a categorized record dialog (语法错误 / 表达优化)
    backed by writing_issues and expression_suggestions.
 7. No Submit Essay button during writing; evaluation/assessment/rewrites are

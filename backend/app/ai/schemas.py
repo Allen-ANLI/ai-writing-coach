@@ -120,6 +120,28 @@ class PolishSentenceResult(BaseModel):
     fragments: list[PolishFragment] = Field(default_factory=list, max_length=5)
 
 
+class PolishVerifyCandidate(BaseModel):
+    """ADR-036 substitution re-check verdict for one candidate option.
+
+    original_unnatural re-checks the detector's own flag (reject false
+    positives); option_unnatural judges the fragment region AFTER the option
+    is substituted back into the sentence. Only candidates with
+    original_unnatural=true and option_unnatural=false may be offered.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_index: int = Field(ge=1)
+    original_unnatural: bool
+    option_unnatural: bool
+
+
+class PolishVerifyResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    results: list[PolishVerifyCandidate] = Field(default_factory=list)
+
+
 class TeachingContent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

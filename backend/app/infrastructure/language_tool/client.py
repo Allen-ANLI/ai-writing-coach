@@ -33,6 +33,10 @@ def check_text(text: str, *, language: str | None = None) -> list[RuleMatch]:
             f"{settings.language_tool_url}/v2/check",
             data={"text": text, "language": language or settings.language_tool_language},
             timeout=settings.language_tool_timeout_seconds,
+            # Local Docker infrastructure must never route through a system
+            # proxy (httpx also reads the Windows registry proxy, which may be
+            # configured but not running — loopback then fails with 10061).
+            trust_env=False,
         )
         response.raise_for_status()
         payload = response.json()
@@ -68,6 +72,7 @@ def is_available() -> bool:
         response = httpx.get(
             f"{settings.language_tool_url}/v2/languages",
             timeout=3.0,
+            trust_env=False,
         )
         return response.status_code == 200
     except httpx.HTTPError:
