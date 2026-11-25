@@ -1,176 +1,134 @@
 # AI Writing Coach
 
-英语写作训练 Web 应用。当前进度：**Stage 1 Bootstrap + Stage 2 Slice 1/1.5 认证 +
-Slice 2A Essay 管理**（原子创建 Essay+工作文档+Original 快照、游标分页、软删除、
-归属隔离；Dashboard 列表/创建/改名/删除确认/详情导航）。编辑器、语法检查、LLM 等
-仍为后续阶段。Git 基线提交 `feat: complete infrastructure and authentication` 已建立。
+> 面向中文用户的英语写作训练 Web 应用 —— 边写边学，反馈就在原文旁边。
 
-- 工程约束：[`AGENTS.md`](AGENTS.md)（必读）
-- API 契约：[`contracts/openapi.yaml`](contracts/openapi.yaml)（OpenAPI 3.1，v1.1.1，唯一事实来源）
-- 文档权威索引：[`docs/README.md`](docs/README.md)
-- 阶段计划：[`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md)
+[![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17%20+%20pgvector-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 
-## 一键启动 / 停止 / 状态（推荐）
+AI Writing Coach 是一个 inline-first 的英语写作教练：语法与表达反馈直接出现在原文附近，
+而不是塞进一个独立的 AI 面板。用户在同一篇文档里写作、纠错、学习表达，并逐步建立
+**属于自己的私人表达知识库**。界面为简体中文，作文与题目内容为英文。
 
-仓库根目录提供三个 PowerShell 脚本（Windows PowerShell 5.1+，无需管理员权限）：
+## 功能特性
 
-| 脚本 | 作用 |
+- **Inline-first 写作编辑器**（TipTap / ProseMirror）：自动保存、撤销/重做、字数统计、
+  不可变历史快照与一键恢复；辅助学习 / 独立写作（考试条件）两种模式
+- **对话式写作规划**：左侧聊天面板与 AI 协商大纲，确认后逐句给出灰色中文 ghost 提示，
+  每条提示附来自范文的表达与句式卡片
+- **自动语法反馈**：规则优先（LanguageTool + 自定义规则），LLM 按需补充；
+  实时下划线、悬停即看纠正、Tab 一键接受；详细教学针对当前句子上下文生成，而非通用模板库
+- **表达润色与中译英**：片段级自动检测不自然表达，提供 3 个可直接替换的候选；
+  选中中文短语获得语境化英文候选
+- **私人表达知识库**：收集、关键词 + 语义检索（pgvector）、从作文中提取候选（先确认再保存）
+- **学习与复习**：SM-2 间隔重复、错误画像与趋势分析、个性化学习计划
+- **IELTS 训练**：原创题库（覆盖 Task 1/2 全题型）、四项评分（明确标注估分）、1–4 级改写
+- **账户与隐私**：设备会话管理、密码重置、数据导出、账号删除；
+  订阅配额（沙箱支付）与 AI 用量分析
+
+## 技术栈
+
+| 层 | 技术 |
 |---|---|
-| `start-dev.ps1` | 检查 Docker Desktop → 启动并等待 `awc-db` / `awc-languagetool` 健康 → 用项目内 venv 启动 FastAPI（:8000）、便携 Node 22 启动 Next.js（:3500）→ 健康检查 → 自动打开浏览器 |
-| `stop-dev.ps1` | **只停止本项目的后端/前端进程**（按命令行特征精确匹配，不误杀其他项目；排除 E2E 的 :8001/:3600）。默认保留容器；加 `-Infrastructure` 同时停止容器（容器与数据卷保留） |
-| `status-dev.ps1` | 只读查看 Docker / 容器健康 / 前后端进程 PID / 端点健康 / 日志位置 |
+| 前端 | Next.js 16（App Router）· React 19 · TypeScript（strict）· Tailwind CSS 4 · TipTap 3 · TanStack Query |
+| 后端 | Python 3.13 · FastAPI · Pydantic 2 · SQLAlchemy 2 · Alembic（模块化单体） |
+| 数据 | PostgreSQL 17 + pgvector |
+| AI | LanguageTool（规则语法）· OpenAI 兼容 LLM / Embedding 适配器 · LangGraph（多步骤工作流） |
+| 测试 | Pytest · Vitest · Playwright · OpenAPI 契约校验 |
+| 基础设施 | Docker Compose · GitHub Actions CI · Nginx（生产配置） |
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\start-dev.ps1
-powershell -ExecutionPolicy Bypass -File .\status-dev.ps1
-powershell -ExecutionPolicy Bypass -File .\stop-dev.ps1
-powershell -ExecutionPolicy Bypass -File .\stop-dev.ps1 -Infrastructure   # 同时停止容器（不删数据卷）
-```
+API 以 [`contracts/openapi.yaml`](contracts/openapi.yaml)（OpenAPI 3.1）为唯一机器可读契约，
+前端类型生成与后端契约测试均从该文件出发。
 
-行为与安全保证：
+## 快速开始
 
-- **幂等**：已运行且健康的服务不会重复启动（端口 + 健康检查 + 进程特征识别）；
-  端口被占用但健康检查失败时报错退出，不会盲目再起一个实例。
-- **仅项目内工具链**：`backend\.venv` 的 Python、`.tools\` 便携 Node 22；
-  PATH 前置仅作用于脚本进程及其子进程，**不修改系统 PATH / 注册表 / 全局 Python**。
-- **Docker Desktop 由用户手动启动**：脚本只检查，未运行时提示并退出，不改动任何系统配置。
-- **停止策略**：应用进程与基础设施分离。默认只停应用；`-Infrastructure` 用
-  `docker compose stop` 停容器，**从不执行 `down -v`，数据卷（pgdata）永不删除**。
-- **不输出任何密钥或环境变量值**；日志只含进程/健康/容器状态信息。
-- **日志**：`.dev\logs\`（已 gitignore）——`start-dev.log` / `stop-dev.log` /
-  `status-dev.log`、`backend.out.log` / `backend.err.log`（uvicorn 日志在 stderr）、
-  `frontend.out.log` / `frontend.err.log`（每次启动覆盖为最新一次运行）。
-  进程 PID 记录在 `.dev\state.json`。
-- `start-dev.ps1 -NoBrowser` 可跳过自动打开浏览器。
+**前置要求**：Node.js 22+、Python 3.13+、Docker（含 Compose）。
 
-首次使用前请先完成下方「快速开始」的第 1、3 步（`.env` / `.env.local` 与依赖安装），
-并确保数据库已迁移（第 4 步）。
+```bash
+# 1) 环境变量（首次）
+cp .env.example .env
+cp frontend/.env.example frontend/.env.local
 
-## 仓库结构
+# 2) 启动 PostgreSQL + pgvector 与 LanguageTool
+docker compose up -d
 
-```text
-ai-writing-coach/
-├── AGENTS.md               # AI/开发者工程约束
-├── docker-compose.yml      # PostgreSQL 17 + pgvector（本地基础设施）
-├── .env.example            # 本地环境变量示例（复制为 .env）
-├── backend/                # FastAPI 模块化单体（Python 3.13）
-│   ├── app/                # api / core / infrastructure / modules(auth,users) / schemas
-│   ├── alembic/            # 迁移（0001 pgvector；0002 认证四表）
-│   └── tests/              # 冒烟 + 契约 + 数据库集成 + 认证集成测试
-├── frontend/               # Next.js App Router（TypeScript strict + Tailwind）
-├── contracts/openapi.yaml  # API 契约（唯一 OpenAPI 源文件）
-├── infrastructure/postgres/init.sql
-└── docs/                   # PRD / ERD / API Spec / 开发计划
-```
-
-## 环境要求（本机已按以下方式准备）
-
-| 组件 | 说明 |
-|---|---|
-| Node.js | **便携版 v22.23.5**，位于 `.tools/node-v22.23.5-win-x64/`，不在系统 PATH |
-| Python | **3.13.9** 虚拟环境 `backend/.venv`（勿用 `py` 默认的 3.14，勿装进 Anaconda base） |
-| Docker | Docker Desktop **由用户手动启动**；本仓库不修改 Docker/WSL/系统配置 |
-| Git | 仓库尚未初始化（等待人工审查后决定） |
-
-每个新终端会话先临时前置便携 Node 到 PATH（仅当前会话生效，不改系统设置）：
-
-```bat
-set "PATH=D:\DOCUMENTS\Projects\ai-writing-coach\.tools\node-v22.23.5-win-x64;%PATH%"
-```
-
-## 快速开始（clean local start）
-
-以下命令均在仓库根 `ai-writing-coach/` 执行（Windows cmd）。
-
-```bat
-:: 0) 前置便携 Node（见上）
-
-:: 1) 环境变量（首次）
-copy .env.example .env
-copy frontend\.env.example frontend\.env.local
-
-:: 2) 启动 PostgreSQL + pgvector（需 Docker Desktop 已运行）
-docker compose up -d db
-
-:: 3) 后端依赖（首次；全局 pip 镜像不可用时必须显式指定官方源）
-backend\.venv\Scripts\python.exe -m pip install --index-url https://pypi.org/simple -e "backend[dev]"
-
-:: 4) 数据库迁移（启用 pgvector 扩展）
+# 3) 后端：依赖安装 → 数据库迁移 → 启动（端口 8000）
 cd backend
-.venv\Scripts\alembic.exe upgrade head
-cd ..
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+alembic upgrade head
+uvicorn app.main:app --reload --port 8000
 
-:: 5) 启动后端（新终端，端口 8000）
-cd backend
-.venv\Scripts\uvicorn.exe app.main:app --reload --port 8000
-
-:: 6) 启动前端（新终端，端口 3500；先执行第 0 步的 PATH 前置）
+# 4) 前端：新终端（端口 3500）
 cd frontend
 npm install
 npm run dev
 ```
 
-> 第 3 步也可在 `backend/` 目录内执行 `.venv\Scripts\python.exe -m pip install --index-url https://pypi.org/simple -e ".[dev]"`。
+打开 **http://localhost:3500** 即可使用；后端健康检查见
+`http://localhost:8000/api/v1/health`。
 
-打开 http://localhost:3500 ，首页会实时显示后端健康状态；
-直接访问 http://localhost:8000/api/v1/health 可看到原始 JSON。
+> **说明**
+> - AI 功能默认使用 `mock` provider（零成本，供开发与测试）。要获得真实的教学、润色、
+>   评分效果，请在 `.env` 中配置 `LLM_*` / `EMBEDDING_*`（密钥只留在本地，已被 gitignore）。
+> - Windows 用户可用一键脚本 `start-dev.ps1` / `stop-dev.ps1` / `status-dev.ps1`，
+>   本机环境细节与常见坑见 [本地开发指南](docs/LOCAL_DEVELOPMENT.md)。
 
-> **为什么是 3500 而不是 3000？** 本机的 Windows Hyper-V/WinNAT 将 2955–3054
-> 等端口段列为系统保留（`netsh interface ipv4 show excludedportrange protocol=tcp`
-> 可查），绑定 3000 会报 `EACCES`。按约束不修改系统配置，故前端改用 3500，
-> CORS 默认源同步为 `http://localhost:3500`。
+## 项目结构
 
-## 健康检查语义（契约 v1.1.1 §23）
+```text
+ai-writing-coach/
+├── frontend/               # Next.js App Router（React 19 + TS strict + Tailwind 4 + TipTap）
+├── backend/                # FastAPI 模块化单体（Python 3.13）
+│   ├── app/                # api / core / infrastructure / modules / ai
+│   ├── alembic/            # 数据库迁移
+│   └── tests/              # 单元 / 契约 / PostgreSQL 集成测试
+├── contracts/              # openapi.yaml —— 唯一 OpenAPI 契约源
+├── docs/                   # PRD / 系统设计 / ERD / API 规范 / ADR / 开发计划
+├── infrastructure/         # PostgreSQL 初始化、生产 Nginx 配置
+├── scripts/                # 数据库备份 / 恢复 / 校验、性能探针、E2E 准备
+├── docker-compose.yml      # 本地基础设施（PostgreSQL 17 + pgvector、LanguageTool）
+├── docker-compose.prod.yml # 生产编排
+└── AGENTS.md               # 工程约束（贡献者必读）
+```
 
-- `GET /api/v1/health`，无需认证。
-- **200**：服务存活且 PostgreSQL 可达（真实 `SELECT 1` 探测）：
-  `{"data": {"status": "ok", "database": "connected"}, "meta": {"request_id": "..."}}`
-- **503**：服务存活但数据库不可达：
-  `{"error": {"code": "DATABASE_UNAVAILABLE", "message": "Database is not reachable."}, "meta": {...}}`
-- 不检查 LanguageTool / LLM / Redis；不返回连接串或凭据。
-
-## 质量检查命令
+## 开发与测试
 
 | 检查 | 命令（目录） |
 |---|---|
-| 后端测试 | `pytest`（backend/，venv 内） |
+| 后端测试 | `pytest`（backend/） |
 | 后端 lint / 格式 | `ruff check .` / `ruff format --check .`（backend/） |
+| 前端单元测试 | `npm run test:unit`（frontend/） |
 | 前端 lint | `npm run lint`（frontend/） |
 | 前端类型检查 | `npx tsc --noEmit`（frontend/） |
 | 前端生产构建 | `npm run build`（frontend/） |
-| OpenAPI 契约校验 | 由 `backend/tests/test_contract.py` 随 pytest 执行 |
+| E2E | `npx playwright test`（frontend/，隔离测试栈 :8001/:3600） |
+| API 类型生成 | `npm run generate:api`（frontend/） |
 
-数据库集成测试（`tests/test_health_integration.py`、`tests/test_migration_downgrade.py`）
-在 PostgreSQL 不可达时**自动跳过**，不会谎报通过。启动数据库后重跑 pytest 即可执行真实集成验证。
+GitHub Actions CI（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）在每次 push / PR
+运行后端测试（真实 PostgreSQL + LanguageTool 服务）、前端检查与依赖安全审计。
 
-## Docker 常用命令
+## 文档
 
-端口仅绑定 `127.0.0.1`，不向其他网络接口暴露；因此 `DATABASE_URL` 使用
-`127.0.0.1` 而非 `localhost`（本机 `localhost` 可能先解析到无响应的 `::1`）。
+| 文档 | 说明 |
+|---|---|
+| [AGENTS.md](AGENTS.md) | 工程约束与领域不变量（贡献者必读） |
+| [docs/README.md](docs/README.md) | 文档权威索引与优先级规则 |
+| [PRD V1.1](docs/PRD_V1.1.docx) | 产品需求（DOCX） |
+| [系统设计 V1.1](docs/AI_Writing_Coach_System_Design_V1.1.md) | 架构基线 |
+| [数据库 ERD V1.2](docs/DATABASE_ERD.md) | 模式与数据不变量 |
+| [API 规范 V1.1.1](docs/API_SPECIFICATION.md) | 人类可读 API 语义 |
+| [开发计划](docs/DEVELOPMENT_PLAN.md) · [追溯矩阵](docs/TRACEABILITY_MATRIX.md) | 阶段记录与逐条需求验证状态 |
+| [ADR 决策记录](docs/ADR/) | 架构与产品决策（ADR-016 起；001–015 见系统设计附录） |
+| [本地开发指南（Windows）](docs/LOCAL_DEVELOPMENT.md) | 一键脚本、本机环境、Docker 命令 |
+| [发布清单](docs/LAUNCH_CHECKLIST.md) | 公开发布前置事项 |
 
-```bat
-docker compose up -d db          :: 启动
-docker compose ps                :: 状态（healthy 表示 pg_isready 通过）
-docker compose logs -f db        :: 日志
-docker compose stop db           :: 停止（数据保留在命名卷 pgdata）
-docker compose down              :: 停止并删除容器（数据卷仍保留）
-docker compose down -v           :: 重置：删除数据卷（ destructive，首次初始化脚本会重新执行）
-```
+## 项目状态
 
-## 环境变量
-
-见 [`.env.example`](.env.example)。要点：
-
-- `DATABASE_URL`：SQLAlchemy 2.x + psycopg 3 连接串，须与 `POSTGRES_*` 一致。
-- `CORS_ORIGINS`：JSON 数组，默认仅允许 `http://localhost:3500`。
-- `NEXT_PUBLIC_API_BASE_URL`：Next.js 只读 `frontend/` 下的 env 文件，
-  因此需同时写入 `frontend/.env.local`。
-- `.env`、`frontend/.env.local` 均已被 `.gitignore` 排除。
-
-## 已知限制 / 后续事项
-
-- System Design V1.1 缺失（已记录，未臆造）；Stage 2+ 工程计划 TBC。
-- Git 已初始化（`main` 分支，**尚无提交**）；提交前需人工审查。
-- 前端 API 类型目前为手写最小镜像（`frontend/src/types/api.ts`），
-  完整的 OpenAPI 类型生成在后续阶段引入（契约含 YAML 锚点，生成前需解析）。
-- 未实现任何业务功能；`backend/app/modules/`、`app/ai/` 等目录将在首个真实文件出现时创建。
+核心功能已实现并建立自动化测试覆盖（Pytest 集成测试、Vitest 单元测试、Playwright E2E、
+OpenAPI 契约校验），逐项实现与验证状态见[追溯矩阵](docs/TRACEABILITY_MATRIX.md)。
+公开部署及真实 LLM / 邮件 / 支付服务的启用尚未进行，按[发布清单](docs/LAUNCH_CHECKLIST.md)管理。
+项目处于活跃开发中。

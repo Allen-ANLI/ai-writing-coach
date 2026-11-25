@@ -42,6 +42,7 @@ This directory holds the approved design baselines and task records for AI Writi
 | `CODEX_FIRST_IMPLEMENTATION_TASK.md` | First implementation task instruction |
 | `PREFLIGHT_REPORT.md` | Preflight findings and implementation plan |
 | `DEVELOPMENT_PLAN.md` | Agreed phase plan |
+| `LOCAL_DEVELOPMENT.md` | Windows local development guide (one-click scripts, machine setup, quick start, Docker commands); moved from the root README on 2026-11-25 |
 | `PRD.md` | Provenance record for the PRD DOCX |
 | `SYSTEM_DESIGN_MISSING.md` | Historical record (dependency since supplied; see authority table) |
 | `TRACEABILITY_MATRIX.md` | Requirement traceability + document reconciliation (Directive V2.0 §1) |
